@@ -176,8 +176,10 @@ pub enum Arg {
 pub enum Op {
     AutoVar(usize),
     ExtrnVar(*const c_char),
-    AutoPlus {index: usize, lhs: Arg, rhs: Arg},
-    AutoMult {index: usize, lhs: Arg, rhs: Arg},
+    // TODO: Consider creating a single AutoBinop instruction
+    AutoPlus  {index: usize, lhs: Arg, rhs: Arg},
+    AutoMinus {index: usize, lhs: Arg, rhs: Arg},
+    AutoMult  {index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {
         index: usize,
         arg: Arg,
@@ -323,6 +325,17 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                 };
                 sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
             }
+            Op::AutoMinus{index, lhs, rhs} => {
+                match lhs {
+                    Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
+                    Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
+                };
+                match rhs {
+                    Arg::AutoVar(index) => sb_appendf(output, c"    sub rax, [rbp-%zu]\n".as_ptr(), index*8),
+                    Arg::Literal(value) => sb_appendf(output, c"    sub rax, %ld\n".as_ptr(), value),
+                };
+                sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
+            }
             Op::AutoMult {index, lhs, rhs} => {
                 sb_appendf(output, c"    xor rdx, rdx\n".as_ptr());
                 match lhs {
@@ -386,6 +399,19 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                 };
                 sb_appendf(output, c";\n".as_ptr());
             }
+            Op::AutoMinus{index, lhs, rhs} => {
+                sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
+                match lhs {
+                    Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
+                    Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
+                };
+                sb_appendf(output, c" - ".as_ptr());
+                match rhs {
+                    Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
+                    Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
+                };
+                sb_appendf(output, c";\n".as_ptr());
+            }
             Op::AutoMult{index, lhs, rhs} => {
                 sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
                 match lhs {
@@ -433,6 +459,13 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
                     }
                     Op::AutoPlus{index, lhs, rhs} => {
                         sb_appendf(output, c"    AutoPlus(%zu, ".as_ptr(), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c", ".as_ptr());
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c")\n".as_ptr());
+                    }
+                    Op::AutoMinus{index, lhs, rhs} => {
+                        sb_appendf(output, c"    AutoMinus(%zu, ".as_ptr(), index);
                         dump_arg(output, lhs);
                         sb_appendf(output, c", ".as_ptr());
                         dump_arg(output, rhs);
@@ -518,18 +551,24 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
 }
 
 // TODO: add support for binary minus expression
-pub unsafe fn compile_plus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
+pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
     let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
-    if (*l).token == '+' as i64 {
+    // TODO: adding more binops of the same precedence requires modification in 3 places here.
+    if (*l).token == '+' as i64 || (*l).token == '-' as i64 {
         (*auto_vars_count) += 1;
         let index = *auto_vars_count;
         da_append(func_body, Op::AutoVar(1));
-        while (*l).token == '+' as i64 {
+        while (*l).token == '+' as i64 || (*l).token == '-' as i64{
+            let token = (*l).token;
             let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body)?;
-            da_append(func_body, Op::AutoPlus {index, lhs, rhs});
+            match token {
+                token if token == '+' as i64 => da_append(func_body, Op::AutoPlus  {index, lhs, rhs}),
+                token if token == '-' as i64 => da_append(func_body, Op::AutoMinus {index, lhs, rhs}),
+                _ => unreachable!()
+            };
             lhs = Arg::AutoVar(index);
 
             saved_point = (*l).parse_point;
@@ -544,7 +583,7 @@ pub unsafe fn compile_plus_expression(l: *mut stb_lexer, input_path: *const c_ch
 // TODO: the expression compilation leaks a lot of temporary variables
 //   Maybe deallocate all of them at the end of a statement.
 pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
-    compile_plus_expression(l, input_path, vars, auto_vars_count, func_body)
+    compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body)
 }
 
 unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Var>, auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> bool {

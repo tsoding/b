@@ -3,9 +3,9 @@ main() {
     auto a;
     auto b;
     auto c;
-    a = 17;
+    a = 20;
     b = 35;
-    c = 2*a + b;
+    c = 2*(a - 3) + b;
     putchar(c);
     putchar(c);
     putchar(c);
