@@ -1,5 +1,5 @@
 use core::ffi::*;
-use crate::libc::*;
+use crate::crust::libc::*;
 
 extern "C" {
     pub fn flag_bool(name: *const c_char, def: bool, desc: *const c_char) -> *mut bool;

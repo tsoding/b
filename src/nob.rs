@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::slice;
-use crate::libc;
+use crate::crust::libc;
 
 #[repr(C)]
 #[derive(Clone, Copy)]

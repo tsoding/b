@@ -3,38 +3,21 @@
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(unused_macros)]
-extern crate core;
 
-#[panic_handler]
-unsafe fn panic(info: &PanicInfo) -> ! {
-    // TODO: What's the best way to implement the panic handler within the Crust spirit
-    //   PanicInfo must be passed by reference.
-    if let Some(location) = info.location() {
-        fprintf!(stderr, c"%.*s:%d: ", location.file().len(), location.file().as_ptr(), location.line());
-    }
-    fprintf!(stderr, c"panicked");
-    if let Some(message) = info.message().as_str() {
-        fprintf!(stderr, c": %.*s", message.len(), message.as_ptr());
-    }
-    fprintf!(stderr, c"\n");
-    abort()
-}
-
-#[macro_use]
-pub mod libc;
 #[macro_use]
 pub mod nob;
 pub mod stb_c_lexer;
+#[macro_use]
 pub mod flag;
+pub mod crust;
 
-use core::panic::PanicInfo;
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use libc::*;
 use nob::*;
 use stb_c_lexer::*;
 use flag::*;
+use crust::libc::*;
 
 macro_rules! diagf {
     ($l:expr, $path:expr, $where:expr, $fmt:literal $($args:tt)*) => {{
@@ -558,7 +541,7 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, v
     compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body)
 }
 
-unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Var>, auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> bool {
+pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Var>, auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> bool {
     (*vars).count = 0;
     loop {
         // Statement
@@ -678,7 +661,7 @@ unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: 
     }
 }
 
-unsafe fn usage(target_name_flag: *mut*mut c_char) {
+pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
     fprintf!(stderr, c"Usage: %s [OPTIONS] <input.b>\n", flag_program_name());
     fprintf!(stderr, c"OPTIONS:\n");
     flag_print_options(stderr);
@@ -688,8 +671,7 @@ unsafe fn usage(target_name_flag: *mut*mut c_char) {
     }
 }
 
-#[no_mangle]
-unsafe extern "C" fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
+pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
     // TODO: some sort of a -run flag that automatically runs the executable
