@@ -724,9 +724,7 @@ unsafe fn usage(target_name_flag: *mut*mut c_char) {
 
 #[no_mangle]
 unsafe extern "C" fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
-    let Some(default_target_name) = name_of_target(Target::Fasm_x86_64_Linux) else {
-        unreachable!("default target name not found");
-    };
+    let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
     // TODO: some sort of a -run flag that automatically runs the executable
     let target_name = flag_str(c"target".as_ptr(), default_target_name, c"Compilation target".as_ptr());
