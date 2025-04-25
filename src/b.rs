@@ -171,23 +171,21 @@ pub enum Arg {
     Literal(i64),
 }
 
+#[derive(Clone, Copy)]
+pub enum Binop {
+    Plus,
+    Minus,
+    Mult,
+}
+
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
-    AutoVar(usize),
+    AutoAlloc(usize),
     ExtrnVar(*const c_char),
-    // TODO: Consider creating a single AutoBinop instruction
-    AutoPlus  {index: usize, lhs: Arg, rhs: Arg},
-    AutoMinus {index: usize, lhs: Arg, rhs: Arg},
-    AutoMult  {index: usize, lhs: Arg, rhs: Arg},
-    AutoAssign {
-        index: usize,
-        arg: Arg,
-    },
-    Funcall {
-        name: *const c_char,
-        arg: Option<Arg>,
-    },
+    AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
+    AutoAssign {index: usize, arg: Arg},
+    Funcall    {name: *const c_char, arg: Option<Arg>},
 }
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
@@ -297,7 +295,7 @@ unsafe fn generate_func_epilog(output: *mut String_Builder, target: Target) {
 unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut String_Builder) {
     for i in 0..body.len() {
         match (*body)[i] {
-            Op::AutoVar(count) => {
+            Op::AutoAlloc(count) => {
                 sb_appendf(output, c"    sub rsp, %zu\n".as_ptr(), count*8);
             },
             Op::ExtrnVar(name) => {
@@ -314,7 +312,7 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                     }
                 }
             },
-            Op::AutoPlus{index, lhs, rhs} => {
+            Op::AutoBinop{binop: Binop::Plus, index, lhs, rhs} => {
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
                     Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
@@ -325,7 +323,7 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                 };
                 sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
             }
-            Op::AutoMinus{index, lhs, rhs} => {
+            Op::AutoBinop{binop: Binop::Minus, index, lhs, rhs} => {
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
                     Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
@@ -336,7 +334,7 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                 };
                 sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
             }
-            Op::AutoMult {index, lhs, rhs} => {
+            Op::AutoBinop {binop: Binop::Mult, index, lhs, rhs} => {
                 sb_appendf(output, c"    xor rdx, rdx\n".as_ptr());
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
@@ -370,7 +368,7 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
 unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_Builder) {
     for i in 0..body.len() {
         match (*body)[i] {
-            Op::AutoVar(count) => {
+            Op::AutoAlloc(count) => {
                 for _ in 0..count {
                     sb_appendf(output, c"    vars.push(0);\n".as_ptr());
                 }
@@ -386,7 +384,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                     }
                 }
             },
-            Op::AutoPlus{index, lhs, rhs} => {
+            Op::AutoBinop{binop: Binop::Plus, index, lhs, rhs} => {
                 sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
@@ -399,7 +397,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                 };
                 sb_appendf(output, c";\n".as_ptr());
             }
-            Op::AutoMinus{index, lhs, rhs} => {
+            Op::AutoBinop{binop: Binop::Minus, index, lhs, rhs} => {
                 sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
@@ -412,7 +410,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                 };
                 sb_appendf(output, c";\n".as_ptr());
             }
-            Op::AutoMult{index, lhs, rhs} => {
+            Op::AutoBinop{binop: Binop::Mult, index, lhs, rhs} => {
                 sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
@@ -446,8 +444,8 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
         Target::IR => {
             for i in 0..body.len() {
                 match (*body)[i] {
-                    Op::AutoVar(index) => {
-                        sb_appendf(output, c"    AutoVar(%zu)\n".as_ptr(), index);
+                    Op::AutoAlloc(index) => {
+                        sb_appendf(output, c"    AutoAlloc(%zu)\n".as_ptr(), index);
                     }
                     Op::ExtrnVar(name) => {
                         sb_appendf(output, c"    ExtrnVar(\"%s\")\n".as_ptr(), name);
@@ -457,22 +455,22 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
                         dump_arg(output, arg);
                         sb_appendf(output, c")\n".as_ptr());
                     }
-                    Op::AutoPlus{index, lhs, rhs} => {
-                        sb_appendf(output, c"    AutoPlus(%zu, ".as_ptr(), index);
+                    Op::AutoBinop{binop: Binop::Plus, index, lhs, rhs} => {
+                        sb_appendf(output, c"    AutoBinop(Binop::Plus, %zu, ".as_ptr(), index);
                         dump_arg(output, lhs);
                         sb_appendf(output, c", ".as_ptr());
                         dump_arg(output, rhs);
                         sb_appendf(output, c")\n".as_ptr());
                     }
-                    Op::AutoMinus{index, lhs, rhs} => {
-                        sb_appendf(output, c"    AutoMinus(%zu, ".as_ptr(), index);
+                    Op::AutoBinop{binop: Binop::Minus, index, lhs, rhs} => {
+                        sb_appendf(output, c"    AutoBinop(Binop::Minus, %zu, ".as_ptr(), index);
                         dump_arg(output, lhs);
                         sb_appendf(output, c", ".as_ptr());
                         dump_arg(output, rhs);
                         sb_appendf(output, c")\n".as_ptr());
                     }
-                    Op::AutoMult{index, lhs, rhs} => {
-                        sb_appendf(output, c"    AutoMult(%zu, ".as_ptr(), index);
+                    Op::AutoBinop{binop: Binop::Mult, index, lhs, rhs} => {
+                        sb_appendf(output, c"    AutoBinop(Binop::Mult, %zu, ".as_ptr(), index);
                         dump_arg(output, lhs);
                         sb_appendf(output, c", ".as_ptr());
                         dump_arg(output, rhs);
@@ -535,10 +533,10 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
     if (*l).token == '*' as i64 {
         (*auto_vars_count) += 1;
         let index = *auto_vars_count;
-        da_append(func_body, Op::AutoVar(1));
+        da_append(func_body, Op::AutoAlloc(1));
         while (*l).token == '*' as i64 {
             let rhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body)?;
-            da_append(func_body, Op::AutoMult {index, lhs, rhs});
+            da_append(func_body, Op::AutoBinop {binop: Binop::Mult, index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
             saved_point = (*l).parse_point;
@@ -560,13 +558,13 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
     if (*l).token == '+' as i64 || (*l).token == '-' as i64 {
         (*auto_vars_count) += 1;
         let index = *auto_vars_count;
-        da_append(func_body, Op::AutoVar(1));
+        da_append(func_body, Op::AutoAlloc(1));
         while (*l).token == '+' as i64 || (*l).token == '-' as i64{
             let token = (*l).token;
             let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body)?;
             match token {
-                token if token == '+' as i64 => da_append(func_body, Op::AutoPlus  {index, lhs, rhs}),
-                token if token == '-' as i64 => da_append(func_body, Op::AutoMinus {index, lhs, rhs}),
+                token if token == '+' as i64 => da_append(func_body, Op::AutoBinop {binop: Binop::Plus, index, lhs, rhs}),
+                token if token == '-' as i64 => da_append(func_body, Op::AutoBinop {binop: Binop::Minus, index, lhs, rhs}),
                 _ => unreachable!()
             };
             lhs = Arg::AutoVar(index);
@@ -634,7 +632,7 @@ unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: 
                 hwere: (*l).where_firstchar,
             });
             // TODO: support multiple auto declarations
-            da_append(func_body, Op::AutoVar(1));
+            da_append(func_body, Op::AutoAlloc(1));
             (*auto_vars_count) += 1;
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
         } else {
