@@ -19,18 +19,24 @@ $(BUILD):
 	mkdir -pv $(BUILD)
 
 .PHONY: examples
-examples: $(BUILD)/hello.js $(BUILD)/hello $(BUILD)/e $(BUILD)/e.js
+examples: $(BUILD)/hello.js $(BUILD)/hello $(BUILD)/hello.ir $(BUILD)/e $(BUILD)/e.js $(BUILD)/e.ir
+
+$(BUILD)/hello: $(EXAMPLES)/hello.b $(BUILD)/b
+	$(BUILD)/b $(EXAMPLES)/hello.b -o $(BUILD)/hello
 
 $(BUILD)/hello.js: $(EXAMPLES)/hello.b $(BUILD)/b
 	$(BUILD)/b $(EXAMPLES)/hello.b -o $(BUILD)/hello.js -target js
 
-$(BUILD)/hello: $(EXAMPLES)/hello.b $(BUILD)/b
-	$(BUILD)/b $(EXAMPLES)/hello.b -o $(BUILD)/hello
+$(BUILD)/hello.ir: $(EXAMPLES)/hello.b $(BUILD)/b
+	$(BUILD)/b $(EXAMPLES)/hello.b -o $(BUILD)/hello.ir -target ir
 
 $(BUILD)/e: $(EXAMPLES)/e.b $(BUILD)/b
 	$(BUILD)/b $(EXAMPLES)/e.b -o $(BUILD)/e
 
 $(BUILD)/e.js: $(EXAMPLES)/e.b $(BUILD)/b
 	$(BUILD)/b $(EXAMPLES)/e.b -o $(BUILD)/e.js -target js
+
+$(BUILD)/e.ir: $(EXAMPLES)/e.b $(BUILD)/b
+	$(BUILD)/b $(EXAMPLES)/e.b -o $(BUILD)/e.ir -target ir
 
 # TODO: use nob to build the project

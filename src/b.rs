@@ -324,45 +324,41 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                     }
                 }
             },
-            Op::AutoBinop{binop: Binop::Plus, index, lhs, rhs} => {
+            Op::AutoBinop{binop, index, lhs, rhs} => {
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
                     Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
                 };
-                match rhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"    add rax, [rbp-%zu]\n".as_ptr(), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c"    add rax, %ld\n".as_ptr(), value),
-                };
-                sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
-            }
-            Op::AutoBinop{binop: Binop::Minus, index, lhs, rhs} => {
-                match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
-                };
-                match rhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"    sub rax, [rbp-%zu]\n".as_ptr(), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c"    sub rax, %ld\n".as_ptr(), value),
-                };
-                sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
-            }
-            Op::AutoBinop {binop: Binop::Mult, index, lhs, rhs} => {
-                sb_appendf(output, c"    xor rdx, rdx\n".as_ptr());
-                match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
-                };
-                match rhs {
-                    Arg::AutoVar(index) => {
-                        // TODO: how do we even distinguish signed and unsigned mul in B?
-                        sb_appendf(output, c"    mul QWORD [rbp-%zu]\n".as_ptr(), index*8);
+                match binop {
+                    Binop::Plus => {
+                        match rhs {
+                            Arg::AutoVar(index) => sb_appendf(output, c"    add rax, [rbp-%zu]\n".as_ptr(), index*8),
+                            Arg::Literal(value) => sb_appendf(output, c"    add rax, %ld\n".as_ptr(), value),
+                        };
+                        sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
                     }
-                    Arg::Literal(value) => {
-                        sb_appendf(output, c"    mov rbx, %ld\n".as_ptr(), value);
-                        sb_appendf(output, c"    mul rbx\n".as_ptr());
+                    Binop::Minus => {
+                        match rhs {
+                            Arg::AutoVar(index) => sb_appendf(output, c"    sub rax, [rbp-%zu]\n".as_ptr(), index*8),
+                            Arg::Literal(value) => sb_appendf(output, c"    sub rax, %ld\n".as_ptr(), value),
+                        };
+                        sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
                     }
-                };
-                sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
+                    Binop::Mult => {
+                        sb_appendf(output, c"    xor rdx, rdx\n".as_ptr());
+                        match rhs {
+                            Arg::AutoVar(index) => {
+                                // TODO: how do we even distinguish signed and unsigned mul in B?
+                                sb_appendf(output, c"    mul QWORD [rbp-%zu]\n".as_ptr(), index*8);
+                            }
+                            Arg::Literal(value) => {
+                                sb_appendf(output, c"    mov rbx, %ld\n".as_ptr(), value);
+                                sb_appendf(output, c"    mul rbx\n".as_ptr());
+                            }
+                        };
+                        sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
+                    }
+                }
             }
             Op::Funcall{name, arg} => {
                 if let Some(arg) = arg {
@@ -396,39 +392,17 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                     }
                 }
             },
-            Op::AutoBinop{binop: Binop::Plus, index, lhs, rhs} => {
+            Op::AutoBinop{binop, index, lhs, rhs} => {
                 sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
                     Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
                 };
-                sb_appendf(output, c" + ".as_ptr());
-                match rhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
+                match binop {
+                    Binop::Plus  => sb_appendf(output, c" + ".as_ptr()),
+                    Binop::Minus => sb_appendf(output, c" - ".as_ptr()),
+                    Binop::Mult  => sb_appendf(output, c" * ".as_ptr()),
                 };
-                sb_appendf(output, c";\n".as_ptr());
-            }
-            Op::AutoBinop{binop: Binop::Minus, index, lhs, rhs} => {
-                sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
-                match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
-                };
-                sb_appendf(output, c" - ".as_ptr());
-                match rhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
-                };
-                sb_appendf(output, c";\n".as_ptr());
-            }
-            Op::AutoBinop{binop: Binop::Mult, index, lhs, rhs} => {
-                sb_appendf(output, c"    vars[%zu] = ".as_ptr(), index - 1);
-                match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
-                };
-                sb_appendf(output, c" * ".as_ptr());
                 match rhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
                     Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
@@ -467,22 +441,14 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
                         dump_arg(output, arg);
                         sb_appendf(output, c")\n".as_ptr());
                     }
-                    Op::AutoBinop{binop: Binop::Plus, index, lhs, rhs} => {
-                        sb_appendf(output, c"    AutoBinop(Binop::Plus, %zu, ".as_ptr(), index);
-                        dump_arg(output, lhs);
-                        sb_appendf(output, c", ".as_ptr());
-                        dump_arg(output, rhs);
-                        sb_appendf(output, c")\n".as_ptr());
-                    }
-                    Op::AutoBinop{binop: Binop::Minus, index, lhs, rhs} => {
-                        sb_appendf(output, c"    AutoBinop(Binop::Minus, %zu, ".as_ptr(), index);
-                        dump_arg(output, lhs);
-                        sb_appendf(output, c", ".as_ptr());
-                        dump_arg(output, rhs);
-                        sb_appendf(output, c")\n".as_ptr());
-                    }
-                    Op::AutoBinop{binop: Binop::Mult, index, lhs, rhs} => {
-                        sb_appendf(output, c"    AutoBinop(Binop::Mult, %zu, ".as_ptr(), index);
+                    Op::AutoBinop{binop, index, lhs, rhs} => {
+                        sb_appendf(output, c"    AutoBinop(".as_ptr());
+                        match binop {
+                            Binop::Plus  => sb_appendf(output, c"Plus".as_ptr()),
+                            Binop::Minus => sb_appendf(output, c"Minus".as_ptr()),
+                            Binop::Mult  => sb_appendf(output, c"Mult".as_ptr()),
+                        };
+                        sb_appendf(output, c", %zu, ".as_ptr(), index);
                         dump_arg(output, lhs);
                         sb_appendf(output, c", ".as_ptr());
                         dump_arg(output, rhs);
