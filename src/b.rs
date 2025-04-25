@@ -6,9 +6,17 @@
 extern crate core;
 
 #[panic_handler]
-unsafe fn panic(_info: &PanicInfo) -> ! {
-    // TODO: what's the best way to implement the panic handler within the Crust spirit
-    fprintf!(stderr, c"panicked\n");
+unsafe fn panic(info: &PanicInfo) -> ! {
+    // TODO: What's the best way to implement the panic handler within the Crust spirit
+    //   PanicInfo must be passed by reference.
+    if let Some(location) = info.location() {
+        fprintf!(stderr, c"%.*s:%d: ", location.file().len(), location.file().as_ptr(), location.line());
+    }
+    fprintf!(stderr, c"panicked");
+    if let Some(message) = info.message().as_str() {
+        fprintf!(stderr, c": %.*s", message.len(), message.as_ptr());
+    }
+    fprintf!(stderr, c"\n");
     abort()
 }
 
@@ -35,15 +43,6 @@ macro_rules! diagf {
         fprintf!(stderr, c"%s:%d:%d: ", $path, loc.line_number, loc.line_offset + 1);
         fprintf!(stderr, $fmt $($args)*);
     }};
-}
-
-macro_rules! todof {
-    ($fmt:literal $($args:tt)*) => {{
-        let file = file!();
-        fprintf!(stderr, c"%.*s:%d: TODO: ", file.len(), file.as_ptr(), line!());
-        fprintf!(stderr, $fmt $($args)*);
-        abort();
-    }}
 }
 
 macro_rules! missingf {
@@ -679,10 +678,9 @@ unsafe fn usage(target_name_flag: *mut*mut c_char) {
 }
 
 #[no_mangle]
-unsafe extern "C" fn main(mut argc: i32, mut argv: *mut *mut c_char) -> i32 {
+unsafe extern "C" fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let Some(default_target_name) = name_of_target(Target::Fasm_x86_64_Linux) else {
-        fprintf!(stderr, c"ASSERT: default target name not found");
-        abort();
+        unreachable!("default target name not found");
     };
 
     // TODO: some sort of a -run flag that automatically runs the executable
