@@ -178,6 +178,18 @@ pub enum Binop {
     Mult,
 }
 
+impl Binop {
+    pub fn from_token(token: c_long) -> Option<Self> {
+        match token {
+            token if token == '+' as i64 => Some(Binop::Plus),
+            token if token == '-' as i64 => Some(Binop::Minus),
+            token if token == '*' as i64 => Some(Binop::Mult),
+            _ => None,
+        }
+    }
+}
+
+
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
@@ -562,11 +574,7 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
         while (*l).token == '+' as i64 || (*l).token == '-' as i64{
             let token = (*l).token;
             let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body)?;
-            match token {
-                token if token == '+' as i64 => da_append(func_body, Op::AutoBinop {binop: Binop::Plus, index, lhs, rhs}),
-                token if token == '-' as i64 => da_append(func_body, Op::AutoBinop {binop: Binop::Minus, index, lhs, rhs}),
-                _ => unreachable!()
-            };
+            da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
             saved_point = (*l).parse_point;
