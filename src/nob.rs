@@ -61,6 +61,13 @@ extern "C" {
 
 pub type String_Builder = Array<c_char>;
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct String_View {
+    pub count: usize,
+    pub data: *const c_char,
+}
+
 extern "C" {
     #[link_name = "nob_read_entire_file"]
     pub fn read_entire_file(path: *const c_char, sb: *mut String_Builder) -> bool;
@@ -70,4 +77,10 @@ extern "C" {
     pub fn temp_sprintf(format: *const c_char, ...) -> *mut c_char;
     #[link_name = "nob_sb_appendf"]
     pub fn sb_appendf(sb: *mut String_Builder, fmt: *const c_char, ...) -> c_int;
+    #[link_name = "nob_sv_from_cstr"]
+    pub fn sv_from_cstr(cstr: *const c_char) -> String_View;
+    #[link_name = "nob_sv_end_with"]
+    pub fn sv_end_with(sv: String_View, cstr: *const c_char) -> bool;
+    #[link_name = "nob_temp_sv_to_cstr"]
+    pub fn temp_sv_to_cstr(sv: String_View) -> *const c_char;
 }

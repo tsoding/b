@@ -735,12 +735,24 @@ pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
     }
 }
 
+pub unsafe fn temp_default_output_path(input_path: *const c_char) -> *const c_char {
+    let mut input_path_sv = sv_from_cstr(input_path);
+    let b_ext = c".b".as_ptr();
+    let b_ext_len = strlen(b_ext);
+    if sv_end_with(input_path_sv, b_ext) {
+        input_path_sv.count -= b_ext_len;
+        temp_sv_to_cstr(input_path_sv)
+    } else {
+        temp_sprintf(c"%s.out".as_ptr(), input_path)
+    }
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
     // TODO: some sort of a -run flag that automatically runs the executable
     let target_name = flag_str(c"target".as_ptr(), default_target_name, c"Compilation target".as_ptr());
-    let output_path = flag_str(c"o".as_ptr(), ptr::null(), c"Output path (MANDATORY)".as_ptr());
+    let output_path_flag = flag_str(c"o".as_ptr(), ptr::null(), c"Output path (MANDATORY)".as_ptr());
     let help        = flag_bool(c"help".as_ptr(), false, c"Print this help message".as_ptr());
 
     let mut input_path: *const c_char = ptr::null();
@@ -773,11 +785,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
         return 1;
     }
 
-    // TODO: -o should not be mandatory. Automatically infer output_path from the input_path if -o is not provided.
-    if (*output_path).is_null() {
-        usage(target_name);
-        fprintf!(stderr, c"ERROR: no output path is provided with -%s\n", flag_name(output_path));
-        return 1;
+    let output_path;
+    if (*output_path_flag).is_null() {
+        output_path = temp_default_output_path(input_path);
+    } else {
+        output_path = *output_path_flag;
     }
 
     let Some(target) = target_by_name(*target_name) else {
@@ -849,8 +861,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
     match target {
         Target::Fasm_x86_64_Linux => {
-            let output_asm_path = temp_sprintf(c"%s.asm".as_ptr(), *output_path);
-            let output_obj_path = temp_sprintf(c"%s.o".as_ptr(), *output_path);
+            let output_asm_path = temp_sprintf(c"%s.asm".as_ptr(), output_path);
+            let output_obj_path = temp_sprintf(c"%s.o".as_ptr(), output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return 69 }
             cmd_append! {
                 &mut cmd,
@@ -859,16 +871,16 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
             if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
             cmd_append! {
                 &mut cmd,
-                c"cc".as_ptr(), c"-no-pie".as_ptr(), c"-o".as_ptr(), *output_path, output_obj_path,
+                c"cc".as_ptr(), c"-no-pie".as_ptr(), c"-o".as_ptr(), output_path, output_obj_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
         }
         Target::JavaScript => {
             // TODO: make the js target automatically generate the html file
-            if !write_entire_file(*output_path, output.items as *const c_void, output.count) { return 69 }
+            if !write_entire_file(output_path, output.items as *const c_void, output.count) { return 69 }
         }
         Target::IR => {
-            if !write_entire_file(*output_path, output.items as *const c_void, output.count) { return 69 }
+            if !write_entire_file(output_path, output.items as *const c_void, output.count) { return 69 }
         }
     }
     0
