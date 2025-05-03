@@ -19,7 +19,7 @@ $(BUILD):
 	mkdir -pv $(BUILD)
 
 .PHONY: examples
-examples: $(BUILD)/hello.js $(BUILD)/hello $(BUILD)/hello.ir $(BUILD)/e $(BUILD)/e.js $(BUILD)/e.ir
+examples: $(BUILD)/hello.js $(BUILD)/hello $(BUILD)/hello.ir $(BUILD)/e $(BUILD)/e.js $(BUILD)/e.ir $(BUILD)/printf $(BUILD)/printf.ir
 
 $(BUILD)/hello: $(EXAMPLES)/hello.b $(BUILD)/b
 	$(BUILD)/b $(EXAMPLES)/hello.b -o $(BUILD)/hello
@@ -38,5 +38,11 @@ $(BUILD)/e.js: $(EXAMPLES)/e.b $(BUILD)/b
 
 $(BUILD)/e.ir: $(EXAMPLES)/e.b $(BUILD)/b
 	$(BUILD)/b $(EXAMPLES)/e.b -o $(BUILD)/e.ir -target ir
+
+$(BUILD)/printf: $(EXAMPLES)/printf.b $(BUILD)/b
+	$(BUILD)/b $(EXAMPLES)/printf.b -o $(BUILD)/printf
+
+$(BUILD)/printf.ir: $(EXAMPLES)/printf.b $(BUILD)/b
+	$(BUILD)/b $(EXAMPLES)/printf.b -o $(BUILD)/printf.ir -target ir
 
 # TODO: use nob to build the project

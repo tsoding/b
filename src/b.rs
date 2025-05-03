@@ -14,6 +14,7 @@ pub mod crust;
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
+use core::slice;
 use nob::*;
 use stb_c_lexer::*;
 use flag::*;
@@ -152,6 +153,7 @@ unsafe fn is_keyword(name: *const c_char) -> bool {
 pub enum Arg {
     AutoVar(usize),
     Literal(i64),
+    DataOffset(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -187,6 +189,7 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
         Arg::Literal(value) => sb_appendf(output, c"Literal(%ld)".as_ptr(), value),
         Arg::AutoVar(index) => sb_appendf(output, c"AutoVar(%zu)".as_ptr(), index),
+        Arg::DataOffset(offset) => sb_appendf(output, c"DataOffset(%zu)".as_ptr(), offset),
     };
 }
 
@@ -305,25 +308,32 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                     Arg::Literal(value) => {
                         sb_appendf(output, c"    mov QWORD [rbp-%zu], %ld\n".as_ptr(), index*8, value);
                     }
+                    Arg::DataOffset(offset) => {
+                        sb_appendf(output, c"    mov rax, dat+%zu\n".as_ptr(), offset);
+                        sb_appendf(output, c"    mov QWORD [rbp-%zu], rax\n".as_ptr(), index*8);
+                    }
                 }
             },
             Op::AutoBinop{binop, index, lhs, rhs} => {
                 match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
+                    Arg::AutoVar(index)     => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
+                    Arg::Literal(value)     => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
+                    Arg::DataOffset(offset) => sb_appendf(output, c"    mov rax, dat+%zu".as_ptr(), offset),
                 };
                 match binop {
                     Binop::Plus => {
                         match rhs {
-                            Arg::AutoVar(index) => sb_appendf(output, c"    add rax, [rbp-%zu]\n".as_ptr(), index*8),
-                            Arg::Literal(value) => sb_appendf(output, c"    add rax, %ld\n".as_ptr(), value),
+                            Arg::AutoVar(index)     => sb_appendf(output, c"    add rax, [rbp-%zu]\n".as_ptr(), index*8),
+                            Arg::Literal(value)     => sb_appendf(output, c"    add rax, %ld\n".as_ptr(), value),
+                            Arg::DataOffset(offset) => sb_appendf(output, c"    add rax, dat+%zu".as_ptr(), offset),
                         };
                         sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
                     }
                     Binop::Minus => {
                         match rhs {
-                            Arg::AutoVar(index) => sb_appendf(output, c"    sub rax, [rbp-%zu]\n".as_ptr(), index*8),
-                            Arg::Literal(value) => sb_appendf(output, c"    sub rax, %ld\n".as_ptr(), value),
+                            Arg::AutoVar(index)     => sb_appendf(output, c"    sub rax, [rbp-%zu]\n".as_ptr(), index*8),
+                            Arg::Literal(value)     => sb_appendf(output, c"    sub rax, %ld\n".as_ptr(), value),
+                            Arg::DataOffset(offset) => sb_appendf(output, c"    sub rax, dat+%zu\n".as_ptr(), offset),
                         };
                         sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
                     }
@@ -338,6 +348,11 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                                 sb_appendf(output, c"    mov rbx, %ld\n".as_ptr(), value);
                                 sb_appendf(output, c"    mul rbx\n".as_ptr());
                             }
+                            Arg::DataOffset(offset) => {
+                                // TODO: should this be even allowed? We are potentially multiplying by a string address in here.
+                                sb_appendf(output, c"    mov rbx, dat+%zu\n".as_ptr(), offset);
+                                sb_appendf(output, c"    mul rbx\n".as_ptr());
+                            }
                         };
                         sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
                     }
@@ -346,8 +361,9 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
             Op::Funcall{name, arg} => {
                 if let Some(arg) = arg {
                     match arg {
-                        Arg::AutoVar(index) => sb_appendf(output, c"    mov rdi, [rbp-%zu]\n".as_ptr(), index*8),
-                        Arg::Literal(value) => sb_appendf(output, c"    mov rdi, %ld\n".as_ptr(), value),
+                        Arg::AutoVar(index)     => sb_appendf(output, c"    mov rdi, [rbp-%zu]\n".as_ptr(), index*8),
+                        Arg::Literal(value)     => sb_appendf(output, c"    mov rdi, %ld\n".as_ptr(), value),
+                        Arg::DataOffset(offset) => sb_appendf(output, c"    mov rdi, dat+%zu\n".as_ptr(), offset),
                     };
                 }
                 sb_appendf(output, c"    call %s\n".as_ptr(), name);
@@ -373,6 +389,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                     Arg::Literal(value) => {
                         sb_appendf(output, c"    vars[%zu] = %ld;\n".as_ptr(), index - 1, value);
                     }
+                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
                 }
             },
             Op::AutoBinop{binop, index, lhs, rhs} => {
@@ -380,6 +397,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                 match lhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
                     Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
+                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
                 };
                 match binop {
                     Binop::Plus  => sb_appendf(output, c" + ".as_ptr()),
@@ -389,6 +407,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                 match rhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
                     Arg::Literal(value) => sb_appendf(output, c"%ld".as_ptr(), value),
+                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
                 };
                 sb_appendf(output, c";\n".as_ptr());
             }
@@ -397,6 +416,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                     match arg {
                         Arg::AutoVar(index) => sb_appendf(output, c"    %s(vars[%zu]);\n".as_ptr(), name, index - 1),
                         Arg::Literal(value) => sb_appendf(output, c"    %s(%ld);\n".as_ptr(), name, value),
+                        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
                     };
                 } else {
                     sb_appendf(output, c"    %s();\n".as_ptr(), name);
@@ -455,11 +475,46 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
     }
 }
 
-pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
+pub unsafe fn generate_data_section(output: *mut String_Builder, target: Target, data: *const [u8]) {
+    match target {
+        Target::Fasm_x86_64_Linux => {
+            if data.len() > 0 {
+                sb_appendf(output, c"section \".data\"\n".as_ptr());
+                sb_appendf(output, c"dat: db ".as_ptr());
+                for i in 0..data.len() {
+                    if i > 0 {
+                        sb_appendf(output, c",".as_ptr());
+                    }
+                    sb_appendf(output, c"0x%02X".as_ptr(), (*data)[i] as c_uint);
+                }
+                sb_appendf(output, c"\n".as_ptr());
+            }
+        }
+        Target::JavaScript => {
+            // TODO: Generate data section for js target
+        }
+        Target::IR => {
+            if data.len() > 0 {
+                sb_appendf(output, c"\n".as_ptr());
+                sb_appendf(output, c"-- Data Section --\n".as_ptr());
+                sb_appendf(output, c"    ".as_ptr());
+                for i in 0..data.len() {
+                    if i > 0 {
+                        sb_appendf(output, c",".as_ptr());
+                    }
+                    sb_appendf(output, c"0x%02X".as_ptr(), (*data)[i] as c_uint);
+                }
+                sb_appendf(output, c"\n".as_ptr());
+            }
+        }
+    }
+}
+
+pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     stb_c_lexer_get_token(l);
     match (*l).token {
         token if token == '(' as i64 => {
-            let expr = compile_expression(l, input_path, vars, auto_vars_count, func_body)?;
+            let expr = compile_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
             if !get_and_expect_clex(l, input_path, ')' as i64) { return None }
             Some(expr)
         }
@@ -479,6 +534,15 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
                 }
             }
         }
+        CLEX_dqstring => {
+            let offset = (*data).count;
+            let string_len = strlen((*l).string);
+            da_append_many(data, slice::from_raw_parts((*l).string as *const u8, string_len));
+            // TODO: confirm that the strings in B are NULL-terminated
+            // I can't find anything about it in the spec: https://web.archive.org/web/20241214022534/https://www.bell-labs.com/usr/dmr/www/kbman.html
+            da_append(data, 0); // NULL-terminator
+            Some(Arg::DataOffset(offset))
+        }
         _ => {
             missingf!(l, input_path, (*l).where_firstchar, c"Unexpected token %s not all expressions are implemented yet\n", display_token_kind_temp((*l).token));
         }
@@ -486,8 +550,8 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 }
 
 // TODO: add support for binary division expression
-pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
-    let mut lhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body)?;
+pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    let mut lhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
@@ -496,7 +560,7 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
         let index = *auto_vars_count;
         da_append(func_body, Op::AutoAlloc(1));
         while (*l).token == '*' as i64 {
-            let rhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body)?;
+            let rhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
             da_append(func_body, Op::AutoBinop {binop: Binop::Mult, index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
@@ -510,8 +574,8 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
 }
 
 // TODO: add support for binary minus expression
-pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
-    let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body)?;
+pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
@@ -522,7 +586,7 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
         da_append(func_body, Op::AutoAlloc(1));
         while (*l).token == '+' as i64 || (*l).token == '-' as i64{
             let token = (*l).token;
-            let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body)?;
+            let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
             da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
@@ -537,11 +601,11 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
 
 // TODO: the expression compilation leaks a lot of temporary variables
 //   Maybe deallocate all of them at the end of a statement.
-pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> Option<Arg> {
-    compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body)
+pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)
 }
 
-pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Var>, auto_vars_count: *mut usize, func_body: *mut Array<Op>) -> bool {
+pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Var>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     (*vars).count = 0;
     loop {
         // Statement
@@ -607,7 +671,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
 
                 match (*var_def).storage {
                     Storage::Auto => {
-                        if let Some(arg) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body) {
+                        if let Some(arg) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body, data) {
                             da_append(func_body, Op::AutoAssign{
                                 index: (*var_def).index,
                                 arg
@@ -635,7 +699,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 if (*l).token != ')' as c_long {
                     (*l).parse_point = saved_point;
                     // TODO: function calls with multiple arguments
-                    if let Some(expr) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body) {
+                    if let Some(expr) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body, data) {
                         arg = Some(expr)
                     } else {
                         return false;
@@ -725,11 +789,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let mut cmd: Cmd = zeroed();
     let mut vars: Array<Var> = zeroed();
     let mut func_body: Array<Op> = zeroed();
+    let mut data: Array<u8> = zeroed();
 
     let mut input: String_Builder = zeroed();
     if !read_entire_file(input_path, &mut input) { return 1; }
 
-    let mut l: stb_lexer    = zeroed();
+    let mut l: stb_lexer = zeroed();
     let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
     stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
 
@@ -770,7 +835,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
             generate_func_prolog(symbol_name, &mut output, target);
             let mut auto_vars_count: usize = 0;
-            if !compile_func_body(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body) { return 1; }
+            if !compile_func_body(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body, &mut data) { return 1; }
             generate_func_body(da_slice(func_body), &mut output, target);
             generate_func_epilog(&mut output, target);
 
@@ -779,6 +844,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
             missingf!(&l, input_path, l.where_firstchar, c"variable definitions\n");
         }
     }
+
+    generate_data_section(&mut output, target, da_slice(data));
+
     match target {
         Target::Fasm_x86_64_Linux => {
             let output_asm_path = temp_sprintf(c"%s.asm".as_ptr(), *output_path);
