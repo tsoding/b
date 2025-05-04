@@ -182,14 +182,14 @@ pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *m
 }
 
 const B_KEYWORDS: *const [*const c_char] = &[
-    c"auto".as_ptr(),
-    c"extrn".as_ptr(),
-    c"case".as_ptr(),
-    c"if".as_ptr(),
-    c"while".as_ptr(),
-    c"switch".as_ptr(),
-    c"goto".as_ptr(),
-    c"return".as_ptr(),
+    c!("auto"),
+    c!("extrn"),
+    c!("case"),
+    c!("if"),
+    c!("while"),
+    c!("switch"),
+    c!("goto"),
+    c!("return"),
 ];
 
 unsafe fn is_keyword(name: *const c_char) -> bool {
@@ -237,6 +237,8 @@ pub enum Op {
     AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
     Funcall    {name: *const c_char, arg: Option<Arg>},
+    Jmp        {addr: usize},
+    JmpIfNot   {addr: usize, arg: Arg},
 }
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
@@ -346,6 +348,7 @@ unsafe fn generate_func_epilog(output: *mut String_Builder, target: Target) {
 
 unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut String_Builder) {
     for i in 0..body.len() {
+        sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
             Op::AutoAlloc(count) => {
                 sb_appendf(output, c"    sub rsp, %zu\n".as_ptr(), count*8);
@@ -432,8 +435,21 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                 }
                 sb_appendf(output, c"    call %s\n".as_ptr(), name);
             },
+            Op::JmpIfNot{addr, arg} => {
+                match arg {
+                    Arg::AutoVar(index)     => sb_appendf(output, c"    mov rax, [rbp-%zu]\n".as_ptr(), index*8),
+                    Arg::Literal(value)     => sb_appendf(output, c"    mov rax, %ld\n".as_ptr(), value),
+                    Arg::DataOffset(offset) => sb_appendf(output, c"    mov rax, dat+%zu\n".as_ptr(), offset),
+                };
+                sb_appendf(output, c!("    test rax, rax\n"));
+                sb_appendf(output, c!("    jz .op_%zu\n"), addr);
+            },
+            Op::Jmp{addr} => {
+                sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
+            },
         }
     }
+    sb_appendf(output, c!(".op_%zu:\n"), body.len());
 }
 
 unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_Builder) {
@@ -487,6 +503,8 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                     sb_appendf(output, c"    %s();\n".as_ptr(), name);
                 }
             },
+            Op::JmpIfNot{..} => todo!(),
+            Op::Jmp{..} => todo!(),
         }
     }
 }
@@ -497,6 +515,7 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
         Target::JavaScript => generate_javascript_func_body(body, output),
         Target::IR => {
             for i in 0..body.len() {
+                sb_appendf(output, c!("%8zu"), i);
                 match (*body)[i] {
                     Op::AutoAlloc(index) => {
                         sb_appendf(output, c"    AutoAlloc(%zu)\n".as_ptr(), index);
@@ -534,6 +553,14 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
                                 sb_appendf(output, c"    Funcall(\"%s\")\n".as_ptr(), name);
                             }
                         }
+                    }
+                    Op::JmpIfNot{addr, arg} => {
+                        sb_appendf(output, c!("    JmpIfNot(%zu, "), addr);
+                        dump_arg(output, arg);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Op::Jmp{addr} => {
+                        sb_appendf(output, c!("    Jmp(%zu)\n"), addr);
                     }
                 }
             }
@@ -708,7 +735,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             return true;
         }
         if !expect_clex(l, input_path, CLEX_id) { return false; }
-        if strcmp((*l).string, c"extrn".as_ptr()) == 0 {
+        if strcmp((*l).string, c!("extrn")) == 0 {
             // TODO: support multiple extrn declarations
             if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
             let name = strdup((*l).string);
@@ -716,7 +743,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             if !declare_var(l, input_path, vars, name, name_where, Storage::External{name}) { return false; }
             da_append(func_body, Op::ExtrnVar(name));
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
-        } else if strcmp((*l).string, c"auto".as_ptr()) == 0 {
+        } else if strcmp((*l).string, c!("auto")) == 0 {
             let mut count = 0;
             'vars: loop {
                 if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
@@ -737,6 +764,22 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             }
 
             da_append(func_body, Op::AutoAlloc(count));
+        } else if strcmp((*l).string, c!("while")) == 0 {
+            let begin = (*func_body).count;
+            if !get_and_expect_clex(l, input_path, '(' as c_long) { return false; }
+            if let Some(arg) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
+                if !get_and_expect_clex(l, input_path, ')' as c_long) { return false; }
+                let condition_jump = (*func_body).count;
+                da_append(func_body, Op::JmpIfNot{addr: 0, arg});
+                if !get_and_expect_clex(l, input_path, '{' as c_long) { return false; }
+                // TODO: parse the body of the while loop as a statement, not as another function body
+                if !compile_func_body(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+                da_append(func_body, Op::Jmp{addr: begin});
+                let end = (*func_body).count;
+                (*(*func_body).items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
+            } else {
+                return false;
+            }
         } else {
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
