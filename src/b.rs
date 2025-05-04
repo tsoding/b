@@ -105,27 +105,58 @@ pub enum Storage {
 #[derive(Clone, Copy)]
 pub struct Var {
     pub name: *const c_char,
-    pub hwere: *mut c_char,
+    pub hwere: *const c_char,
     pub storage: Storage,
 }
 
-
-pub unsafe fn find_var_mut(vars: *mut [Var], name: *const c_char) -> *mut Var {
-    for i in 0..vars.len() {
-        if strcmp((*vars)[i].name, name) == 0 {
-            return &mut (*vars)[i];
-        }
+pub unsafe fn scope_push(vars: *mut Array<Array<Var>>) {
+    if (*vars).count < (*vars).capacity {
+        // Reusing already allocated scopes
+        (*vars).count += 1;
+        (*da_last_mut(vars)).count = 0;
+    } else {
+        da_append(vars, zeroed());
     }
-    return ptr::null_mut();
 }
 
-pub unsafe fn find_var(vars: *const [Var], name: *const c_char) -> *const Var {
-    for i in 0..vars.len() {
-        if strcmp((*vars)[i].name, name) == 0 {
-            return &(*vars)[i];
+pub unsafe fn scope_pop(vars: *mut Array<Array<Var>>) {
+    assert!((*vars).count > 0);
+    (*vars).count -= 1;
+}
+
+pub unsafe fn find_var_near(vars: *const Array<Var>, name: *const c_char) -> *const Var {
+    for i in 0..(*vars).count {
+        let var = (*vars).items.add(i);
+        if strcmp((*var).name, name) == 0 {
+            return var
         }
     }
-    return ptr::null();
+    ptr::null()
+}
+
+pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char) -> *const Var {
+    let mut i = (*vars).count;
+    while i > 0 {
+        let var = find_var_near((*vars).items.add(i-1), name);
+        if !var.is_null() {
+            return var;
+        }
+        i -= 1;
+    }
+    ptr::null()
+}
+
+pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, name: *const c_char, name_where: *const c_char, storage: Storage) -> bool {
+    let scope = da_last_mut(vars);
+    let existing_var = find_var_near(scope, name);
+    if !existing_var.is_null() {
+        diagf!(l, input_path, name_where, c"ERROR: redefinition of variable `%s`\n", name);
+        diagf!(l, input_path, (*existing_var).hwere, c"NOTE: the first declaration is located here\n");
+        return false;
+    }
+
+    da_append(scope, Var {name, storage, hwere: name_where});
+    true
 }
 
 const B_KEYWORDS: *const [*const c_char] = &[
@@ -509,7 +540,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, target: Target,
     }
 }
 
-pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     stb_c_lexer_get_token(l);
     match (*l).token {
         token if token == '(' as i64 => {
@@ -521,7 +552,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         CLEX_id => {
             let name = (*l).string;
             let name_where = (*l).where_firstchar;
-            let var_def = find_var(vars, name);
+            let var_def = find_var_deep(vars, name);
             if var_def.is_null() {
                 diagf!(l, input_path, name_where, c"ERROR: could not find variable `%s`\n", name);
                 return None;
@@ -553,7 +584,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 }
 
 // TODO: add support for binary division expression
-pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     let mut lhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
@@ -577,7 +608,7 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
 }
 
 // TODO: add support for binary minus expression
-pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
@@ -604,12 +635,11 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
 
 // TODO: the expression compilation leaks a lot of temporary variables
 //   Maybe deallocate all of them at the end of a statement.
-pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const [Var], auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)
 }
 
-pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Var>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
-    (*vars).count = 0;
+pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     loop {
         // Statement
         stb_c_lexer_get_token(l);
@@ -618,43 +648,20 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
         }
         if !expect_clex(l, input_path, CLEX_id) { return false; }
         if strcmp((*l).string, c"extrn".as_ptr()) == 0 {
-            if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
             // TODO: support multiple extrn declarations
-
+            if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
-            let existing_var = find_var(da_slice(*vars), name);
-            if !existing_var.is_null() {
-                diagf!(l, input_path, name_where, c"ERROR: redefinition of variable `%s`\n", name);
-                diagf!(l, input_path, (*existing_var).hwere, c"NOTE: the first declaration is located here\n");
-                return false;
-            }
-
-            da_append(vars, Var {
-                name,
-                storage: Storage::External{name},
-                hwere: (*l).where_firstchar,
-            });
-
-            da_append(func_body, Op::ExtrnVar(strdup((*l).string)));
+            if !declare_var(l, input_path, vars, name, name_where, Storage::External{name}) { return false; }
+            da_append(func_body, Op::ExtrnVar(name));
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
         } else if strcmp((*l).string, c"auto".as_ptr()) == 0 {
-            if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
             // TODO: support multiple auto declarations
+            if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
-            let existing_var = find_var(da_slice(*vars), name);
-            if !existing_var.is_null() {
-                diagf!(l, input_path, name_where, c"ERROR: redefinition of variable `%s`\n", name);
-                diagf!(l, input_path, (*existing_var).hwere, c"NOTE: the first declaration is located here\n");
-                return false;
-            }
             (*auto_vars_count) += 1;
-            da_append(vars, Var {
-                name,
-                storage: Storage::Auto{index: *auto_vars_count},
-                hwere: (*l).where_firstchar,
-            });
+            if !declare_var(l, input_path, vars, name, name_where, Storage::Auto{index: *auto_vars_count}) { return false; }
             da_append(func_body, Op::AutoAlloc(1));
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
         } else {
@@ -664,7 +671,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             stb_c_lexer_get_token(l);
             // TODO: assignment and function call must be expressions
             if (*l).token == '=' as c_long {
-                let var_def = find_var(da_slice(*vars), name);
+                let var_def = find_var_deep(vars, name);
                 if var_def.is_null() {
                     diagf!(l, input_path, name_where, c"ERROR: could not find variable `%s`\n", name);
                     return false;
@@ -672,7 +679,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
 
                 match (*var_def).storage {
                     Storage::Auto{index} => {
-                        if let Some(arg) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body, data) {
+                        if let Some(arg) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
                             da_append(func_body, Op::AutoAssign{index, arg})
                         } else {
                             return false;
@@ -685,7 +692,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
 
                 if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
             } else if (*l).token == '(' as c_long {
-                let var_def = find_var(da_slice(*vars), name);
+                let var_def = find_var_deep(vars, name);
                 if var_def.is_null() {
                     diagf!(l, input_path, name_where, c"ERROR: could not find function `%s`\n", name);
                     return false;
@@ -697,7 +704,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 if (*l).token != ')' as c_long {
                     (*l).parse_point = saved_point;
                     // TODO: function calls with multiple arguments
-                    if let Some(expr) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body, data) {
+                    if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
                         arg = Some(expr)
                     } else {
                         return false;
@@ -797,7 +804,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     };
 
     let mut cmd: Cmd = zeroed();
-    let mut vars: Array<Var> = zeroed();
+    let mut vars: Array<Array<Var>> = zeroed();
     let mut func_body: Array<Op> = zeroed();
     let mut data: Array<u8> = zeroed();
 
@@ -811,9 +818,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let mut output: String_Builder = zeroed();
     generate_executable(&mut output, target);
 
-    // TODO: calling user defined functions does not work anymore
-    // TODO: are function also variables?
-    //   Maybe some sort of global variables.
+    scope_push(&mut vars);          // global scope
+
     'def: loop {
         stb_c_lexer_get_token(&mut l);
         if l.token == CLEX_eof { break 'def }
@@ -843,11 +849,15 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
             if !get_and_expect_clex(&mut l, input_path, ')' as c_long) { return 1; }
             if !get_and_expect_clex(&mut l, input_path, '{' as c_long) { return 1; }
 
-            generate_func_prolog(symbol_name, &mut output, target);
-            let mut auto_vars_count: usize = 0;
-            if !compile_func_body(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body, &mut data) { return 1; }
-            generate_func_body(da_slice(func_body), &mut output, target);
-            generate_func_epilog(&mut output, target);
+            scope_push(&mut vars);          // begin function scope
+                generate_func_prolog(symbol_name, &mut output, target);
+                let mut auto_vars_count: usize = 0;
+                if !compile_func_body(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body, &mut data) { return 1; }
+                generate_func_body(da_slice(func_body), &mut output, target);
+                generate_func_epilog(&mut output, target);
+            scope_pop(&mut vars);          // end function scope
+
+            declare_var(&mut l, input_path, &mut vars, symbol_name, symbol_name_where, Storage::External{name: symbol_name});
 
             func_body.count = 0;
         } else { // Variable definition

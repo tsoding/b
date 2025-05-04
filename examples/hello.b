@@ -1,4 +1,4 @@
-main() {
+hello() {
     extrn putchar;
     putchar(72);
     putchar(69);
@@ -12,4 +12,10 @@ main() {
     putchar(79);
     putchar(79);
     putchar(10);
+}
+
+main() {
+    hello();
+    hello();
+    hello();
 }
