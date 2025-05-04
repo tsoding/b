@@ -213,6 +213,7 @@ pub enum Binop {
     Plus,
     Minus,
     Mult,
+    Less,
 }
 
 impl Binop {
@@ -221,6 +222,7 @@ impl Binop {
             token if token == '+' as i64 => Some(Binop::Plus),
             token if token == '-' as i64 => Some(Binop::Minus),
             token if token == '*' as i64 => Some(Binop::Mult),
+            token if token == '<' as i64 => Some(Binop::Less),
             _ => None,
         }
     }
@@ -408,6 +410,16 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                         };
                         sb_appendf(output, c"    mov [rbp-%zu], rax\n".as_ptr(), index*8);
                     }
+                    Binop::Less => {
+                        sb_appendf(output, c!("    xor rbx, rbx\n"), index*8);
+                        match rhs {
+                            Arg::AutoVar(index) => sb_appendf(output, c!("    cmp rax, [rbp-%zu]\n"), index*8),
+                            Arg::Literal(value) => sb_appendf(output, c!("    cmp rax, %ld\n"), value),
+                            Arg::DataOffset(_offset) => todo!(),
+                        };
+                        sb_appendf(output, c!("    setl bl\n"));
+                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rbx\n"), index*8);
+                    }
                 }
             }
             Op::Funcall{name, arg} => {
@@ -455,6 +467,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                     Binop::Plus  => sb_appendf(output, c" + ".as_ptr()),
                     Binop::Minus => sb_appendf(output, c" - ".as_ptr()),
                     Binop::Mult  => sb_appendf(output, c" * ".as_ptr()),
+                    Binop::Less  => todo!(),
                 };
                 match rhs {
                     Arg::AutoVar(index) => sb_appendf(output, c"vars[%zu]".as_ptr(), index - 1),
@@ -499,9 +512,10 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
                     Op::AutoBinop{binop, index, lhs, rhs} => {
                         sb_appendf(output, c"    AutoBinop(".as_ptr());
                         match binop {
-                            Binop::Plus  => sb_appendf(output, c"Plus".as_ptr()),
-                            Binop::Minus => sb_appendf(output, c"Minus".as_ptr()),
-                            Binop::Mult  => sb_appendf(output, c"Mult".as_ptr()),
+                            Binop::Plus  => sb_appendf(output, c!("Plus")),
+                            Binop::Minus => sb_appendf(output, c!("Minus")),
+                            Binop::Mult  => sb_appendf(output, c!("Mult")),
+                            Binop::Less  => sb_appendf(output, c!("Less")),
                         };
                         sb_appendf(output, c", %zu, ".as_ptr(), index);
                         dump_arg(output, lhs);
@@ -640,9 +654,34 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
         (*auto_vars_count) += 1;
         let index = *auto_vars_count;
         da_append(func_body, Op::AutoAlloc(1));
-        while (*l).token == '+' as i64 || (*l).token == '-' as i64{
+        while (*l).token == '+' as i64 || (*l).token == '-' as i64 {
             let token = (*l).token;
             let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+            da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
+            lhs = Arg::AutoVar(index);
+
+            saved_point = (*l).parse_point;
+            stb_c_lexer_get_token(l);
+        }
+    }
+
+    (*l).parse_point = saved_point;
+    Some(lhs)
+}
+
+pub unsafe fn compile_less_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    let mut lhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+
+    let mut saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+    // TODO: adding more binops of the same precedence requires modification in 3 places here.
+    if (*l).token == '<' as i64 {
+        (*auto_vars_count) += 1;
+        let index = *auto_vars_count;
+        da_append(func_body, Op::AutoAlloc(1));
+        while (*l).token == '<' as i64 {
+            let token = (*l).token;
+            let rhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
             da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
@@ -658,7 +697,7 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
 // TODO: the expression compilation leaks a lot of temporary variables
 //   Maybe deallocate all of them at the end of a statement.
 pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)
+    compile_less_expression(l, input_path, vars, auto_vars_count, func_body, data)
 }
 
 pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
