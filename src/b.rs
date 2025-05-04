@@ -82,12 +82,34 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
     }
 }
 
-unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: i64) -> bool {
-    if (*l).token != clex {
-        diagf!(l, input_path, (*l).where_firstchar, c"ERROR: expected %s, but got %s\n", display_token_kind_temp(clex), display_token_kind_temp((*l).token));
-        return false
+unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [i64]) -> bool {
+    for i in 0..clexes.len() {
+        if (*clexes)[i] == (*l).token {
+            return true;
+        }
     }
-    true
+
+    let mut sb: String_Builder = zeroed();
+    for i in 0..clexes.len() {
+        if i > 0 {
+            if i + 1 >= clexes.len() {
+                sb_appendf(&mut sb, c!(", or "));
+            } else {
+                sb_appendf(&mut sb, c!(", "));
+            }
+        }
+        sb_appendf(&mut sb, c!("%s"), display_token_kind_temp((*clexes)[i]));
+    }
+    da_append(&mut sb, 0);
+
+    diagf!(l, input_path, (*l).where_firstchar, c"ERROR: expected %s, but got %s\n", sb.items, display_token_kind_temp((*l).token));
+
+    free(sb.items);
+    false
+}
+
+unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: i64) -> bool {
+    expect_clexes(l, input_path, &[clex])
 }
 
 unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, clex: c_long) -> bool {
@@ -656,14 +678,26 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             da_append(func_body, Op::ExtrnVar(name));
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
         } else if strcmp((*l).string, c"auto".as_ptr()) == 0 {
-            // TODO: support multiple auto declarations
-            if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
-            let name = strdup((*l).string);
-            let name_where = (*l).where_firstchar;
-            (*auto_vars_count) += 1;
-            if !declare_var(l, input_path, vars, name, name_where, Storage::Auto{index: *auto_vars_count}) { return false; }
-            da_append(func_body, Op::AutoAlloc(1));
-            if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
+            let mut count = 0;
+            'vars: loop {
+                if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
+                let name = strdup((*l).string);
+                let name_where = (*l).where_firstchar;
+                (*auto_vars_count) += 1;
+                if !declare_var(l, input_path, vars, name, name_where, Storage::Auto{index: *auto_vars_count}) { return false; }
+                count += 1;
+                stb_c_lexer_get_token(l);
+                if !expect_clexes(l, input_path, &[',' as c_long, ';' as c_long]) { return false }
+                if (*l).token == ';' as c_long {
+                    break 'vars;
+                } else if (*l).token == ',' as c_long {
+                    continue 'vars;
+                } else {
+                    unreachable!()
+                }
+            }
+
+            da_append(func_body, Op::AutoAlloc(count));
         } else {
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;

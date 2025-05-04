@@ -80,3 +80,10 @@ pub unsafe fn panic_handler(info: &PanicInfo) -> ! {
 pub unsafe extern "C" fn crust_entry_point(argc: i32, argv: *mut*mut c_char) -> i32 {
     crate::main(argc, argv)
 }
+
+#[macro_export]
+macro_rules! c {
+    ($l:literal) => {
+        concat!($l, "\0").as_ptr() as *const i8
+    }
+}
