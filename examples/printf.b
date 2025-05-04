@@ -1,5 +1,5 @@
 main() {
     extrn printf;
     printf("Hello, World\n");
-    //printf("%d\n", 69);
+    printf("%d\n", 69);
 }

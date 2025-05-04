@@ -236,7 +236,7 @@ pub enum Op {
     ExtrnVar(*const c_char),
     AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
-    Funcall    {name: *const c_char, arg: Option<Arg>},
+    Funcall    {name: *const c_char, args: Array<Arg>},
     Jmp        {addr: usize},
     JmpIfNot   {addr: usize, arg: Arg},
 }
@@ -425,12 +425,17 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
                     }
                 }
             }
-            Op::Funcall{name, arg} => {
-                if let Some(arg) = arg {
-                    match arg {
-                        Arg::AutoVar(index)     => sb_appendf(output, c"    mov rdi, [rbp-%zu]\n".as_ptr(), index*8),
-                        Arg::Literal(value)     => sb_appendf(output, c"    mov rdi, %ld\n".as_ptr(), value),
-                        Arg::DataOffset(offset) => sb_appendf(output, c"    mov rdi, dat+%zu\n".as_ptr(), offset),
+            Op::Funcall{name, args} => {
+                const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi")];
+                if args.count > REGISTERS.len() {
+                    todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
+                }
+                for i in 0..args.count {
+                    let reg = (*REGISTERS)[i];
+                    match *args.items.add(i) {
+                        Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
+                        Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"),       reg, value),
+                        Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"),   reg, offset),
                     };
                 }
                 sb_appendf(output, c"    call %s\n".as_ptr(), name);
@@ -492,17 +497,7 @@ unsafe fn generate_javascript_func_body(body: *const [Op], output: *mut String_B
                 };
                 sb_appendf(output, c";\n".as_ptr());
             }
-            Op::Funcall{name, arg} => {
-                if let Some(arg) = arg {
-                    match arg {
-                        Arg::AutoVar(index) => sb_appendf(output, c"    %s(vars[%zu]);\n".as_ptr(), name, index - 1),
-                        Arg::Literal(value) => sb_appendf(output, c"    %s(%ld);\n".as_ptr(), name, value),
-                        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                    };
-                } else {
-                    sb_appendf(output, c"    %s();\n".as_ptr(), name);
-                }
-            },
+            Op::Funcall{..} => todo!(),
             Op::JmpIfNot{..} => todo!(),
             Op::Jmp{..} => todo!(),
         }
@@ -542,17 +537,13 @@ pub unsafe fn generate_func_body(body: *const [Op], output: *mut String_Builder,
                         dump_arg(output, rhs);
                         sb_appendf(output, c")\n".as_ptr());
                     }
-                    Op::Funcall{name, arg} => {
-                        match arg {
-                            Some(arg) => {
-                                sb_appendf(output, c"    Funcall(\"%s\", ".as_ptr(), name);
-                                dump_arg(output, arg);
-                                sb_appendf(output, c")\n".as_ptr());
-                            }
-                            None => {
-                                sb_appendf(output, c"    Funcall(\"%s\")\n".as_ptr(), name);
-                            }
+                    Op::Funcall{name, args} => {
+                        sb_appendf(output, c"    Funcall(\"%s\"".as_ptr(), name);
+                        for i in 0..args.count {
+                            sb_appendf(output, c!(", "));
+                            dump_arg(output, *args.items.add(i));
                         }
+                        sb_appendf(output, c")\n".as_ptr());
                     }
                     Op::JmpIfNot{addr, arg} => {
                         sb_appendf(output, c!("    JmpIfNot(%zu, "), addr);
@@ -814,23 +805,33 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                     return false;
                 }
 
+                let mut args: Array<Arg> = zeroed();
                 let saved_point = (*l).parse_point;
                 stb_c_lexer_get_token(l);
-                let mut arg = None;
                 if (*l).token != ')' as c_long {
                     (*l).parse_point = saved_point;
-                    // TODO: function calls with multiple arguments
-                    if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
-                        arg = Some(expr)
-                    } else {
-                        return false;
+                    loop {
+                        // TODO: function calls with multiple arguments
+                        if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
+                            da_append(&mut args, expr)
+                        } else {
+                            return false;
+                        }
+                        stb_c_lexer_get_token(l);
+                        if !expect_clexes(l, input_path, &[')' as c_long, ',' as c_long]) { return false; }
+                        if (*l).token == ')' as c_long {
+                            break;
+                        } else if (*l).token == ',' as c_long {
+                            continue;
+                        } else {
+                            unreachable!();
+                        }
                     }
-                    if !get_and_expect_clex(l, input_path, ')' as c_long) { return false; }
                 }
 
                 match (*var_def).storage {
                     Storage::External{name} => {
-                        da_append(func_body, Op::Funcall {name, arg});
+                        da_append(func_body, Op::Funcall {name, args});
                     }
                     Storage::Auto{..} => {
                         missingf!(l, input_path, name_where, c"calling functions from auto variables\n");

@@ -6,7 +6,7 @@ main() {
     a = 0;
     b = 1;
     while (a < 1000000) {
-        // printf("%d\n", a);
+        printf("%d\n", a);
         c = a + b;
         a = b;
         b = c;
