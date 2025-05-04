@@ -638,6 +638,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
         } else if strcmp((*l).string, c"auto".as_ptr()) == 0 {
             if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
+            // TODO: support multiple auto declarations
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
             let existing_var = find_var(da_slice(*vars), name);
@@ -646,15 +647,14 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 diagf!(l, input_path, (*existing_var).hwere, c"NOTE: the first declaration is located here\n");
                 return false;
             }
+            (*auto_vars_count) += 1;
             da_append(vars, Var {
                 name,
                 storage: Storage::Auto,
-                index: (*vars).count,
+                index: *auto_vars_count,
                 hwere: (*l).where_firstchar,
             });
-            // TODO: support multiple auto declarations
             da_append(func_body, Op::AutoAlloc(1));
-            (*auto_vars_count) += 1;
             if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
         } else {
             let name = strdup((*l).string);
