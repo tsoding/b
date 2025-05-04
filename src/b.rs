@@ -228,7 +228,6 @@ impl Binop {
     }
 }
 
-
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
@@ -661,7 +660,6 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
     Some(lhs)
 }
 
-// TODO: add support for binary minus expression
 pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
 
@@ -811,7 +809,6 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 if (*l).token != ')' as c_long {
                     (*l).parse_point = saved_point;
                     loop {
-                        // TODO: function calls with multiple arguments
                         if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
                             da_append(&mut args, expr)
                         } else {
@@ -1014,4 +1011,3 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
 // TODO: B lexing is different from the C one.
 //   Hack stb_c_lexer.h into stb_b_lexer.h
-// TODO: Create a roadmap based on the spec.
