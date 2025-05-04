@@ -538,8 +538,12 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let offset = (*data).count;
             let string_len = strlen((*l).string);
             da_append_many(data, slice::from_raw_parts((*l).string as *const u8, string_len));
-            // TODO: confirm that the strings in B are NULL-terminated
-            // I can't find anything about it in the spec: https://web.archive.org/web/20241214022534/https://www.bell-labs.com/usr/dmr/www/kbman.html
+            // TODO: Strings in B are not NULL-terminated.
+            // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
+            // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
+            // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
+            // libc. While the language is still in development we gonna terminate it with 0. We will make it
+            // "spec complaint" later.
             da_append(data, 0); // NULL-terminator
             Some(Arg::DataOffset(offset))
         }
