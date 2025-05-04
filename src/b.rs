@@ -98,14 +98,13 @@ unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, clex
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum Storage {
-    External,
-    Auto
+    External{name: *const c_char},
+    Auto{index: usize},
 }
 
 #[derive(Clone, Copy)]
 pub struct Var {
     pub name: *const c_char,
-    pub index: usize,
     pub hwere: *mut c_char,
     pub storage: Storage,
 }
@@ -528,8 +527,8 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
                 return None;
             }
             match (*var_def).storage {
-                Storage::Auto => return Some(Arg::AutoVar((*var_def).index)),
-                Storage::External => {
+                Storage::Auto{index} => return Some(Arg::AutoVar(index)),
+                Storage::External{..} => {
                     missingf!(l, input_path, name_where, c"external variables in lvalues are not supported yet\n");
                 }
             }
@@ -633,8 +632,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
 
             da_append(vars, Var {
                 name,
-                storage: Storage::External,
-                index: 0,  // Irrelevant for external variables
+                storage: Storage::External{name},
                 hwere: (*l).where_firstchar,
             });
 
@@ -654,8 +652,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             (*auto_vars_count) += 1;
             da_append(vars, Var {
                 name,
-                storage: Storage::Auto,
-                index: *auto_vars_count,
+                storage: Storage::Auto{index: *auto_vars_count},
                 hwere: (*l).where_firstchar,
             });
             da_append(func_body, Op::AutoAlloc(1));
@@ -674,17 +671,14 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 }
 
                 match (*var_def).storage {
-                    Storage::Auto => {
+                    Storage::Auto{index} => {
                         if let Some(arg) = compile_expression(l, input_path, da_slice(*vars), auto_vars_count, func_body, data) {
-                            da_append(func_body, Op::AutoAssign{
-                                index: (*var_def).index,
-                                arg
-                            })
+                            da_append(func_body, Op::AutoAssign{index, arg})
                         } else {
                             return false;
                         }
                     }
-                    Storage::External => {
+                    Storage::External{..} => {
                         missingf!(l, input_path, name_where, c"assignment to external variables\n");
                     }
                 }
@@ -712,10 +706,10 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 }
 
                 match (*var_def).storage {
-                    Storage::External => {
+                    Storage::External{name} => {
                         da_append(func_body, Op::Funcall {name, arg});
                     }
-                    Storage::Auto => {
+                    Storage::Auto{..} => {
                         missingf!(l, input_path, name_where, c"calling functions from auto variables\n");
                     }
                 }
