@@ -41,9 +41,18 @@ macro_rules! missingf {
     }}
 }
 
+#[macro_export]
+macro_rules! cl {
+    ($e:expr) => {{
+        let s: &'static [u8] = concat!($e, "\0").as_bytes();
+        s.as_ptr() as *const core::ffi::c_char
+    }}
+}
+
+
 unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
     match token {
-        CLEX_id         => c"identifier".as_ptr(),
+        CLEX_id         => cl!("identifier"),
         CLEX_eq         => c"==".as_ptr(),
         CLEX_noteq      => c"!=".as_ptr(),
         CLEX_lesseq     => c"<=".as_ptr(),
