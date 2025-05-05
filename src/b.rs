@@ -731,7 +731,10 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
     stb_c_lexer_get_token(l);
 
     if (*l).token == '{' as c_long {
-        compile_block(l, input_path, vars, auto_vars_count, func_body, data)
+        scope_push(vars);
+        if !compile_block(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+        scope_pop(vars);
+        true
     } else {
         if !expect_clex(l, input_path, CLEX_id) { return false; }
         if strcmp((*l).string, c!("extrn")) == 0 {
