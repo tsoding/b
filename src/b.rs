@@ -716,13 +716,23 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, v
     compile_less_expression(l, input_path, vars, auto_vars_count, func_body, data)
 }
 
-pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     loop {
-        // Statement
+        let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
-        if (*l).token == '}' as c_long {
-            return true;
-        }
+        if (*l).token == '}' as c_long { return true; }
+        (*l).parse_point = saved_point;
+
+        if !compile_stmt(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+    }
+}
+
+pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+    stb_c_lexer_get_token(l);
+
+    if (*l).token == '{' as c_long {
+        compile_block(l, input_path, vars, auto_vars_count, func_body, data)
+    } else {
         if !expect_clex(l, input_path, CLEX_id) { return false; }
         if strcmp((*l).string, c!("extrn")) == 0 {
             // TODO: support multiple extrn declarations
@@ -731,7 +741,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             let name_where = (*l).where_firstchar;
             if !declare_var(l, input_path, vars, name, name_where, Storage::External{name}) { return false; }
             da_append(func_body, Op::ExtrnVar(name));
-            if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
+            get_and_expect_clex(l, input_path, ';' as c_long)
         } else if strcmp((*l).string, c!("auto")) == 0 {
             let mut count = 0;
             'vars: loop {
@@ -753,6 +763,8 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
             }
 
             da_append(func_body, Op::AutoAlloc(count));
+
+            true
         } else if strcmp((*l).string, c!("while")) == 0 {
             let begin = (*func_body).count;
             if !get_and_expect_clex(l, input_path, '(' as c_long) { return false; }
@@ -760,15 +772,15 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                 if !get_and_expect_clex(l, input_path, ')' as c_long) { return false; }
                 let condition_jump = (*func_body).count;
                 da_append(func_body, Op::JmpIfNot{addr: 0, arg});
-                if !get_and_expect_clex(l, input_path, '{' as c_long) { return false; }
-                // TODO: parse the body of the while loop as a statement, not as another function body
-                if !compile_func_body(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+                if !compile_stmt(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
                 da_append(func_body, Op::Jmp{addr: begin});
                 let end = (*func_body).count;
                 (*(*func_body).items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
             } else {
                 return false;
             }
+
+            true
         } else {
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
@@ -795,7 +807,7 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                     }
                 }
 
-                if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
+                get_and_expect_clex(l, input_path, ';' as c_long)
             } else if (*l).token == '(' as c_long {
                 let var_def = find_var_deep(vars, name);
                 if var_def.is_null() {
@@ -835,10 +847,10 @@ pub unsafe fn compile_func_body(l: *mut stb_lexer, input_path: *const c_char, va
                     }
                 }
 
-                if !get_and_expect_clex(l, input_path, ';' as c_long) { return false; }
+                get_and_expect_clex(l, input_path, ';' as c_long)
             } else {
                 diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: unexpected token %s\n"), display_token_kind_temp((*l).token));
-                return false;
+                false
             }
         }
     }
@@ -962,12 +974,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
         if l.token == '(' as c_long { // Function definition
             // TODO: functions with several parameters
             if !get_and_expect_clex(&mut l, input_path, ')' as c_long) { return 1; }
-            if !get_and_expect_clex(&mut l, input_path, '{' as c_long) { return 1; }
 
             scope_push(&mut vars);          // begin function scope
                 generate_func_prolog(symbol_name, &mut output, target);
                 let mut auto_vars_count: usize = 0;
-                if !compile_func_body(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body, &mut data) { return 1; }
+                if !compile_stmt(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body, &mut data) { return 1; }
                 generate_func_body(da_slice(func_body), &mut output, target);
                 generate_func_epilog(&mut output, target);
             scope_pop(&mut vars);          // end function scope
