@@ -727,6 +727,48 @@ pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: 
     }
 }
 
+pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>, name: *const c_char, name_where: *const c_char) -> bool {
+    let var_def = find_var_deep(vars, name);
+    if var_def.is_null() {
+        diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
+        return false;
+    }
+
+    let mut args: Array<Arg> = zeroed();
+    let saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+    if (*l).token != ')' as c_long {
+        (*l).parse_point = saved_point;
+        loop {
+            if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
+                da_append(&mut args, expr)
+            } else {
+                return false;
+            }
+            stb_c_lexer_get_token(l);
+            if !expect_clexes(l, input_path, &[')' as c_long, ',' as c_long]) { return false; }
+            if (*l).token == ')' as c_long {
+                break;
+            } else if (*l).token == ',' as c_long {
+                continue;
+            } else {
+                unreachable!();
+            }
+        }
+    }
+
+    match (*var_def).storage {
+        Storage::External{name} => {
+            da_append(func_body, Op::Funcall {name, args});
+        }
+        Storage::Auto{..} => {
+            missingf!(l, input_path, name_where, c!("calling functions from auto variables\n"));
+        }
+    }
+
+    true
+}
+
 pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     stb_c_lexer_get_token(l);
 
@@ -812,44 +854,7 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
 
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else if (*l).token == '(' as c_long {
-                let var_def = find_var_deep(vars, name);
-                if var_def.is_null() {
-                    diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
-                    return false;
-                }
-
-                let mut args: Array<Arg> = zeroed();
-                let saved_point = (*l).parse_point;
-                stb_c_lexer_get_token(l);
-                if (*l).token != ')' as c_long {
-                    (*l).parse_point = saved_point;
-                    loop {
-                        if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
-                            da_append(&mut args, expr)
-                        } else {
-                            return false;
-                        }
-                        stb_c_lexer_get_token(l);
-                        if !expect_clexes(l, input_path, &[')' as c_long, ',' as c_long]) { return false; }
-                        if (*l).token == ')' as c_long {
-                            break;
-                        } else if (*l).token == ',' as c_long {
-                            continue;
-                        } else {
-                            unreachable!();
-                        }
-                    }
-                }
-
-                match (*var_def).storage {
-                    Storage::External{name} => {
-                        da_append(func_body, Op::Funcall {name, args});
-                    }
-                    Storage::Auto{..} => {
-                        missingf!(l, input_path, name_where, c!("calling functions from auto variables\n"));
-                    }
-                }
-
+                if !compile_function_call(l, input_path, vars, auto_vars_count, func_body, data, name, name_where) { return false; }
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else {
                 diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: unexpected token %s\n"), display_token_kind_temp((*l).token));
