@@ -15,6 +15,7 @@ hello() {
 }
 
 main() {
+    extrn putchar;
     hello();
     hello();
     hello();

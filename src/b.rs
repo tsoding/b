@@ -243,8 +243,6 @@ impl Binop {
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
-    // TODO: Op::ExtrnVar should not be a thing
-    ExtrnVar(*const c_char),
     AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
     Funcall    {name: *const c_char, args: Array<Arg>},
@@ -327,9 +325,6 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
-            Op::ExtrnVar(name) => {
-                sb_appendf(output, c!("    extrn %s\n"), name);
-            },
             Op::AutoAssign{index, arg} => {
                 match arg {
                     Arg::AutoVar(other_index) => {
@@ -437,10 +432,11 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
 
 unsafe fn generate_javascript_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     sb_appendf(output, c!("function %s() {\n"), name);
-    sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), auto_vars_count);
+    if auto_vars_count > 0 {
+        sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), auto_vars_count);
+    }
     for i in 0..body.len() {
         match (*body)[i] {
-            Op::ExtrnVar(_name) => {},
             Op::AutoAssign{index, arg} => {
                 match arg {
                     Arg::AutoVar(other_index) => {
@@ -500,9 +496,6 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
             for i in 0..body.len() {
                 sb_appendf(output, c!("%8zu"), i);
                 match (*body)[i] {
-                    Op::ExtrnVar(name) => {
-                        sb_appendf(output, c!("    ExtrnVar(\"%s\")\n"), name);
-                    }
                     Op::AutoAssign{index, arg} => {
                         sb_appendf(output, c!("    AutoAssign(%zu, "), index);
                         dump_arg(output, arg);
@@ -675,14 +668,14 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, v
     compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, 0)
 }
 
-pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, extrns: *mut Array<*const c_char>, data: *mut Array<u8>) -> bool {
     loop {
         let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
         if (*l).token == '}' as c_long { return true; }
         (*l).parse_point = saved_point;
 
-        if !compile_statement(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
+        if !compile_statement(l, input_path, vars, auto_vars_ator, func_body, extrns, data) { return false; }
     }
 }
 
@@ -728,13 +721,22 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     true
 }
 
-pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+pub unsafe fn extrn_declare_if_not_exists(extrns: *mut Array<*const c_char>, name: *const c_char) {
+    for i in 0..(*extrns).count {
+        if strcmp(*(*extrns).items.add(i), name) == 0 {
+            return;
+        }
+    }
+    da_append(extrns, name)
+}
+
+pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, extrns: *mut Array<*const c_char>, data: *mut Array<u8>) -> bool {
     stb_c_lexer_get_token(l);
 
     if (*l).token == '{' as c_long {
         scope_push(vars);
             let saved_auto_vars_count = (*auto_vars_ator).count;
-                if !compile_block(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
+                if !compile_block(l, input_path, vars, auto_vars_ator, func_body, extrns, data) { return false; }
             (*auto_vars_ator).count = saved_auto_vars_count;
         scope_pop(vars);
         true
@@ -747,7 +749,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
                 let name = strdup((*l).string);
                 let name_where = (*l).where_firstchar;
                 let storage = if extrn {
-                    da_append(func_body, Op::ExtrnVar(name));
+                    extrn_declare_if_not_exists(extrns, name);
                     Storage::External{name}
                 } else {
                     let index = allocate_auto_var(auto_vars_ator);
@@ -776,7 +778,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
                 da_append(func_body, Op::JmpIfNot{addr: 0, arg});
                 (*auto_vars_ator).count = saved_auto_vars_count;
 
-                if !compile_statement(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
+                if !compile_statement(l, input_path, vars, auto_vars_ator, func_body, extrns, data) { return false; }
                 da_append(func_body, Op::Jmp{addr: begin});
                 let end = (*func_body).count;
                 (*(*func_body).items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
@@ -849,6 +851,28 @@ pub unsafe fn temp_default_output_path(input_path: *const c_char) -> *const c_ch
     }
 }
 
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], target: Target) {
+    match target {
+        Target::Fasm_x86_64_Linux => {
+            for i in 0..extrns.len() {
+                sb_appendf(output, c!("extrn %s\n"), (*extrns)[i]);
+            }
+        }
+        Target::JavaScript => {
+            sb_appendf(output, c!("// External Symbols:\n"));
+            for i in 0..extrns.len() {
+                sb_appendf(output, c!("//    %s\n"), (*extrns)[i]);
+            }
+        }
+        Target::IR => {
+            sb_appendf(output, c!("-- External Symbols --\n\n"));
+            for i in 0..extrns.len() {
+                sb_appendf(output, c!("    %s\n"), (*extrns)[i]);
+            }
+        }
+    }
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
@@ -905,6 +929,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let mut vars: Array<Array<Var>> = zeroed();
     let mut func_body: Array<Op> = zeroed();
     let mut data: Array<u8> = zeroed();
+    let mut extrns: Array<*const c_char> = zeroed();
 
     let mut input: String_Builder = zeroed();
     if !read_entire_file(input_path, &mut input) { return 1; }
@@ -948,7 +973,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
             scope_push(&mut vars);          // begin function scope
                 let mut auto_vars_ator: AutoVarsAtor = zeroed();
-                if !compile_statement(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut data) { return 1; }
+                if !compile_statement(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut extrns, &mut data) { return 1; }
                 generate_function(symbol_name, auto_vars_ator.max, da_slice(func_body), &mut output, target);
             scope_pop(&mut vars);          // end function scope
 
@@ -960,6 +985,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
         }
     }
 
+    generate_extrns(&mut output, da_slice(extrns), target);
     generate_data_section(&mut output, target, da_slice(data));
 
     match target {
