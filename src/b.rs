@@ -474,7 +474,7 @@ unsafe fn generate_javascript_func_body(name: *const c_char, body: *const [Op], 
                     Binop::Plus  => sb_appendf(output, c!(" + ")),
                     Binop::Minus => sb_appendf(output, c!(" - ")),
                     Binop::Mult  => sb_appendf(output, c!(" * ")),
-                    Binop::Less  => todo!(),
+                    Binop::Less  => sb_appendf(output, c!(" < ")),
                 };
                 match rhs {
                     Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
@@ -483,7 +483,18 @@ unsafe fn generate_javascript_func_body(name: *const c_char, body: *const [Op], 
                 };
                 sb_appendf(output, c!(";\n"));
             }
-            Op::Funcall{..} => todo!(),
+            Op::Funcall{name, args} => {
+                sb_appendf(output, c!("    %s("), name);
+                for i in 0..args.count {
+                    if i > 0 { sb_appendf(output, c!(", ")); }
+                    match *args.items.add(i) {
+                        Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
+                        Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
+                        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
+                    };
+                }
+                sb_appendf(output, c!(");\n"));
+            },
             Op::JmpIfNot{..} => todo!(),
             Op::Jmp{..} => todo!(),
         }
