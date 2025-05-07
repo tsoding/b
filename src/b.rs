@@ -681,7 +681,7 @@ pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: 
         if (*l).token == '}' as c_long { return true; }
         (*l).parse_point = saved_point;
 
-        if !compile_stmt(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
+        if !compile_statement(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
     }
 }
 
@@ -727,7 +727,7 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     true
 }
 
-pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     stb_c_lexer_get_token(l);
 
     if (*l).token == '{' as c_long {
@@ -776,7 +776,7 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
                 da_append(func_body, Op::JmpIfNot{addr: 0, arg});
                 (*auto_vars_ator).count = saved_auto_vars_count;
 
-                if !compile_stmt(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
+                if !compile_statement(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
                 da_append(func_body, Op::Jmp{addr: begin});
                 let end = (*func_body).count;
                 (*(*func_body).items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
@@ -948,7 +948,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
             scope_push(&mut vars);          // begin function scope
                 let mut auto_vars_ator: AutoVarsAtor = zeroed();
-                if !compile_stmt(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut data) { return 1; }
+                if !compile_statement(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut data) { return 1; }
                 generate_function(symbol_name, auto_vars_ator.max, da_slice(func_body), &mut output, target);
             scope_pop(&mut vars);          // end function scope
 
