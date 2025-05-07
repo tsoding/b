@@ -208,6 +208,7 @@ pub enum Arg {
     DataOffset(usize),
 }
 
+// TODO: add support for binary division expression
 #[derive(Clone, Copy)]
 pub enum Binop {
     Plus,
@@ -225,6 +226,17 @@ impl Binop {
             token if token == '<' as i64 => Some(Binop::Less),
             _ => None,
         }
+    }
+
+    pub const MAX_PRECEDENCE: usize = 3;
+    pub fn precedence(self) -> usize {
+        let x = match self {
+            Binop::Less => 0,
+            Binop::Plus | Binop::Minus => 1,
+            Binop::Mult => 2,
+        };
+        assert!(x < Self::MAX_PRECEDENCE);
+        x
     }
 }
 
@@ -655,67 +667,30 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     }
 }
 
-// TODO: add support for binary division expression
-pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    let mut lhs = compile_primary_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-
-    let mut saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
-    if (*l).token == '*' as i64 {
-        let index = allocate_auto_var(auto_vars_ator);
-        while (*l).token == '*' as i64 {
-            let rhs = compile_primary_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-            da_append(func_body, Op::AutoBinop {binop: Binop::Mult, index, lhs, rhs});
-            lhs = Arg::AutoVar(index);
-
-            saved_point = (*l).parse_point;
-            stb_c_lexer_get_token(l);
-        }
+pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>, precedence: usize) -> Option<Arg> {
+    if precedence >= Binop::MAX_PRECEDENCE {
+        return compile_primary_expression(l, input_path, vars, auto_vars_ator, func_body, data);
     }
 
-    (*l).parse_point = saved_point;
-    Some(lhs)
-}
-
-pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
+    let mut lhs = compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, precedence + 1)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
-    // TODO: adding more binops of the same precedence requires modification in 3 places here.
-    if (*l).token == '+' as i64 || (*l).token == '-' as i64 {
-        let index = allocate_auto_var(auto_vars_ator);
-        while (*l).token == '+' as i64 || (*l).token == '-' as i64 {
-            let token = (*l).token;
-            let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-            da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
-            lhs = Arg::AutoVar(index);
 
-            saved_point = (*l).parse_point;
-            stb_c_lexer_get_token(l);
-        }
-    }
+    if let Some(binop) = Binop::from_token((*l).token) {
+        if binop.precedence() == precedence {
+            let index = allocate_auto_var(auto_vars_ator);
+            while let Some(binop) = Binop::from_token((*l).token) {
+                if binop.precedence() != precedence { break; }
 
-    (*l).parse_point = saved_point;
-    Some(lhs)
-}
+                let token = (*l).token;
+                let rhs = compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, precedence)?;
+                da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
+                lhs = Arg::AutoVar(index);
 
-pub unsafe fn compile_less_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    let mut lhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-
-    let mut saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
-    // TODO: adding more binops of the same precedence requires modification in 3 places here.
-    if (*l).token == '<' as i64 {
-        let index = allocate_auto_var(auto_vars_ator);
-        while (*l).token == '<' as i64 {
-            let token = (*l).token;
-            let rhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-            da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
-            lhs = Arg::AutoVar(index);
-
-            saved_point = (*l).parse_point;
-            stb_c_lexer_get_token(l);
+                saved_point = (*l).parse_point;
+                stb_c_lexer_get_token(l);
+            }
         }
     }
 
@@ -724,7 +699,7 @@ pub unsafe fn compile_less_expression(l: *mut stb_lexer, input_path: *const c_ch
 }
 
 pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    compile_less_expression(l, input_path, vars, auto_vars_ator, func_body, data)
+    compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, 0)
 }
 
 pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
