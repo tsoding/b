@@ -243,11 +243,6 @@ impl Binop {
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
-    FuncProlog {
-        /// Amount of local auto vars to allocate for the function
-        count: usize,
-    },
-    FuncEpilog,
     ExtrnVar(*const c_char),
     AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
@@ -320,25 +315,17 @@ unsafe fn generate_executable(output: *mut String_Builder, target: Target) {
     }
 }
 
-unsafe fn generate_fasm_x86_64_linux_func_body(name: *const c_char, body: *const [Op], output: *mut String_Builder) {
+unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     sb_appendf(output, c!("public %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
+    sb_appendf(output, c!("    push rbp\n"));
+    sb_appendf(output, c!("    mov rbp, rsp\n"));
+    if auto_vars_count > 0 {
+        sb_appendf(output, c!("    sub rsp, %zu\n"), auto_vars_count*8);
+    }
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
-            Op::FuncProlog{count} => {
-                sb_appendf(output, c!("    push rbp\n"));
-                sb_appendf(output, c!("    mov rbp, rsp\n"));
-                if count > 0 {
-                    sb_appendf(output, c!("    sub rsp, %zu\n"), count*8);
-                }
-            },
-            Op::FuncEpilog => {
-                sb_appendf(output, c!("    mov rsp, rbp\n"));
-                sb_appendf(output, c!("    pop rbp\n"));
-                sb_appendf(output, c!("    mov rax, 0\n"));
-                sb_appendf(output, c!("    ret\n"));
-            }
             Op::ExtrnVar(name) => {
                 sb_appendf(output, c!("    extrn %s\n"), name);
             },
@@ -441,16 +428,17 @@ unsafe fn generate_fasm_x86_64_linux_func_body(name: *const c_char, body: *const
         }
     }
     sb_appendf(output, c!(".op_%zu:\n"), body.len());
+    sb_appendf(output, c!("    mov rsp, rbp\n"));
+    sb_appendf(output, c!("    pop rbp\n"));
+    sb_appendf(output, c!("    mov rax, 0\n"));
+    sb_appendf(output, c!("    ret\n"));
 }
 
-unsafe fn generate_javascript_func_body(name: *const c_char, body: *const [Op], output: *mut String_Builder) {
+unsafe fn generate_javascript_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     sb_appendf(output, c!("function %s() {\n"), name);
+    sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), auto_vars_count);
     for i in 0..body.len() {
         match (*body)[i] {
-            Op::FuncProlog{count} => {
-                sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), count);
-            },
-            Op::FuncEpilog => {}
             Op::ExtrnVar(_name) => {},
             Op::AutoAssign{index, arg} => {
                 match arg {
@@ -502,21 +490,15 @@ unsafe fn generate_javascript_func_body(name: *const c_char, body: *const [Op], 
     sb_appendf(output, c!("}\n"));
 }
 
-pub unsafe fn generate_func_body(name: *const c_char, body: *const [Op], output: *mut String_Builder, target: Target) {
+pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder, target: Target) {
     match target {
-        Target::Fasm_x86_64_Linux => generate_fasm_x86_64_linux_func_body(name, body, output),
-        Target::JavaScript        => generate_javascript_func_body(name, body, output),
+        Target::Fasm_x86_64_Linux => generate_fasm_x86_64_linux_function(name, auto_vars_count, body, output),
+        Target::JavaScript        => generate_javascript_function(name, auto_vars_count, body, output),
         Target::IR => {
             sb_appendf(output, c!("%s:\n"), name);
             for i in 0..body.len() {
                 sb_appendf(output, c!("%8zu"), i);
                 match (*body)[i] {
-                    Op::FuncProlog{count} => {
-                        sb_appendf(output, c!("    FuncProlog(%zu)\n"), count);
-                    }
-                    Op::FuncEpilog => {
-                        sb_appendf(output, c!("    FuncEpilog\n"));
-                    }
                     Op::ExtrnVar(name) => {
                         sb_appendf(output, c!("    ExtrnVar(\"%s\")\n"), name);
                     }
@@ -966,12 +948,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
             scope_push(&mut vars);          // begin function scope
                 let mut auto_vars_ator: AutoVarsAtor = zeroed();
-                let prolog = func_body.count;
-                da_append(&mut func_body, Op::FuncProlog{count: 0});
                 if !compile_stmt(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut data) { return 1; }
-                da_append(&mut func_body, Op::FuncEpilog);
-                *func_body.items.add(prolog) = Op::FuncProlog{count: auto_vars_ator.max};
-                generate_func_body(symbol_name, da_slice(func_body), &mut output, target);
+                generate_function(symbol_name, auto_vars_ator.max, da_slice(func_body), &mut output, target);
             scope_pop(&mut vars);          // end function scope
 
             declare_var(&mut l, input_path, &mut vars, symbol_name, symbol_name_where, Storage::External{name: symbol_name});
