@@ -839,15 +839,14 @@ pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
     }
 }
 
-pub unsafe fn temp_default_output_path(input_path: *const c_char) -> *const c_char {
-    let mut input_path_sv = sv_from_cstr(input_path);
-    let b_ext = c!(".b");
-    let b_ext_len = strlen(b_ext);
-    if sv_end_with(input_path_sv, b_ext) {
-        input_path_sv.count -= b_ext_len;
-        temp_sv_to_cstr(input_path_sv)
+pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Option<*const c_char> {
+    let mut sv = sv_from_cstr(s);
+    let suffix_len = strlen(suffix);
+    if sv_end_with(sv, suffix) {
+        sv.count -= suffix_len;
+        Some(temp_sv_to_cstr(sv))
     } else {
-        temp_sprintf(c!("%s.out"), input_path)
+        None
     }
 }
 
@@ -878,7 +877,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
     // TODO: some sort of a -run flag that automatically runs the executable
     let target_name = flag_str(c!("target"), default_target_name, c!("Compilation target"));
-    let output_path_flag = flag_str(c!("o"), ptr::null(), c!("Output path (MANDATORY)"));
+    let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     // TODO: pass user flags to the linker
 
@@ -910,13 +909,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
         usage(target_name);
         fprintf(stderr, c!("ERROR: no input is provided\n"));
         return 1;
-    }
-
-    let output_path;
-    if (*output_path_flag).is_null() {
-        output_path = temp_default_output_path(input_path);
-    } else {
-        output_path = *output_path_flag;
     }
 
     let Some(target) = target_by_name(*target_name) else {
@@ -990,8 +982,19 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
     match target {
         Target::Fasm_x86_64_Linux => {
-            let output_asm_path = temp_sprintf(c!("%s.asm"), output_path);
-            let output_obj_path = temp_sprintf(c!("%s.o"), output_path);
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), input_path);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return 69 }
             cmd_append! {
                 &mut cmd,
@@ -1000,16 +1003,34 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
             if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
             cmd_append! {
                 &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), output_path, output_obj_path,
+                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
         }
         Target::JavaScript => {
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.js"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
             // TODO: make the js target automatically generate the html file
-            if !write_entire_file(output_path, output.items as *const c_void, output.count) { return 69 }
+            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return 69 }
+            printf(c!("Generated %s\n"), effective_output_path);
         }
         Target::IR => {
-            if !write_entire_file(output_path, output.items as *const c_void, output.count) { return 69 }
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.ir"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return 69 }
+            printf(c!("Generated %s\n"), effective_output_path);
         }
     }
     0
