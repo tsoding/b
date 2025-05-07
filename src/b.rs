@@ -243,6 +243,7 @@ impl Binop {
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
+    // TODO: Op::ExtrnVar should not be a thing
     ExtrnVar(*const c_char),
     AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
@@ -739,23 +740,22 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
         true
     } else {
         if !expect_clex(l, input_path, CLEX_id) { return false; }
-        if strcmp((*l).string, c!("extrn")) == 0 {
-            // TODO: support multiple extrn declarations
-            if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
-            let name = strdup((*l).string);
-            let name_where = (*l).where_firstchar;
-            if !declare_var(l, input_path, vars, name, name_where, Storage::External{name}) { return false; }
-            da_append(func_body, Op::ExtrnVar(name));
-            get_and_expect_clex(l, input_path, ';' as c_long)
-        } else if strcmp((*l).string, c!("auto")) == 0 {
+        if strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0 {
+            let extrn = strcmp((*l).string, c!("extrn")) == 0;
             'vars: loop {
                 if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
                 let name = strdup((*l).string);
                 let name_where = (*l).where_firstchar;
-                let index = allocate_auto_var(auto_vars_ator);
-                if !declare_var(l, input_path, vars, name, name_where, Storage::Auto{index}) { return false; }
+                let storage = if extrn {
+                    da_append(func_body, Op::ExtrnVar(name));
+                    Storage::External{name}
+                } else {
+                    let index = allocate_auto_var(auto_vars_ator);
+                    Storage::Auto{index}
+                };
+                if !declare_var(l, input_path, vars, name, name_where, storage)   { return false; }
                 stb_c_lexer_get_token(l);
-                if !expect_clexes(l, input_path, &[',' as c_long, ';' as c_long]) { return false }
+                if !expect_clexes(l, input_path, &[',' as c_long, ';' as c_long]) { return false; }
                 if (*l).token == ';' as c_long {
                     break 'vars;
                 } else if (*l).token == ',' as c_long {

@@ -1,5 +1,6 @@
 main() {
-    extrn printf;
+    extrn printf, putchar;
     printf("Hello, World\n");
-    printf("%d\n", 69);
+    printf("%d", 69);
+    putchar(10);
 }
