@@ -350,7 +350,9 @@ unsafe fn generate_fasm_x86_64_linux_func_body(body: *const [Op], output: *mut S
         sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
             Op::AutoAlloc(count) => {
-                sb_appendf(output, c!("    sub rsp, %zu\n"), count*8);
+                if count > 0 {
+                    sb_appendf(output, c!("    sub rsp, %zu\n"), count*8);
+                }
             },
             Op::ExtrnVar(name) => {
                 sb_appendf(output, c!("    extrn %s\n"), name);
@@ -593,11 +595,28 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, target: Target,
     }
 }
 
-pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+/// Allocator of Auto Vars
+#[derive(Clone, Copy)]
+pub struct AutoVarsAtor {
+    /// How many autovars currently allocated
+    pub count: usize,
+    /// Maximum allocated autovars throughout the function body
+    pub max: usize,
+}
+
+pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
+    (*t).count += 1;
+    if (*t).count > (*t).max {
+        (*t).max = (*t).count;
+    }
+    (*t).count
+}
+
+pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
     stb_c_lexer_get_token(l);
     match (*l).token {
         token if token == '(' as i64 => {
-            let expr = compile_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+            let expr = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
             if !get_and_expect_clex(l, input_path, ')' as i64) { return None }
             Some(expr)
         }
@@ -637,17 +656,15 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 }
 
 // TODO: add support for binary division expression
-pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    let mut lhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    let mut lhs = compile_primary_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
     if (*l).token == '*' as i64 {
-        (*auto_vars_count) += 1;
-        let index = *auto_vars_count;
-        da_append(func_body, Op::AutoAlloc(1));
+        let index = allocate_auto_var(auto_vars_ator);
         while (*l).token == '*' as i64 {
-            let rhs = compile_primary_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+            let rhs = compile_primary_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
             da_append(func_body, Op::AutoBinop {binop: Binop::Mult, index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
@@ -660,19 +677,17 @@ pub unsafe fn compile_multiply_expression(l: *mut stb_lexer, input_path: *const 
     Some(lhs)
 }
 
-pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    let mut lhs = compile_multiply_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
     // TODO: adding more binops of the same precedence requires modification in 3 places here.
     if (*l).token == '+' as i64 || (*l).token == '-' as i64 {
-        (*auto_vars_count) += 1;
-        let index = *auto_vars_count;
-        da_append(func_body, Op::AutoAlloc(1));
+        let index = allocate_auto_var(auto_vars_ator);
         while (*l).token == '+' as i64 || (*l).token == '-' as i64 {
             let token = (*l).token;
-            let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+            let rhs = compile_multiply_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
             da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
@@ -685,19 +700,17 @@ pub unsafe fn compile_plus_or_minus_expression(l: *mut stb_lexer, input_path: *c
     Some(lhs)
 }
 
-pub unsafe fn compile_less_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    let mut lhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+pub unsafe fn compile_less_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    let mut lhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
     // TODO: adding more binops of the same precedence requires modification in 3 places here.
     if (*l).token == '<' as i64 {
-        (*auto_vars_count) += 1;
-        let index = *auto_vars_count;
-        da_append(func_body, Op::AutoAlloc(1));
+        let index = allocate_auto_var(auto_vars_ator);
         while (*l).token == '<' as i64 {
             let token = (*l).token;
-            let rhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_count, func_body, data)?;
+            let rhs = compile_plus_or_minus_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
             da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
             lhs = Arg::AutoVar(index);
 
@@ -710,24 +723,22 @@ pub unsafe fn compile_less_expression(l: *mut stb_lexer, input_path: *const c_ch
     Some(lhs)
 }
 
-// TODO: the expression compilation leaks a lot of temporary variables
-//   Maybe deallocate all of them at the end of a statement.
-pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    compile_less_expression(l, input_path, vars, auto_vars_count, func_body, data)
+pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+    compile_less_expression(l, input_path, vars, auto_vars_ator, func_body, data)
 }
 
-pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     loop {
         let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
         if (*l).token == '}' as c_long { return true; }
         (*l).parse_point = saved_point;
 
-        if !compile_stmt(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+        if !compile_stmt(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
     }
 }
 
-pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>, name: *const c_char, name_where: *const c_char) -> bool {
+pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>, name: *const c_char, name_where: *const c_char) -> bool {
     let var_def = find_var_deep(vars, name);
     if var_def.is_null() {
         diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
@@ -740,7 +751,7 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     if (*l).token != ')' as c_long {
         (*l).parse_point = saved_point;
         loop {
-            if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
+            if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data) {
                 da_append(&mut args, expr)
             } else {
                 return false;
@@ -769,12 +780,14 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     true
 }
 
-pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_count: *mut usize, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
+pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> bool {
     stb_c_lexer_get_token(l);
 
     if (*l).token == '{' as c_long {
         scope_push(vars);
-        if !compile_block(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+            let saved_auto_vars_count = (*auto_vars_ator).count;
+                if !compile_block(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
+            (*auto_vars_ator).count = saved_auto_vars_count;
         scope_pop(vars);
         true
     } else {
@@ -788,14 +801,12 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
             da_append(func_body, Op::ExtrnVar(name));
             get_and_expect_clex(l, input_path, ';' as c_long)
         } else if strcmp((*l).string, c!("auto")) == 0 {
-            let mut count = 0;
             'vars: loop {
                 if !get_and_expect_clex(l, input_path, CLEX_id) { return false; }
                 let name = strdup((*l).string);
                 let name_where = (*l).where_firstchar;
-                (*auto_vars_count) += 1;
-                if !declare_var(l, input_path, vars, name, name_where, Storage::Auto{index: *auto_vars_count}) { return false; }
-                count += 1;
+                let index = allocate_auto_var(auto_vars_ator);
+                if !declare_var(l, input_path, vars, name, name_where, Storage::Auto{index}) { return false; }
                 stb_c_lexer_get_token(l);
                 if !expect_clexes(l, input_path, &[',' as c_long, ';' as c_long]) { return false }
                 if (*l).token == ';' as c_long {
@@ -807,17 +818,18 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
                 }
             }
 
-            da_append(func_body, Op::AutoAlloc(count));
-
             true
         } else if strcmp((*l).string, c!("while")) == 0 {
             let begin = (*func_body).count;
             if !get_and_expect_clex(l, input_path, '(' as c_long) { return false; }
-            if let Some(arg) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
+            let saved_auto_vars_count = (*auto_vars_ator).count;
+            if let Some(arg) = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data) {
                 if !get_and_expect_clex(l, input_path, ')' as c_long) { return false; }
                 let condition_jump = (*func_body).count;
                 da_append(func_body, Op::JmpIfNot{addr: 0, arg});
-                if !compile_stmt(l, input_path, vars, auto_vars_count, func_body, data) { return false; }
+                (*auto_vars_ator).count = saved_auto_vars_count;
+
+                if !compile_stmt(l, input_path, vars, auto_vars_ator, func_body, data) { return false; }
                 da_append(func_body, Op::Jmp{addr: begin});
                 let end = (*func_body).count;
                 (*(*func_body).items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
@@ -839,9 +851,10 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
                     return false;
                 }
 
+                let saved_auto_vars_count = (*auto_vars_ator).count;
                 match (*var_def).storage {
                     Storage::Auto{index} => {
-                        if let Some(arg) = compile_expression(l, input_path, vars, auto_vars_count, func_body, data) {
+                        if let Some(arg) = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data) {
                             da_append(func_body, Op::AutoAssign{index, arg})
                         } else {
                             return false;
@@ -851,10 +864,13 @@ pub unsafe fn compile_stmt(l: *mut stb_lexer, input_path: *const c_char, vars: *
                         missingf!(l, input_path, name_where, c!("assignment to external variables\n"));
                     }
                 }
+                (*auto_vars_ator).count = saved_auto_vars_count;
 
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else if (*l).token == '(' as c_long {
-                if !compile_function_call(l, input_path, vars, auto_vars_count, func_body, data, name, name_where) { return false; }
+                let saved_auto_vars_count = (*auto_vars_ator).count;
+                if !compile_function_call(l, input_path, vars, auto_vars_ator, func_body, data, name, name_where) { return false; }
+                (*auto_vars_ator).count = saved_auto_vars_count;
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else {
                 diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: unexpected token %s\n"), display_token_kind_temp((*l).token));
@@ -985,8 +1001,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
             scope_push(&mut vars);          // begin function scope
                 generate_func_prolog(symbol_name, &mut output, target);
-                let mut auto_vars_count: usize = 0;
-                if !compile_stmt(&mut l, input_path, &mut vars, &mut auto_vars_count, &mut func_body, &mut data) { return 1; }
+                let mut auto_vars_ator: AutoVarsAtor = zeroed();
+                let pre_alloc_vars = func_body.count;
+                da_append(&mut func_body, Op::AutoAlloc(0));
+                if !compile_stmt(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut data) { return 1; }
+                *func_body.items.add(pre_alloc_vars) = Op::AutoAlloc(auto_vars_ator.max);
                 generate_func_body(da_slice(func_body), &mut output, target);
                 generate_func_epilog(&mut output, target);
             scope_pop(&mut vars);          // end function scope
