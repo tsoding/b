@@ -19,8 +19,7 @@ Compiler for the B Programming Language implemented in [Crust](https://github.co
 
 ```console
 $ make
-$ ./build/b ./examples/hello.b -o hello
-$ ./hello
+$ ./build/b -run ./examples/hello.b
 ```
 
 ## References
