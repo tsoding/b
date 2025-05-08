@@ -1,6 +1,8 @@
 use core::ffi::*;
 use crate::crust::libc::*;
 
+type Flag_List = crate::nob::Array<*const c_char>;
+
 extern "C" {
     pub fn flag_bool(name: *const c_char, def: bool, desc: *const c_char) -> *mut bool;
     pub fn flag_str(name: *const c_char, def: *const c_char, desc: *const c_char) -> *mut*mut c_char;
@@ -10,6 +12,7 @@ extern "C" {
     pub fn flag_print_error(stream: *mut FILE);
     pub fn flag_print_options(stream: *mut FILE);
     pub fn flag_program_name() -> *const c_char;
+    pub fn flag_list(name: *const c_char, desc: *const c_char) -> *mut Flag_List;
 }
 
 pub unsafe fn flag_name<T>(val: *mut T) -> *mut c_char {

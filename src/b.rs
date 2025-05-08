@@ -311,7 +311,10 @@ unsafe fn generate_executable(output: *mut String_Builder, target: Target) {
     match target {
         Target::Fasm_x86_64_Linux => generate_fasm_x86_64_linux_executable(output),
         Target::JavaScript        => generate_javascript_executable(output),
-        Target::IR                => {}
+        Target::IR                => {
+            sb_appendf(output, c!("-- Functions --\n"));
+            sb_appendf(output, c!("\n"));
+        }
     }
 }
 
@@ -407,7 +410,7 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
                 }
             }
             Op::Funcall{result, name, args} => {
-                const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx")];
+                const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
                 if args.count > REGISTERS.len() {
                     todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
                 }
@@ -865,16 +868,6 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
     }
 }
 
-pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
-    fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
-    fprintf(stderr, c!("OPTIONS:\n"));
-    flag_print_options(stderr);
-    fprintf(stderr, c!("Compilation targets:\n"));
-    for i in 0..TARGET_NAMES.len() {
-        fprintf(stderr, c!("    -%s %s\n"), flag_name(target_name_flag), (*TARGET_NAMES)[i].name);
-    }
-}
-
 pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Option<*const c_char> {
     let mut sv = sv_from_cstr(s);
     let suffix_len = strlen(suffix);
@@ -909,6 +902,16 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
+    fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
+    fprintf(stderr, c!("OPTIONS:\n"));
+    flag_print_options(stderr);
+    fprintf(stderr, c!("Compilation targets:\n"));
+    for i in 0..TARGET_NAMES.len() {
+        fprintf(stderr, c!("    -%s %s\n"), flag_name(target_name_flag), (*TARGET_NAMES)[i].name);
+    }
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
@@ -916,7 +919,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
-    // TODO: pass user flags to the linker
+    let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
     let mut input_path: *const c_char = ptr::null();
     while argc > 0 {
@@ -1041,6 +1044,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
             cmd_append! {
                 &mut cmd,
                 c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
             if *run {

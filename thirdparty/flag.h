@@ -23,11 +23,18 @@
 // etc.
 // WARNING! *_var functions may break the flag_name() functionality
 
+typedef struct {
+    const char **items;
+    size_t count;
+    size_t capacity;
+} Flag_List;
+
 char *flag_name(void *val);
 bool *flag_bool(const char *name, bool def, const char *desc);
 uint64_t *flag_uint64(const char *name, uint64_t def, const char *desc);
 size_t *flag_size(const char *name, uint64_t def, const char *desc);
 char **flag_str(const char *name, const char *def, const char *desc);
+Flag_List *flag_list(const char *name, const char *desc);
 bool flag_parse(int argc, char **argv);
 int flag_rest_argc(void);
 char **flag_rest_argv(void);
@@ -45,15 +52,17 @@ typedef enum {
     FLAG_UINT64,
     FLAG_SIZE,
     FLAG_STR,
+    FLAG_LIST,
     COUNT_FLAG_TYPES,
 } Flag_Type;
 
-static_assert(COUNT_FLAG_TYPES == 4, "Exhaustive Flag_Value definition");
+static_assert(COUNT_FLAG_TYPES == 5, "Exhaustive Flag_Value definition");
 typedef union {
     char *as_str;
     uint64_t as_uint64;
     bool as_bool;
     size_t as_size;
+    Flag_List as_list;
 } Flag_Value;
 
 typedef enum {
@@ -145,6 +154,25 @@ char **flag_str(const char *name, const char *def, const char *desc)
     return &flag->val.as_str;
 }
 
+Flag_List *flag_list(const char *name, const char *desc)
+{
+    Flag *flag = flag_new(FLAG_LIST, name, desc);
+    return &flag->val.as_list;
+}
+
+#define FLAG_LIST_INIT_CAP 8
+
+static void flag_list_append(Flag_List *list, char *item)
+{
+    if (list->count >= list->capacity) {
+        size_t new_capacity = list->capacity == 0 ? FLAG_LIST_INIT_CAP : list->capacity*2;
+        list->items = realloc(list->items, new_capacity*sizeof(*list->items));
+        list->capacity = new_capacity;
+    }
+
+    list->items[list->count++] = item;
+}
+
 static char *flag_shift_args(int *argc, char ***argv)
 {
     assert(*argc > 0);
@@ -200,8 +228,20 @@ bool flag_parse(int argc, char **argv)
         bool found = false;
         for (size_t i = 0; i < c->flags_count; ++i) {
             if (strcmp(c->flags[i].name, flag) == 0) {
-                static_assert(COUNT_FLAG_TYPES == 4, "Exhaustive flag type parsing");
+                static_assert(COUNT_FLAG_TYPES == 5, "Exhaustive flag type parsing");
                 switch (c->flags[i].type) {
+                case FLAG_LIST: {
+                    if (argc == 0) {
+                        c->flag_error = FLAG_ERROR_NO_VALUE;
+                        c->flag_error_name = flag;
+                        return false;
+                    }
+
+                    char *arg = flag_shift_args(&argc, &argv);
+                    flag_list_append(&c->flags[i].val.as_list, arg);
+                }
+                break;
+
                 case FLAG_BOOL: {
                     c->flags[i].val.as_bool = true;
                 }
@@ -322,8 +362,10 @@ void flag_print_options(FILE *stream)
 
         fprintf(stream, "    -%s\n", flag->name);
         fprintf(stream, "        %s\n", flag->desc);
-        static_assert(COUNT_FLAG_TYPES == 4, "Exhaustive flag type defaults printing");
+        static_assert(COUNT_FLAG_TYPES == 5, "Exhaustive flag type defaults printing");
         switch (c->flags[i].type) {
+        case FLAG_LIST:
+            break;
         case FLAG_BOOL:
             if (flag->def.as_bool) {
                 fprintf(stream, "        Default: %s\n", flag->def.as_bool ? "true" : "false");
