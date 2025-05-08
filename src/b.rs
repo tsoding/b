@@ -1036,6 +1036,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return 69 }
+            printf(c!("Generated %s\n"), effective_output_path);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
