@@ -243,9 +243,10 @@ impl Binop {
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
+    UnaryNot   {result: usize, arg: Arg},
     AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
-    Funcall    {name: *const c_char, args: Array<Arg>},
+    Funcall    {result: usize, name: *const c_char, args: Array<Arg>},
     Jmp        {addr: usize},
     JmpIfNot   {addr: usize, arg: Arg},
 }
@@ -340,6 +341,17 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
                     }
                 }
             },
+            Op::UnaryNot{result, arg} => {
+                sb_appendf(output, c!("    xor rbx, rbx\n"));
+                match arg {
+                    Arg::AutoVar(index) => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
+                    Arg::Literal(value) => sb_appendf(output, c!("    mov rax, %ld\n"), value),
+                    Arg::DataOffset(_offset) => todo!(),
+                };
+                sb_appendf(output, c!("    test rax, rax\n"));
+                sb_appendf(output, c!("    setz bl\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rbx\n"), result*8);
+            },
             Op::AutoBinop{binop, index, lhs, rhs} => {
                 match lhs {
                     Arg::AutoVar(index)     => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
@@ -394,7 +406,7 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
                     }
                 }
             }
-            Op::Funcall{name, args} => {
+            Op::Funcall{result, name, args} => {
                 const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx")];
                 if args.count > REGISTERS.len() {
                     todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
@@ -408,6 +420,7 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
                     };
                 }
                 sb_appendf(output, c!("    call %s\n"), name);
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
             Op::JmpIfNot{addr, arg} => {
                 match arg {
@@ -448,6 +461,7 @@ unsafe fn generate_javascript_function(name: *const c_char, auto_vars_count: usi
                     Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
                 }
             },
+            Op::UnaryNot{..} => todo!(),
             Op::AutoBinop{binop, index, lhs, rhs} => {
                 sb_appendf(output, c!("    vars[%zu] = "), index - 1);
                 match lhs {
@@ -468,8 +482,8 @@ unsafe fn generate_javascript_function(name: *const c_char, auto_vars_count: usi
                 };
                 sb_appendf(output, c!(";\n"));
             }
-            Op::Funcall{name, args} => {
-                sb_appendf(output, c!("    %s("), name);
+            Op::Funcall{result, name, args} => {
+                sb_appendf(output, c!("    vars[%zu] = %s("), result - 1, name);
                 for i in 0..args.count {
                     if i > 0 { sb_appendf(output, c!(", ")); }
                     match *args.items.add(i) {
@@ -501,6 +515,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                         dump_arg(output, arg);
                         sb_appendf(output, c!(")\n"));
                     }
+                    Op::UnaryNot{result, arg} => {
+                        sb_appendf(output, c!("    UnaryNot(%zu, "), result);
+                        dump_arg(output, arg);
+                        sb_appendf(output, c!(")\n"));
+                    }
                     Op::AutoBinop{binop, index, lhs, rhs} => {
                         sb_appendf(output, c!("    AutoBinop("));
                         match binop {
@@ -515,8 +534,8 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                         dump_arg(output, rhs);
                         sb_appendf(output, c!(")\n"));
                     }
-                    Op::Funcall{name, args} => {
-                        sb_appendf(output, c!("    Funcall(\"%s\""), name);
+                    Op::Funcall{result, name, args} => {
+                        sb_appendf(output, c!("    Funcall(%zu, \"%s\""), result, name);
                         for i in 0..args.count {
                             sb_appendf(output, c!(", "));
                             dump_arg(output, *args.items.add(i));
@@ -558,9 +577,10 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, target: Target,
         Target::IR => {
             if data.len() > 0 {
                 sb_appendf(output, c!("\n"));
-                // TODO: display the IR Data Section in hex editor style
                 sb_appendf(output, c!("-- Data Section --\n"));
+                sb_appendf(output, c!("\n"));
                 sb_appendf(output, c!("    "));
+                // TODO: display the IR Data Section in hex editor style
                 for i in 0..data.len() {
                     if i > 0 {
                         sb_appendf(output, c!(","));
@@ -594,23 +614,39 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     stb_c_lexer_get_token(l);
     match (*l).token {
         token if token == '(' as i64 => {
-            let expr = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
+            let result = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
             if !get_and_expect_clex(l, input_path, ')' as i64) { return None }
-            Some(expr)
+            Some(result)
         }
-        CLEX_intlit => return Some(Arg::Literal((*l).int_number)),
+        token if token == '!' as i64 => {
+            let arg = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
+            let result = allocate_auto_var(auto_vars_ator);
+            da_append(func_body, Op::UnaryNot{result, arg});
+            Some(Arg::AutoVar(result))
+        }
+        CLEX_intlit => Some(Arg::Literal((*l).int_number)),
         CLEX_id => {
-            let name = (*l).string;
+            let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
+
             let var_def = find_var_deep(vars, name);
             if var_def.is_null() {
-                diagf!(l, input_path, name_where, c!("ERROR: could not find variable `%s`\n"), name);
+                diagf!(l, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
                 return None;
             }
-            match (*var_def).storage {
-                Storage::Auto{index} => return Some(Arg::AutoVar(index)),
-                Storage::External{..} => {
-                    missingf!(l, input_path, name_where, c!("external variables in lvalues are not supported yet\n"));
+
+            let saved_point = (*l).parse_point;
+            stb_c_lexer_get_token(l);
+
+            if (*l).token == '(' as i64 {
+                compile_function_call(l, input_path, vars, auto_vars_ator, func_body, data, name, name_where)
+            } else {
+                (*l).parse_point = saved_point;
+                match (*var_def).storage {
+                    Storage::Auto{index} => Some(Arg::AutoVar(index)),
+                    Storage::External{..} => {
+                        missingf!(l, input_path, name_where, c!("external variables in lvalues are not supported yet\n"));
+                    }
                 }
             }
         }
@@ -679,11 +715,11 @@ pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: 
     }
 }
 
-pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>, name: *const c_char, name_where: *const c_char) -> bool {
+pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>, name: *const c_char, name_where: *const c_char) -> Option<Arg> {
     let var_def = find_var_deep(vars, name);
     if var_def.is_null() {
         diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
-        return false;
+        return None;
     }
 
     let mut args: Array<Arg> = zeroed();
@@ -695,10 +731,10 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
             if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data) {
                 da_append(&mut args, expr)
             } else {
-                return false;
+                return None;
             }
             stb_c_lexer_get_token(l);
-            if !expect_clexes(l, input_path, &[')' as c_long, ',' as c_long]) { return false; }
+            if !expect_clexes(l, input_path, &[')' as c_long, ',' as c_long]) { return None; }
             if (*l).token == ')' as c_long {
                 break;
             } else if (*l).token == ',' as c_long {
@@ -711,14 +747,14 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
 
     match (*var_def).storage {
         Storage::External{name} => {
-            da_append(func_body, Op::Funcall {name, args});
+            let result = allocate_auto_var(auto_vars_ator);
+            da_append(func_body, Op::Funcall {result, name, args});
+            Some(Arg::AutoVar(result))
         }
         Storage::Auto{..} => {
             missingf!(l, input_path, name_where, c!("calling functions from auto variables\n"));
         }
     }
-
-    true
 }
 
 pub unsafe fn extrn_declare_if_not_exists(extrns: *mut Array<*const c_char>, name: *const c_char) {
@@ -818,7 +854,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else if (*l).token == '(' as c_long {
                 let saved_auto_vars_count = (*auto_vars_ator).count;
-                if !compile_function_call(l, input_path, vars, auto_vars_ator, func_body, data, name, name_where) { return false; }
+                if compile_function_call(l, input_path, vars, auto_vars_ator, func_body, data, name, name_where).is_none() { return false; }
                 (*auto_vars_ator).count = saved_auto_vars_count;
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else {
@@ -864,6 +900,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             }
         }
         Target::IR => {
+            sb_appendf(output, c!("\n"));
             sb_appendf(output, c!("-- External Symbols --\n\n"));
             for i in 0..extrns.len() {
                 sb_appendf(output, c!("    %s\n"), (*extrns)[i]);
@@ -875,9 +912,9 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
-    // TODO: some sort of a -run flag that automatically runs the executable
-    let target_name = flag_str(c!("target"), default_target_name, c!("Compilation target"));
+    let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target"));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
+    let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     // TODO: pass user flags to the linker
 
@@ -1006,6 +1043,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
                 c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
+            if *run {
+                // TODO: pass the extra arguments from command line
+                cmd_append! {
+                    &mut cmd,
+                    effective_output_path,
+                }
+                if !cmd_run_sync_and_reset(&mut cmd) { return 1 }
+            }
         }
         Target::JavaScript => {
             let effective_output_path;
@@ -1016,9 +1061,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
                 effective_output_path = *output_path;
             }
 
-            // TODO: make the js target automatically generate the html file
+            // TODO(2025-05-08 07:18:15): make the js target automatically generate the html file
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return 69 }
             printf(c!("Generated %s\n"), effective_output_path);
+            if *run {
+                // TODO: when (2025-05-08 07:18:15) is done, open the html file in browser with html
+                todo!("Run the JavaScript program");
+            }
         }
         Target::IR => {
             let effective_output_path;
@@ -1031,6 +1080,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return 69 }
             printf(c!("Generated %s\n"), effective_output_path);
+            if *run {
+                todo!("Interpret the IR");
+            }
         }
     }
     0
@@ -1038,3 +1090,5 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> i32 {
 
 // TODO: B lexing is different from the C one.
 //   Hack stb_c_lexer.h into stb_b_lexer.h
+// TODO: Looks like B does not have hex literals, which means we will have to remove the from stb_c_lexer.h
+// TODO: Do all the strdup-s of names into some sort of easily cleanable arena

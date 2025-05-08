@@ -1,12 +1,9 @@
+// -*- mode: simpc -*-
 main() {
-    extrn InitWindow;
-    extrn BeginDrawing;
-    extrn EndDrawing;
-    extrn ClearBackground;
+    extrn InitWindow, BeginDrawing, EndDrawing, WindowShouldClose, ClearBackground;
 
     InitWindow(800, 600, "Hello, from B");
-    // TODO: Add support for WindowShouldClose()
-    while (1) {
+    while (!WindowShouldClose()) {
         BeginDrawing();
         ClearBackground(4278190335);
         EndDrawing();
