@@ -1,4 +1,4 @@
-// flag.h -- v1.0.0 -- command-line flag parsing
+// flag.h -- v1.1.0 -- command-line flag parsing
 //
 //   Inspired by Go's flag module: https://pkg.go.dev/flag
 //
@@ -22,6 +22,10 @@
 // void flag_bool_uint64(uint64_t *var, const char *name, bool def, const char *desc);
 // etc.
 // WARNING! *_var functions may break the flag_name() functionality
+
+#ifndef FLAG_LIST_INIT_CAP
+#define FLAG_LIST_INIT_CAP 8
+#endif // FLAG_LIST_INIT_CAP
 
 typedef struct {
     const char **items;
@@ -160,13 +164,11 @@ Flag_List *flag_list(const char *name, const char *desc)
     return &flag->val.as_list;
 }
 
-#define FLAG_LIST_INIT_CAP 8
-
 static void flag_list_append(Flag_List *list, char *item)
 {
     if (list->count >= list->capacity) {
         size_t new_capacity = list->capacity == 0 ? FLAG_LIST_INIT_CAP : list->capacity*2;
-        list->items = realloc(list->items, new_capacity*sizeof(*list->items));
+        list->items = (const char**)realloc(list->items, new_capacity*sizeof(*list->items));
         list->capacity = new_capacity;
     }
 
@@ -425,6 +427,7 @@ void flag_print_error(FILE *stream)
 /*
    Revision history:
 
+     1.1.0 (2025-05-09) Introduce flag list
      1.0.0 (2025-03-03) Initial release
                         Save program_name in the context
 
