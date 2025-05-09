@@ -63,5 +63,8 @@ pub unsafe fn panic_handler(info: &PanicInfo) -> ! {
 
 #[export_name="main"]
 pub unsafe extern "C" fn crust_entry_point(argc: i32, argv: *mut*mut c_char) -> i32 {
-    crate::main(argc, argv)
+    match crate::main(argc, argv) {
+        Some(()) => 0,
+        None => 1,
+    }
 }
