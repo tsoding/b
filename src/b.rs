@@ -422,6 +422,11 @@ unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_cou
                         Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"),   reg, offset),
                     };
                 }
+                sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
+                                                           // floating point args via al. Since B
+                                                           // does not distinguish regular and
+                                                           // variadic functions we set al to 0 just
+                                                           // in case.
                 sb_appendf(output, c!("    call %s\n"), name);
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },

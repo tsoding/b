@@ -1,4 +1,3 @@
-// TODO: this example segfaults for some reason
 main() {
     extrn printf, putchar;
     printf("Hello, World\n");
