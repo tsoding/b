@@ -613,18 +613,18 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
     (*t).count
 }
 
-pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
+pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, ctx: *mut Context) -> Option<Arg> {
     stb_c_lexer_get_token(l);
     match (*l).token {
         token if token == '(' as i64 => {
-            let result = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
+            let result = compile_expression(l, input_path, ctx)?;
             get_and_expect_clex(l, input_path, ')' as i64)?;
             Some(result)
         }
         token if token == '!' as i64 => {
-            let arg = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-            let result = allocate_auto_var(auto_vars_ator);
-            da_append(func_body, Op::UnaryNot{result, arg});
+            let arg = compile_expression(l, input_path, ctx)?;
+            let result = allocate_auto_var(&mut (*ctx).auto_vars_ator);
+            da_append(&mut (*ctx).func_body, Op::UnaryNot{result, arg});
             Some(Arg::AutoVar(result))
         }
         CLEX_intlit => Some(Arg::Literal((*l).int_number)),
@@ -632,7 +632,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let name = strdup((*l).string);
             let name_where = (*l).where_firstchar;
 
-            let var_def = find_var_deep(vars, name);
+            let var_def = find_var_deep(&mut (*ctx).vars, name);
             if var_def.is_null() {
                 diagf!(l, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
                 return None;
@@ -642,7 +642,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             stb_c_lexer_get_token(l);
 
             if (*l).token == '(' as i64 {
-                compile_function_call(l, input_path, vars, auto_vars_ator, func_body, data, name, name_where)
+                compile_function_call(l, input_path, ctx, name, name_where)
             } else {
                 (*l).parse_point = saved_point;
                 match (*var_def).storage {
@@ -654,16 +654,16 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             }
         }
         CLEX_dqstring => {
-            let offset = (*data).count;
+            let offset = (*ctx).data.count;
             let string_len = strlen((*l).string);
-            da_append_many(data, slice::from_raw_parts((*l).string as *const u8, string_len));
+            da_append_many(&mut (*ctx).data, slice::from_raw_parts((*l).string as *const u8, string_len));
             // TODO: Strings in B are not NULL-terminated.
             // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
             // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
             // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
             // libc. While the language is still in development we gonna terminate it with 0. We will make it
             // "spec complaint" later.
-            da_append(data, 0); // NULL-terminator
+            da_append(&mut (*ctx).data, 0); // NULL-terminator
             Some(Arg::DataOffset(offset))
         }
         _ => {
@@ -672,25 +672,25 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     }
 }
 
-pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>, precedence: usize) -> Option<Arg> {
+pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_char, ctx: *mut Context, precedence: usize) -> Option<Arg> {
     if precedence >= Binop::MAX_PRECEDENCE {
-        return compile_primary_expression(l, input_path, vars, auto_vars_ator, func_body, data);
+        return compile_primary_expression(l, input_path, ctx);
     }
 
-    let mut lhs = compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, precedence + 1)?;
+    let mut lhs = compile_binop_expression(l, input_path, ctx, precedence + 1)?;
 
     let mut saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
 
     if let Some(binop) = Binop::from_token((*l).token) {
         if binop.precedence() == precedence {
-            let index = allocate_auto_var(auto_vars_ator);
+            let index = allocate_auto_var(&mut (*ctx).auto_vars_ator);
             while let Some(binop) = Binop::from_token((*l).token) {
                 if binop.precedence() != precedence { break; }
 
                 let token = (*l).token;
-                let rhs = compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, precedence)?;
-                da_append(func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
+                let rhs = compile_binop_expression(l, input_path, ctx, precedence)?;
+                da_append(&mut (*ctx).func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
                 lhs = Arg::AutoVar(index);
 
                 saved_point = (*l).parse_point;
@@ -703,23 +703,23 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
     Some(lhs)
 }
 
-pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>) -> Option<Arg> {
-    compile_binop_expression(l, input_path, vars, auto_vars_ator, func_body, data, 0)
+pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, ctx: *mut Context) -> Option<Arg> {
+    compile_binop_expression(l, input_path, ctx, 0)
 }
 
-pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, extrns: *mut Array<*const c_char>, data: *mut Array<u8>) -> Option<()> {
+pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, ctx: *mut Context) -> Option<()> {
     loop {
         let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
         if (*l).token == '}' as c_long { return Some(()); }
         (*l).parse_point = saved_point;
 
-        compile_statement(l, input_path, vars, auto_vars_ator, func_body, extrns, data)?
+        compile_statement(l, input_path, ctx)?
     }
 }
 
-pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, vars: *const Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, data: *mut Array<u8>, name: *const c_char, name_where: *const c_char) -> Option<Arg> {
-    let var_def = find_var_deep(vars, name);
+pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, ctx: *mut Context, name: *const c_char, name_where: *const c_char) -> Option<Arg> {
+    let var_def = find_var_deep(&(*ctx).vars, name);
     if var_def.is_null() {
         diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
         return None;
@@ -731,11 +731,8 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     if (*l).token != ')' as c_long {
         (*l).parse_point = saved_point;
         loop {
-            if let Some(expr) = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data) {
-                da_append(&mut args, expr)
-            } else {
-                return None;
-            }
+            let expr = compile_expression(l, input_path, ctx)?;
+            da_append(&mut args, expr);
             stb_c_lexer_get_token(l);
             expect_clexes(l, input_path, &[')' as c_long, ',' as c_long])?;
             if (*l).token == ')' as c_long {
@@ -750,8 +747,8 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
 
     match (*var_def).storage {
         Storage::External{name} => {
-            let result = allocate_auto_var(auto_vars_ator);
-            da_append(func_body, Op::Funcall {result, name, args});
+            let result = allocate_auto_var(&mut (*ctx).auto_vars_ator);
+            da_append(&mut (*ctx).func_body, Op::Funcall {result, name, args});
             Some(Arg::AutoVar(result))
         }
         Storage::Auto{..} => {
@@ -769,15 +766,15 @@ pub unsafe fn extrn_declare_if_not_exists(extrns: *mut Array<*const c_char>, nam
     da_append(extrns, name)
 }
 
-pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, auto_vars_ator: *mut AutoVarsAtor, func_body: *mut Array<Op>, extrns: *mut Array<*const c_char>, data: *mut Array<u8>) -> Option<()> {
+pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, ctx: *mut Context) -> Option<()> {
     stb_c_lexer_get_token(l);
 
     if (*l).token == '{' as c_long {
-        scope_push(vars);
-            let saved_auto_vars_count = (*auto_vars_ator).count;
-                compile_block(l, input_path, vars, auto_vars_ator, func_body, extrns, data)?;
-            (*auto_vars_ator).count = saved_auto_vars_count;
-        scope_pop(vars);
+        scope_push(&mut (*ctx).vars);
+            let saved_auto_vars_count = (*ctx).auto_vars_ator.count;
+                compile_block(l, input_path, ctx)?;
+            (*ctx).auto_vars_ator.count = saved_auto_vars_count;
+        scope_pop(&mut (*ctx).vars);
         Some(())
     } else {
         expect_clex(l, input_path, CLEX_id)?;
@@ -788,13 +785,13 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
                 let name = strdup((*l).string);
                 let name_where = (*l).where_firstchar;
                 let storage = if extrn {
-                    extrn_declare_if_not_exists(extrns, name);
+                    extrn_declare_if_not_exists(&mut (*ctx).extrns, name);
                     Storage::External{name}
                 } else {
-                    let index = allocate_auto_var(auto_vars_ator);
+                    let index = allocate_auto_var(&mut (*ctx).auto_vars_ator);
                     Storage::Auto{index}
                 };
-                declare_var(l, input_path, vars, name, name_where, storage)?;
+                declare_var(l, input_path, &mut (*ctx).vars, name, name_where, storage)?;
                 stb_c_lexer_get_token(l);
                 expect_clexes(l, input_path, &[',' as c_long, ';' as c_long])?;
                 if (*l).token == ';' as c_long {
@@ -808,20 +805,20 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
 
             Some(())
         } else if strcmp((*l).string, c!("while")) == 0 {
-            let begin = (*func_body).count;
+            let begin = (*ctx).func_body.count;
             get_and_expect_clex(l, input_path, '(' as c_long)?;
-            let saved_auto_vars_count = (*auto_vars_ator).count;
-            let arg = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
+            let saved_auto_vars_count = (*ctx).auto_vars_ator.count;
+            let arg = compile_expression(l, input_path, ctx)?;
 
             get_and_expect_clex(l, input_path, ')' as c_long)?;
-            let condition_jump = (*func_body).count;
-            da_append(func_body, Op::JmpIfNot{addr: 0, arg});
-            (*auto_vars_ator).count = saved_auto_vars_count;
+            let condition_jump = (*ctx).func_body.count;
+            da_append(&mut (*ctx).func_body, Op::JmpIfNot{addr: 0, arg});
+            (*ctx).auto_vars_ator.count = saved_auto_vars_count;
 
-            compile_statement(l, input_path, vars, auto_vars_ator, func_body, extrns, data)?;
-            da_append(func_body, Op::Jmp{addr: begin});
-            let end = (*func_body).count;
-            (*(*func_body).items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
+            compile_statement(l, input_path, ctx)?;
+            da_append(&mut (*ctx).func_body, Op::Jmp{addr: begin});
+            let end = (*ctx).func_body.count;
+            (*(*ctx).func_body.items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
             Some(())
         } else {
             let name = strdup((*l).string);
@@ -830,29 +827,29 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, va
             stb_c_lexer_get_token(l);
             // TODO: assignment and function call must be expressions
             if (*l).token == '=' as c_long {
-                let var_def = find_var_deep(vars, name);
+                let var_def = find_var_deep(&(*ctx).vars, name);
                 if var_def.is_null() {
                     diagf!(l, input_path, name_where, c!("ERROR: could not find variable `%s`\n"), name);
                     return None;
                 }
 
-                let saved_auto_vars_count = (*auto_vars_ator).count;
+                let saved_auto_vars_count = (*ctx).auto_vars_ator.count;
                 match (*var_def).storage {
                     Storage::Auto{index} => {
-                        let arg = compile_expression(l, input_path, vars, auto_vars_ator, func_body, data)?;
-                        da_append(func_body, Op::AutoAssign{index, arg})
+                        let arg = compile_expression(l, input_path, ctx)?;
+                        da_append(&mut (*ctx).func_body, Op::AutoAssign{index, arg})
                     }
                     Storage::External{..} => {
                         missingf!(l, input_path, name_where, c!("assignment to external variables\n"));
                     }
                 }
-                (*auto_vars_ator).count = saved_auto_vars_count;
+                (*ctx).auto_vars_ator.count = saved_auto_vars_count;
 
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else if (*l).token == '(' as c_long {
-                let saved_auto_vars_count = (*auto_vars_ator).count;
-                compile_function_call(l, input_path, vars, auto_vars_ator, func_body, data, name, name_where)?;
-                (*auto_vars_ator).count = saved_auto_vars_count;
+                let saved_auto_vars_count = (*ctx).auto_vars_ator.count;
+                compile_function_call(l, input_path, ctx, name, name_where)?;
+                (*ctx).auto_vars_ator.count = saved_auto_vars_count;
                 get_and_expect_clex(l, input_path, ';' as c_long)
             } else {
                 diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: unexpected token %s\n"), display_token_kind_temp((*l).token));
@@ -906,6 +903,14 @@ pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
     }
 }
 
+pub struct Context {
+    pub vars: Array<Array<Var>>,
+    pub auto_vars_ator: AutoVarsAtor,
+    pub func_body: Array<Op>,
+    pub data: Array<u8>,
+    pub extrns: Array<*const c_char>,
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
@@ -952,10 +957,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     };
 
     let mut cmd: Cmd = zeroed();
-    let mut vars: Array<Array<Var>> = zeroed();
-    let mut func_body: Array<Op> = zeroed();
-    let mut data: Array<u8> = zeroed();
-    let mut extrns: Array<*const c_char> = zeroed();
+    let mut ctx: Context = zeroed();
 
     let mut input: String_Builder = zeroed();
     if !read_entire_file(input_path, &mut input) { return None; }
@@ -967,7 +969,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut output: String_Builder = zeroed();
     generate_executable(&mut output, target);
 
-    scope_push(&mut vars);          // global scope
+    scope_push(&mut ctx.vars);          // global scope
 
     'def: loop {
         stb_c_lexer_get_token(&mut l);
@@ -997,22 +999,22 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             // TODO: functions with several parameters
             get_and_expect_clex(&mut l, input_path, ')' as c_long)?;
 
-            scope_push(&mut vars);          // begin function scope
-                let mut auto_vars_ator: AutoVarsAtor = zeroed();
-                compile_statement(&mut l, input_path, &mut vars, &mut auto_vars_ator, &mut func_body, &mut extrns, &mut data)?;
-                generate_function(symbol_name, auto_vars_ator.max, da_slice(func_body), &mut output, target);
-            scope_pop(&mut vars);          // end function scope
+            scope_push(&mut ctx.vars);          // begin function scope
+                ctx.auto_vars_ator = zeroed();
+                compile_statement(&mut l, input_path, &mut ctx)?;
+                generate_function(symbol_name, ctx.auto_vars_ator.max, da_slice(ctx.func_body), &mut output, target);
+            scope_pop(&mut ctx.vars);          // end function scope
 
-            declare_var(&mut l, input_path, &mut vars, symbol_name, symbol_name_where, Storage::External{name: symbol_name});
+            declare_var(&mut l, input_path, &mut ctx.vars, symbol_name, symbol_name_where, Storage::External{name: symbol_name});
 
-            func_body.count = 0;
+            ctx.func_body.count = 0;
         } else { // Variable definition
             missingf!(&l, input_path, l.where_firstchar, c!("variable definitions\n"));
         }
     }
 
-    generate_extrns(&mut output, da_slice(extrns), target);
-    generate_data_section(&mut output, target, da_slice(data));
+    generate_extrns(&mut output, da_slice(ctx.extrns), target);
+    generate_data_section(&mut output, target, da_slice(ctx.data));
 
     match target {
         Target::Fasm_x86_64_Linux => {
