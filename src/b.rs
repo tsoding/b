@@ -10,6 +10,7 @@ pub mod stb_c_lexer;
 #[macro_use]
 pub mod flag;
 pub mod crust;
+pub mod arena;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -19,6 +20,7 @@ use nob::*;
 use stb_c_lexer::*;
 use flag::*;
 use crust::libc::*;
+use arena::Arena;
 
 macro_rules! diagf {
     ($l:expr, $path:expr, $where:expr, $($args:tt)*) => {{
@@ -634,7 +636,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         }
         CLEX_intlit => Some(Arg::Literal((*l).int_number)),
         CLEX_id => {
-            let name = strdup((*l).string);
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
             let name_where = (*l).where_firstchar;
 
             let var_def = find_var_deep(&mut (*c).vars, name);
@@ -787,7 +789,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             let extrn = strcmp((*l).string, c!("extrn")) == 0;
             'vars: loop {
                 get_and_expect_clex(l, input_path, CLEX_id)?;
-                let name = strdup((*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let name_where = (*l).where_firstchar;
                 let storage = if extrn {
                     extrn_declare_if_not_exists(&mut (*c).extrns, name);
@@ -826,7 +828,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             (*(*c).func_body.items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
             Some(())
         } else {
-            let name = strdup((*l).string);
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
             let name_where = (*l).where_firstchar;
 
             stb_c_lexer_get_token(l);
@@ -914,6 +916,7 @@ pub struct Compiler {
     pub func_body: Array<Op>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
+    pub arena: Arena,
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
@@ -982,7 +985,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
         expect_clex(&mut l, input_path, CLEX_id)?;
 
-        let symbol_name = strdup(l.string);
+        let symbol_name = arena::strdup(&mut c.arena, l.string);
         let symbol_name_where = l.where_firstchar;
 
         // TODO: maybe the keywords should be identified on the level of lexing
@@ -1102,4 +1105,3 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 // TODO: B lexing is different from the C one.
 //   Hack stb_c_lexer.h into stb_b_lexer.h
 // TODO: Looks like B does not have hex literals, which means we will have to remove the from stb_c_lexer.h
-// TODO: Do all the strdup-s of names into some sort of easily cleanable arena
