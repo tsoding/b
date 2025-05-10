@@ -1,4 +1,9 @@
 // -*- mode: simpc -*-
+
+// To compile this example you need to download raylib from https://github.com/raysan5/raylib/releases
+// Than pass appropriate linker flags to the b compiler:
+// $ b raylib.b -L -L/path/to/raylib-version_linux_amd64/lib/ -L -l:libraylib.a -L -lm -run
+
 main() {
     extrn InitWindow, BeginDrawing, EndDrawing, WindowShouldClose, ClearBackground, DrawRectangle, SetTargetFPS;
     auto x, y, dx, dy;
