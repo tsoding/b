@@ -900,6 +900,19 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], target: Target) {
+    for i in 0..funcs.len() {
+        generate_function((*funcs)[i].name, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, target);
+    }
+}
+
+pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, target: Target) {
+    generate_executable(output, target);
+    generate_funcs(output, da_slice((*c).funcs), target);
+    generate_extrns(output, da_slice((*c).extrns), target);
+    generate_data_section(output, target, da_slice((*c).data));
+}
+
 pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
     fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
     fprintf(stderr, c!("OPTIONS:\n"));
@@ -910,13 +923,73 @@ pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct Func {
+    name: *const c_char,
+    body: Array<Op>,
+    auto_vars_count: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
+    pub funcs: Array<Func>,
     pub func_body: Array<Op>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub arena: Arena,
+}
+
+pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
+    scope_push(&mut (*c).vars);          // begin global scope
+    'def: loop {
+        stb_c_lexer_get_token(l);
+        if (*l).token == CLEX_eof { break 'def }
+
+        expect_clex(l, input_path, CLEX_id)?;
+
+        let name = arena::strdup(&mut (*c).arena, (*l).string);
+        let name_where = (*l).where_firstchar;
+
+        // TODO: maybe the keywords should be identified on the level of lexing
+        if is_keyword((*l).string) {
+            diagf!(l, input_path, name_where, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
+            diagf!(l, input_path, name_where, c!("NOTE: Reserved keywords are: "));
+            for i in 0..B_KEYWORDS.len() {
+                if i > 0 {
+                    fprintf(stderr, c!(", "));
+                }
+                fprintf(stderr, c!("`%s`"), (*B_KEYWORDS)[i]);
+            }
+            fprintf(stderr, c!("\n"));
+            return None;
+        }
+
+        stb_c_lexer_get_token(l);
+        if (*l).token == '(' as c_long { // Function definition
+            // TODO: functions with several parameters
+            get_and_expect_clex(l, input_path, ')' as c_long)?;
+
+            scope_push(&mut (*c).vars); // begin function scope
+            compile_statement(l, input_path, c)?;
+            scope_pop(&mut (*c).vars); // end function scope
+
+            declare_var(l, input_path, &mut (*c).vars, name, name_where, Storage::External{name});
+            da_append(&mut (*c).funcs, Func {
+                name,
+                body: (*c).func_body,
+                auto_vars_count: (*c).auto_vars_ator.max,
+            });
+            (*c).func_body = zeroed();
+            (*c).auto_vars_ator = zeroed();
+        } else { // Variable definition
+            missingf!(l, input_path, (*l).where_firstchar, c!("variable definitions\n"));
+        }
+    }
+    scope_pop(&mut (*c).vars);          // end global scope
+
+    Some(())
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
@@ -924,7 +997,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target"));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
-    let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable)"));
+    let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
@@ -965,7 +1038,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     };
 
     let mut cmd: Cmd = zeroed();
-    let mut c: Compiler = zeroed();
 
     let mut input: String_Builder = zeroed();
     if !read_entire_file(input_path, &mut input) { return None; }
@@ -974,55 +1046,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
     stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
 
+    let mut c: Compiler = zeroed();
+    compile_program(&mut l, input_path, &mut c)?;
+
     let mut output: String_Builder = zeroed();
-    generate_executable(&mut output, target);
-
-    scope_push(&mut c.vars);          // global scope
-
-    'def: loop {
-        stb_c_lexer_get_token(&mut l);
-        if l.token == CLEX_eof { break 'def }
-
-        expect_clex(&mut l, input_path, CLEX_id)?;
-
-        let symbol_name = arena::strdup(&mut c.arena, l.string);
-        let symbol_name_where = l.where_firstchar;
-
-        // TODO: maybe the keywords should be identified on the level of lexing
-        if is_keyword(l.string) {
-            diagf!(&l, input_path, symbol_name_where, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), symbol_name);
-            diagf!(&l, input_path, symbol_name_where, c!("NOTE: Reserved keywords are: "));
-            for i in 0..B_KEYWORDS.len() {
-                if i > 0 {
-                    fprintf(stderr, c!(", "));
-                }
-                fprintf(stderr, c!("`%s`"), (*B_KEYWORDS)[i]);
-            }
-            fprintf(stderr, c!("\n"));
-            return None;
-        }
-
-        stb_c_lexer_get_token(&mut l);
-        if l.token == '(' as c_long { // Function definition
-            // TODO: functions with several parameters
-            get_and_expect_clex(&mut l, input_path, ')' as c_long)?;
-
-            scope_push(&mut c.vars);          // begin function scope
-                c.auto_vars_ator = zeroed();
-                compile_statement(&mut l, input_path, &mut c)?;
-                generate_function(symbol_name, c.auto_vars_ator.max, da_slice(c.func_body), &mut output, target);
-            scope_pop(&mut c.vars);          // end function scope
-
-            declare_var(&mut l, input_path, &mut c.vars, symbol_name, symbol_name_where, Storage::External{name: symbol_name});
-
-            c.func_body.count = 0;
-        } else { // Variable definition
-            missingf!(&l, input_path, l.where_firstchar, c!("variable definitions\n"));
-        }
-    }
-
-    generate_extrns(&mut output, da_slice(c.extrns), target);
-    generate_data_section(&mut output, target, da_slice(c.data));
+    generate_program(&mut output, &c, target);
 
     match target {
         Target::Fasm_x86_64_Linux => {

@@ -22,6 +22,8 @@ $ make
 $ ./build/b -run ./examples/hello.b
 ```
 
+Also check out more examples at [./examples/](./examples/).
+
 ## References
 
 - https://en.wikipedia.org/wiki/B_(programming_language)
