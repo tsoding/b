@@ -913,14 +913,10 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     generate_data_section(output, target, da_slice((*c).data));
 }
 
-pub unsafe fn usage(target_name_flag: *mut*mut c_char) {
+pub unsafe fn usage() {
     fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
     fprintf(stderr, c!("OPTIONS:\n"));
     flag_print_options(stderr);
-    fprintf(stderr, c!("Compilation targets:\n"));
-    for i in 0..TARGET_NAMES.len() {
-        fprintf(stderr, c!("    -%s %s\n"), flag_name(target_name_flag), (*TARGET_NAMES)[i].name);
-    }
 }
 
 #[derive(Clone, Copy)]
@@ -995,7 +991,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
 
-    let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target"));
+    let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
@@ -1004,7 +1000,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut input_path: *const c_char = ptr::null();
     while argc > 0 {
         if !flag_parse(argc, argv) {
-            usage(target_name);
+            usage();
             flag_print_error(stderr);
             return None;
         }
@@ -1021,18 +1017,26 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     if *help {
-        usage(target_name);
+        usage();
+        return Some(());
+    }
+
+    if strcmp(*target_name, c!("list")) == 0 {
+        fprintf(stderr, c!("Compilation targets:\n"));
+        for i in 0..TARGET_NAMES.len() {
+            fprintf(stderr, c!("    %s\n"), (*TARGET_NAMES)[i].name);
+        }
         return Some(());
     }
 
     if input_path.is_null() {
-        usage(target_name);
+        usage();
         fprintf(stderr, c!("ERROR: no input is provided\n"));
         return None;
     }
 
     let Some(target) = target_by_name(*target_name) else {
-        usage(target_name);
+        usage();
         fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
     };
