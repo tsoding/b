@@ -1054,6 +1054,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     match target {
         Target::Fasm_x86_64_Linux => {
+            // TODO: if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
             let effective_output_path;
             if (*output_path).is_null() {
                 if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
