@@ -964,7 +964,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
 
         stb_c_lexer_get_token(l);
         if (*l).token == '(' as c_long { // Function definition
-            // TODO: functions with several parameters
+            // TODO(2025-05-11 15:45:38): functions with several parameters
             get_and_expect_clex(l, input_path, ')' as c_long)?;
 
             scope_push(&mut (*c).vars); // begin function scope
@@ -1092,6 +1092,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
                 // TODO: pass the extra arguments from command line
+                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
                 cmd_append! {
                     &mut cmd,
                     effective_output_path,
