@@ -1,4 +1,6 @@
 *.asm
 *.o
+*.s
+*.ir
 
 # TODO: also find a way to gitignore all the executables
