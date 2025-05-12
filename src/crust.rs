@@ -6,7 +6,7 @@ use core::ffi::*;
 #[macro_export]
 macro_rules! c {
     ($l:literal) => {
-        concat!($l, "\0").as_ptr() as *const i8
+        concat!($l, "\0").as_ptr() as *const c_char
     }
 }
 
