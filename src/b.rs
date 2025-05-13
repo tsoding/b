@@ -1247,6 +1247,34 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), output_asm_path);
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                c!("as"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                c!("cc"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                // TODO: pass the extra arguments from command line
+                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
+                cmd_append! {
+                    &mut cmd,
+                    effective_output_path,
+                }
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            }
         },
         Target::Fasm_x86_64_Linux => {
             // TODO: if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
@@ -1262,9 +1290,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
