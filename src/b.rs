@@ -548,7 +548,7 @@ pub unsafe fn load_literal_to_reg_gas_aarch64(output: *mut String_Builder, reg: 
     i += 1;
 
     while i < chunks_len {
-        sb_appendf(output, c!("    movk %s, %d, lsl 16\n"), reg, chunks[i] as u64);
+        sb_appendf(output, c!("    movk %s, %d, lsl %d\n"), reg, chunks[i] as u64, 16 * i);
         i += 1;
     }
 }
