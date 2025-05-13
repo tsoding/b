@@ -1172,7 +1172,13 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
-    let default_target_name = name_of_target(Target::Fasm_x86_64_Linux).expect("default target name not found");
+    let default_target;
+    if cfg!(target_arch = "aarch64") {
+        default_target = Target::Gas_AArch64_Linux;
+    } else {
+        default_target = Target::Fasm_x86_64_Linux;
+    }
+    let default_target_name = name_of_target(default_target).expect("default target name not found");
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
