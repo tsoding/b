@@ -605,7 +605,14 @@ pub unsafe fn generate_gas_aarch64_linux_function(name: *const c_char, auto_vars
                     Arg::Literal(value) => {
                         load_literal_to_reg_gas_aarch64(output, c!("x0"), value);
                     }
-                    Arg::DataOffset(_) => todo!(),
+                    Arg::DataOffset(offset) => {
+                        if offset == 0 {
+                            sb_appendf(output, c!("    adrp x0, .dat\n"));
+                            sb_appendf(output, c!("    add  x0, x0, :lo12:.dat\n"));
+                        } else {
+                            todo!();
+                        }
+                    },
                 }
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
