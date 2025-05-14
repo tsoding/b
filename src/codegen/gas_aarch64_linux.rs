@@ -44,7 +44,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     sb_appendf(output, c!("    stp x29, x30, [sp, -%zu]!\n"), stack_size);
     sb_appendf(output, c!("    mov x29, sp\n"), name);
     for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
+        sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
             Op::UnaryNot   {..} => todo!(),
             Op::AutoBinop  {binop, index, lhs, rhs} => {
@@ -70,7 +70,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 match binop {
                     Binop::Plus => {
                         sb_appendf(output, c!("    add x0, x1, x0\n"));
-                    },
+                    }
                     Binop::Minus => todo!(),
                     Binop::Mult  => todo!(),
                     Binop::Less  => {
@@ -130,7 +130,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 // TODO: save the result of the function call to the auto var
             },
             Op::Jmp {addr} => {
-                sb_appendf(output, c!("    b .op_%zu\n"), addr);
+                sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
             },
             Op::JmpIfNot {addr, arg} => {
                 match arg {
@@ -143,11 +143,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                     Arg::DataOffset(_) => todo!(),
                 };
                 sb_appendf(output, c!("    cmp x0, 0\n"));
-                sb_appendf(output, c!("    beq .op_%zu\n"), addr);
+                sb_appendf(output, c!("    beq %s.op_%zu\n"), name, addr);
             },
         }
     }
-    sb_appendf(output, c!(".op_%zu:\n"), body.len());
+    sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());
     sb_appendf(output, c!("    mov w0, 0\n"));
     sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
     sb_appendf(output, c!("    ret\n"));
