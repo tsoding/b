@@ -249,7 +249,10 @@ impl Binop {
 #[derive(Clone, Copy)]
 pub enum Op {
     UnaryNot   {result: usize, arg: Arg},
-    AutoBinop  {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
+    Add        {index: usize, lhs: Arg, rhs: Arg},
+    Sub        {index: usize, lhs: Arg, rhs: Arg},
+    Mul        {index: usize, lhs: Arg, rhs: Arg},
+    Less       {index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
     Funcall    {result: usize, name: *const c_char, args: Array<Arg>},
     Jmp        {addr: usize},
@@ -359,7 +362,12 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                 let token = (*l).token;
                 let rhs = compile_binop_expression(l, input_path, c, precedence)?;
-                da_append(&mut (*c).func_body, Op::AutoBinop {binop: Binop::from_token(token).unwrap(), index, lhs, rhs});
+                match Binop::from_token(token).unwrap() {
+                    Binop::Plus  => da_append(&mut (*c).func_body, Op::Add  {index, lhs, rhs}),
+                    Binop::Minus => da_append(&mut (*c).func_body, Op::Sub  {index, lhs, rhs}),
+                    Binop::Mult  => da_append(&mut (*c).func_body, Op::Mul  {index, lhs, rhs}),
+                    Binop::Less  => da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs}),
+                }
                 lhs = Arg::AutoVar(index);
 
                 saved_point = (*l).parse_point;

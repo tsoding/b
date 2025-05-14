@@ -1,7 +1,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
-use crate::{Compiler, Op, Arg, Binop, Func, align_bytes};
+use crate::{Compiler, Op, Arg, Func, align_bytes};
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64) {
     if literal < 0 {
@@ -66,24 +66,21 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
             Op::UnaryNot   {..} => todo!(),
-            Op::AutoBinop  {binop, index, lhs, rhs} => {
+            Op::Add {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("x0"), output);
                 load_arg_to_reg(rhs, c!("x1"), output);
-
-                match binop {
-                    Binop::Plus => {
-                        sb_appendf(output, c!("    add x0, x1, x0\n"));
-                    }
-                    Binop::Minus => todo!(),
-                    Binop::Mult  => todo!(),
-                    Binop::Less  => {
-                        sb_appendf(output, c!("    cmp x0, x1\n"));
-                        sb_appendf(output, c!("    cset x0, ls\n"));
-                    },
-                }
-
+                sb_appendf(output, c!("    add x0, x1, x0\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
+            }
+            Op::Sub {..} => todo!(),
+            Op::Mul {..} => todo!(),
+            Op::Less {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    cmp x0, x1\n"));
+                sb_appendf(output, c!("    cset x0, ls\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            }
             Op::AutoAssign {index, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);

@@ -1,6 +1,14 @@
 use core::ffi::*;
-use crate::{Op, Arg, Func, Binop, Compiler};
+use crate::{Op, Arg, Func, Compiler};
 use crate::nob::*;
+
+pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
+    match arg {
+        Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
+        Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
+        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
+    };
+}
 
 pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     sb_appendf(output, c!("function %s() {\n"), name);
@@ -10,46 +18,44 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     for i in 0..body.len() {
         match (*body)[i] {
             Op::AutoAssign{index, arg} => {
-                match arg {
-                    Arg::AutoVar(other_index) => {
-                        sb_appendf(output, c!("    vars[%zu] = vars[%zu];\n"), index - 1, other_index - 1);
-                    }
-                    Arg::Literal(value) => {
-                        sb_appendf(output, c!("    vars[%zu] = %ld;\n"), index - 1, value);
-                    }
-                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                }
+                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                generate_arg(arg, output);
+                sb_appendf(output, c!(";\n"));
             },
             Op::UnaryNot{..} => todo!(),
-            Op::AutoBinop{binop, index, lhs, rhs} => {
+            Op::Add {index, lhs, rhs} => {
                 sb_appendf(output, c!("    vars[%zu] = "), index - 1);
-                match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
-                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                };
-                match binop {
-                    Binop::Plus  => sb_appendf(output, c!(" + ")),
-                    Binop::Minus => sb_appendf(output, c!(" - ")),
-                    Binop::Mult  => sb_appendf(output, c!(" * ")),
-                    Binop::Less  => sb_appendf(output, c!(" < ")),
-                };
-                match rhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
-                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                };
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" + "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            }
+            Op::Sub {index, lhs, rhs} => {
+                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" - "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            }
+            Op::Mul {index, lhs, rhs} => {
+                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" * "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            }
+            Op::Less {index, lhs, rhs} => {
+                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" < "));
+                generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("    vars[%zu] = %s("), result - 1, name);
                 for i in 0..args.count {
                     if i > 0 { sb_appendf(output, c!(", ")); }
-                    match *args.items.add(i) {
-                        Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
-                        Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
-                        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                    };
+                    generate_arg(*args.items.add(i), output);
                 }
                 sb_appendf(output, c!(");\n"));
             },

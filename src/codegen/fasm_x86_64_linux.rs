@@ -1,5 +1,5 @@
 use core::ffi::*;
-use crate::{Op, Arg, Func, Binop, Compiler};
+use crate::{Op, Arg, Func, Compiler};
 use crate::nob::*;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
@@ -32,28 +32,32 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    setz bl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rbx\n"), result*8);
             },
-            Op::AutoBinop{binop, index, lhs, rhs} => {
+            Op::Add  {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("rax"), output);
                 load_arg_to_reg(rhs, c!("rbx"), output);
-                match binop {
-                    Binop::Plus => {
-                        sb_appendf(output, c!("    add rax, rbx\n"));
-                    }
-                    Binop::Minus => {
-                        sb_appendf(output, c!("    sub rax, rbx\n"));
-                    }
-                    Binop::Mult => {
-                        sb_appendf(output, c!("    xor rdx, rdx\n"));
-                        sb_appendf(output, c!("    mul rbx\n"));
-                    }
-                    Binop::Less => {
-                        sb_appendf(output, c!("    xor rdx, rdx\n"));
-                        sb_appendf(output, c!("    cmp rax, rbx\n"));
-                        sb_appendf(output, c!("    setl dl\n"));
-                        sb_appendf(output, c!("    mov rax, rdx\n"));
-                    }
-                }
+                sb_appendf(output, c!("    add rax, rbx\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
+            Op::Sub  {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    sub rax, rbx\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
+            Op::Mul  {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    xor rdx, rdx\n"));
+                sb_appendf(output, c!("    mul rbx\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
+            Op::Less {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    xor rdx, rdx\n"));
+                sb_appendf(output, c!("    cmp rax, rbx\n"));
+                sb_appendf(output, c!("    setl dl\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
             }
             Op::Funcall{result, name, args} => {
                 const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];

@@ -1,6 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Arg, Binop, Func, Compiler};
+use crate::{Op, Arg, Func, Compiler};
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
@@ -25,15 +25,29 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 dump_arg(output, arg);
                 sb_appendf(output, c!(")\n"));
             }
-            Op::AutoBinop{binop, index, lhs, rhs} => {
-                sb_appendf(output, c!("    AutoBinop("));
-                match binop {
-                    Binop::Plus  => sb_appendf(output, c!("Plus")),
-                    Binop::Minus => sb_appendf(output, c!("Minus")),
-                    Binop::Mult  => sb_appendf(output, c!("Mult")),
-                    Binop::Less  => sb_appendf(output, c!("Less")),
-                };
-                sb_appendf(output, c!(", %zu, "), index);
+            Op::Add {index, lhs, rhs} => {
+                sb_appendf(output, c!("    Add(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::Sub {index, lhs, rhs} => {
+                sb_appendf(output, c!("    Sub(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::Mul {index, lhs, rhs} => {
+                sb_appendf(output, c!("    Mul(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::Less {index, lhs, rhs} => {
+                sb_appendf(output, c!("    Less(%zu, "), index);
                 dump_arg(output, lhs);
                 sb_appendf(output, c!(", "));
                 dump_arg(output, rhs);
