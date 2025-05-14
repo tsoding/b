@@ -214,13 +214,20 @@ pub enum Arg {
 }
 
 // TODO: add support for binary division expression
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Binop {
     Plus,
     Minus,
     Mult,
     Less,
 }
+
+// The higher the index of the row in this table the higher the precedence of the Binop
+pub const PRECEDENCE: *const [*const [Binop]] = &[
+    &[Binop::Less],
+    &[Binop::Plus, Binop::Minus],
+    &[Binop::Mult],
+];
 
 impl Binop {
     pub fn from_token(token: c_long) -> Option<Self> {
@@ -233,15 +240,16 @@ impl Binop {
         }
     }
 
-    pub const MAX_PRECEDENCE: usize = 3;
-    pub fn precedence(self) -> usize {
-        let x = match self {
-            Binop::Less => 0,
-            Binop::Plus | Binop::Minus => 1,
-            Binop::Mult => 2,
-        };
-        assert!(x < Self::MAX_PRECEDENCE);
-        x
+    pub const MAX_PRECEDENCE: usize = PRECEDENCE.len();
+    pub unsafe fn precedence(self) -> usize {
+        for precedence in 0..PRECEDENCE.len() {
+            for i in 0..(*PRECEDENCE)[precedence].len() {
+                if self == (*(*PRECEDENCE)[precedence])[i] {
+                    return precedence
+                }
+            }
+        }
+        unreachable!()
     }
 }
 
