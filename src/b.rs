@@ -9,8 +9,10 @@ pub mod nob;
 pub mod stb_c_lexer;
 #[macro_use]
 pub mod flag;
+#[macro_use]
 pub mod crust;
 pub mod arena;
+pub mod codegen;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -21,6 +23,7 @@ use stb_c_lexer::*;
 use flag::*;
 use crust::libc::*;
 use arena::Arena;
+use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
 
 macro_rules! diagf {
     ($l:expr, $path:expr, $where:expr, $($args:tt)*) => {{
@@ -253,525 +256,12 @@ pub enum Op {
     JmpIfNot   {addr: usize, arg: Arg},
 }
 
-pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
-    match arg {
-        Arg::Literal(value) => sb_appendf(output, c!("Literal(%ld)"), value),
-        Arg::AutoVar(index) => sb_appendf(output, c!("AutoVar(%zu)"), index),
-        Arg::DataOffset(offset) => sb_appendf(output, c!("DataOffset(%zu)"), offset),
-    };
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Target {
-    Fasm_x86_64_Linux,
-    Gas_AArch64_Linux,
-    JavaScript,
-    IR,
-}
-
-#[derive(Clone, Copy)]
-struct Target_Name {
-    name: *const c_char,
-    target: Target,
-}
-
-// TODO: How do we make this place fail compiling when you add a new target above?
-//   Maybe we can introduce some sort of macro that generates all of this from a single list of targets
-const TARGET_NAMES: *const [Target_Name] = &[
-    Target_Name { name: c!("fasm-x86_64-linux"), target: Target::Fasm_x86_64_Linux },
-    Target_Name { name: c!("gas-aarch64-linux"), target: Target::Gas_AArch64_Linux },
-    Target_Name { name: c!("js"),                target: Target::JavaScript        },
-    Target_Name { name: c!("ir"),                target: Target::IR                },
-];
-
-unsafe fn name_of_target(target: Target) -> Option<*const c_char> {
-    for i in 0..(*TARGET_NAMES).len() {
-        if target == (*TARGET_NAMES)[i].target {
-            return Some((*TARGET_NAMES)[i].name);
-        }
-    }
-    None
-}
-
-unsafe fn target_by_name(name: *const c_char) -> Option<Target> {
-    for i in 0..(*TARGET_NAMES).len() {
-        if strcmp(name, (*TARGET_NAMES)[i].name) == 0 {
-            return Some((*TARGET_NAMES)[i].target);
-        }
-    }
-    None
-}
-
-unsafe fn generate_fasm_x86_64_linux_executable(output: *mut String_Builder) {
-    sb_appendf(output, c!("format ELF64\n"));
-}
-
-unsafe fn generate_javascript_executable(output: *mut String_Builder) {
-    sb_appendf(output, c!("\"use strict\"\n"));
-}
-
-unsafe fn generate_executable(output: *mut String_Builder, target: Target) {
-    match target {
-        Target::Gas_AArch64_Linux => {},
-        Target::Fasm_x86_64_Linux => generate_fasm_x86_64_linux_executable(output),
-        Target::JavaScript        => generate_javascript_executable(output),
-        Target::IR                => {}
-    }
-}
-
-unsafe fn generate_fasm_x86_64_linux_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
-    sb_appendf(output, c!("public %s\n"), name);
-    sb_appendf(output, c!("%s:\n"), name);
-    sb_appendf(output, c!("    push rbp\n"));
-    sb_appendf(output, c!("    mov rbp, rsp\n"));
-    if auto_vars_count > 0 {
-        sb_appendf(output, c!("    sub rsp, %zu\n"), auto_vars_count*8);
-    }
-    for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
-        match (*body)[i] {
-            Op::AutoAssign{index, arg} => {
-                match arg {
-                    Arg::AutoVar(other_index) => {
-                        sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), other_index*8);
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
-                    }
-                    Arg::Literal(value) => {
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], %ld\n"), index*8, value);
-                    }
-                    Arg::DataOffset(offset) => {
-                        sb_appendf(output, c!("    mov rax, dat+%zu\n"), offset);
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
-                    }
-                }
-            },
-            Op::UnaryNot{result, arg} => {
-                sb_appendf(output, c!("    xor rbx, rbx\n"));
-                match arg {
-                    Arg::AutoVar(index) => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c!("    mov rax, %ld\n"), value),
-                    Arg::DataOffset(_offset) => todo!(),
-                };
-                sb_appendf(output, c!("    test rax, rax\n"));
-                sb_appendf(output, c!("    setz bl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rbx\n"), result*8);
-            },
-            Op::AutoBinop{binop, index, lhs, rhs} => {
-                match lhs {
-                    Arg::AutoVar(index)     => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
-                    Arg::Literal(value)     => sb_appendf(output, c!("    mov rax, %ld\n"), value),
-                    Arg::DataOffset(offset) => sb_appendf(output, c!("    mov rax, dat+%zu"), offset),
-                };
-                match binop {
-                    Binop::Plus => {
-                        match rhs {
-                            Arg::AutoVar(index)     => sb_appendf(output, c!("    add rax, [rbp-%zu]\n"), index*8),
-                            Arg::Literal(value)     => sb_appendf(output, c!("    add rax, %ld\n"), value),
-                            Arg::DataOffset(offset) => sb_appendf(output, c!("    add rax, dat+%zu"), offset),
-                        };
-                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-                    }
-                    Binop::Minus => {
-                        match rhs {
-                            Arg::AutoVar(index)     => sb_appendf(output, c!("    sub rax, [rbp-%zu]\n"), index*8),
-                            Arg::Literal(value)     => sb_appendf(output, c!("    sub rax, %ld\n"), value),
-                            Arg::DataOffset(offset) => sb_appendf(output, c!("    sub rax, dat+%zu\n"), offset),
-                        };
-                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-                    }
-                    Binop::Mult => {
-                        sb_appendf(output, c!("    xor rdx, rdx\n"));
-                        match rhs {
-                            Arg::AutoVar(index) => {
-                                // TODO: how do we even distinguish signed and unsigned mul in B?
-                                sb_appendf(output, c!("    mul QWORD [rbp-%zu]\n"), index*8);
-                            }
-                            Arg::Literal(value) => {
-                                sb_appendf(output, c!("    mov rbx, %ld\n"), value);
-                                sb_appendf(output, c!("    mul rbx\n"));
-                            }
-                            Arg::DataOffset(offset) => {
-                                // TODO: should this be even allowed? We are potentially multiplying by a string address in here.
-                                sb_appendf(output, c!("    mov rbx, dat+%zu\n"), offset);
-                                sb_appendf(output, c!("    mul rbx\n"));
-                            }
-                        };
-                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-                    }
-                    Binop::Less => {
-                        sb_appendf(output, c!("    xor rbx, rbx\n"), index*8);
-                        match rhs {
-                            Arg::AutoVar(index) => sb_appendf(output, c!("    cmp rax, [rbp-%zu]\n"), index*8),
-                            Arg::Literal(value) => sb_appendf(output, c!("    cmp rax, %ld\n"), value),
-                            Arg::DataOffset(_offset) => todo!(),
-                        };
-                        sb_appendf(output, c!("    setl bl\n"));
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rbx\n"), index*8);
-                    }
-                }
-            }
-            Op::Funcall{result, name, args} => {
-                const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
-                if args.count > REGISTERS.len() {
-                    todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
-                }
-                for i in 0..args.count {
-                    let reg = (*REGISTERS)[i];
-                    match *args.items.add(i) {
-                        Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
-                        Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"),       reg, value),
-                        Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"),   reg, offset),
-                    };
-                }
-                sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
-                                                           // floating point args via al. Since B
-                                                           // does not distinguish regular and
-                                                           // variadic functions we set al to 0 just
-                                                           // in case.
-                sb_appendf(output, c!("    call %s\n"), name);
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
-            },
-            Op::JmpIfNot{addr, arg} => {
-                match arg {
-                    Arg::AutoVar(index)     => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
-                    Arg::Literal(value)     => sb_appendf(output, c!("    mov rax, %ld\n"), value),
-                    Arg::DataOffset(offset) => sb_appendf(output, c!("    mov rax, dat+%zu\n"), offset),
-                };
-                sb_appendf(output, c!("    test rax, rax\n"));
-                sb_appendf(output, c!("    jz .op_%zu\n"), addr);
-            },
-            Op::Jmp{addr} => {
-                sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
-            },
-        }
-    }
-    sb_appendf(output, c!(".op_%zu:\n"), body.len());
-    sb_appendf(output, c!("    mov rsp, rbp\n"));
-    sb_appendf(output, c!("    pop rbp\n"));
-    sb_appendf(output, c!("    mov rax, 0\n"));
-    sb_appendf(output, c!("    ret\n"));
-}
-
-unsafe fn generate_javascript_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
-    sb_appendf(output, c!("function %s() {\n"), name);
-    if auto_vars_count > 0 {
-        sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), auto_vars_count);
-    }
-    for i in 0..body.len() {
-        match (*body)[i] {
-            Op::AutoAssign{index, arg} => {
-                match arg {
-                    Arg::AutoVar(other_index) => {
-                        sb_appendf(output, c!("    vars[%zu] = vars[%zu];\n"), index - 1, other_index - 1);
-                    }
-                    Arg::Literal(value) => {
-                        sb_appendf(output, c!("    vars[%zu] = %ld;\n"), index - 1, value);
-                    }
-                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                }
-            },
-            Op::UnaryNot{..} => todo!(),
-            Op::AutoBinop{binop, index, lhs, rhs} => {
-                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
-                match lhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
-                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                };
-                match binop {
-                    Binop::Plus  => sb_appendf(output, c!(" + ")),
-                    Binop::Minus => sb_appendf(output, c!(" - ")),
-                    Binop::Mult  => sb_appendf(output, c!(" * ")),
-                    Binop::Less  => sb_appendf(output, c!(" < ")),
-                };
-                match rhs {
-                    Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
-                    Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
-                    Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                };
-                sb_appendf(output, c!(";\n"));
-            }
-            Op::Funcall{result, name, args} => {
-                sb_appendf(output, c!("    vars[%zu] = %s("), result - 1, name);
-                for i in 0..args.count {
-                    if i > 0 { sb_appendf(output, c!(", ")); }
-                    match *args.items.add(i) {
-                        Arg::AutoVar(index) => sb_appendf(output, c!("vars[%zu]"), index - 1),
-                        Arg::Literal(value) => sb_appendf(output, c!("%ld"), value),
-                        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
-                    };
-                }
-                sb_appendf(output, c!(");\n"));
-            },
-            Op::JmpIfNot{..} => todo!(),
-            Op::Jmp{..} => todo!(),
-        }
-    }
-    sb_appendf(output, c!("}\n"));
-}
-
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
     if rem > 0 {
         bytes + alignment - rem
     } else {
         bytes
-    }
-}
-
-pub unsafe fn load_literal_to_reg_gas_aarch64(output: *mut String_Builder, reg: *const c_char, literal: i64) {
-    if literal < 0 {
-        todo!("Loading negative numbers is not supported yet");
-    }
-
-    let mut literal = literal as u64;
-
-    if literal == 0 {
-        sb_appendf(output, c!("    mov %s, 0\n"), reg);
-        return;
-    }
-
-    let mut chunks: [u16; 4] = zeroed();
-    let mut chunks_len = 0;
-
-    while literal > 0 {
-        chunks[chunks_len] = (literal&0xFFFF) as u16;
-        chunks_len += 1;
-        literal >>= 16;
-    }
-
-    assert!(chunks_len > 0);
-
-    let mut i = 0;
-
-    sb_appendf(output, c!("    mov %s, %d\n"), reg, chunks[i] as u64);
-    i += 1;
-
-    while i < chunks_len {
-        sb_appendf(output, c!("    movk %s, %d, lsl %d\n"), reg, chunks[i] as u64, 16 * i);
-        i += 1;
-    }
-}
-
-pub unsafe fn generate_gas_aarch64_linux_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
-    let stack_size = align_bytes((2 + auto_vars_count)*8, 16);
-    sb_appendf(output, c!(".global %s\n"), name);
-    sb_appendf(output, c!("%s:\n"), name);
-    sb_appendf(output, c!("    stp x29, x30, [sp, -%zu]!\n"), stack_size);
-    sb_appendf(output, c!("    mov x29, sp\n"), name);
-    for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
-        match (*body)[i] {
-            Op::UnaryNot   {..} => todo!(),
-            Op::AutoBinop  {binop, index, lhs, rhs} => {
-                match lhs {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg_gas_aarch64(output, c!("x0"), value);
-                    },
-                    Arg::DataOffset(_) => todo!(),
-                };
-                match rhs {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x1, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg_gas_aarch64(output, c!("x1"), value);
-                    },
-                    Arg::DataOffset(_) => todo!(),
-                };
-
-                match binop {
-                    Binop::Plus => {
-                        sb_appendf(output, c!("    add x0, x1, x0\n"));
-                    },
-                    Binop::Minus => todo!(),
-                    Binop::Mult  => todo!(),
-                    Binop::Less  => {
-                        sb_appendf(output, c!("    cmp x0, x1\n"));
-                        sb_appendf(output, c!("    cset x0, ls\n"));
-                    },
-                }
-
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::AutoAssign {index, arg} => {
-                match arg {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg_gas_aarch64(output, c!("x0"), value);
-                    }
-                    Arg::DataOffset(offset) => {
-                        if offset == 0 {
-                            sb_appendf(output, c!("    adrp x0, .dat\n"));
-                            sb_appendf(output, c!("    add  x0, x0, :lo12:.dat\n"));
-                        } else {
-                            todo!();
-                        }
-                    },
-                }
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::Funcall {result: _, name, args} => {
-                // TODO: add the rest of the registers.
-                // The first 8 args go to x0-x7
-                const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
-                if args.count > REGISTERS.len() {
-                    todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
-                }
-                for i in 0..args.count {
-                    let reg = (*REGISTERS)[i];
-                    match *args.items.add(i) {
-                        Arg::AutoVar(index) => {
-                            sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
-                        },
-                        Arg::Literal(value)  => {
-                            load_literal_to_reg_gas_aarch64(output, reg, value)
-                        }
-                        Arg::DataOffset(offset)  => {
-                            if offset == 0 {
-                                sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
-                                sb_appendf(output, c!("    add  %s, %s, :lo12:.dat\n"), reg, reg);
-                            } else {
-                                todo!();
-                            }
-                        },
-                    };
-                }
-                sb_appendf(output, c!("    bl %s\n"), name);
-                // TODO: save the result of the function call to the auto var
-            },
-            Op::Jmp {addr} => {
-                sb_appendf(output, c!("    b .op_%zu\n"), addr);
-            },
-            Op::JmpIfNot {addr, arg} => {
-                match arg {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg_gas_aarch64(output, c!("x0"), value);
-                    },
-                    Arg::DataOffset(_) => todo!(),
-                };
-                sb_appendf(output, c!("    cmp x0, 0\n"));
-                sb_appendf(output, c!("    beq .op_%zu\n"), addr);
-            },
-        }
-    }
-    sb_appendf(output, c!(".op_%zu:\n"), body.len());
-    sb_appendf(output, c!("    mov w0, 0\n"));
-    sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
-    sb_appendf(output, c!("    ret\n"));
-
-}
-
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder, target: Target) {
-    match target {
-        Target::Gas_AArch64_Linux => generate_gas_aarch64_linux_function(name, auto_vars_count, body, output),
-        Target::Fasm_x86_64_Linux => generate_fasm_x86_64_linux_function(name, auto_vars_count, body, output),
-        Target::JavaScript        => generate_javascript_function(name, auto_vars_count, body, output),
-        Target::IR => {
-            sb_appendf(output, c!("%s:\n"), name);
-            for i in 0..body.len() {
-                sb_appendf(output, c!("%8zu"), i);
-                match (*body)[i] {
-                    Op::AutoAssign{index, arg} => {
-                        sb_appendf(output, c!("    AutoAssign(%zu, "), index);
-                        dump_arg(output, arg);
-                        sb_appendf(output, c!(")\n"));
-                    }
-                    Op::UnaryNot{result, arg} => {
-                        sb_appendf(output, c!("    UnaryNot(%zu, "), result);
-                        dump_arg(output, arg);
-                        sb_appendf(output, c!(")\n"));
-                    }
-                    Op::AutoBinop{binop, index, lhs, rhs} => {
-                        sb_appendf(output, c!("    AutoBinop("));
-                        match binop {
-                            Binop::Plus  => sb_appendf(output, c!("Plus")),
-                            Binop::Minus => sb_appendf(output, c!("Minus")),
-                            Binop::Mult  => sb_appendf(output, c!("Mult")),
-                            Binop::Less  => sb_appendf(output, c!("Less")),
-                        };
-                        sb_appendf(output, c!(", %zu, "), index);
-                        dump_arg(output, lhs);
-                        sb_appendf(output, c!(", "));
-                        dump_arg(output, rhs);
-                        sb_appendf(output, c!(")\n"));
-                    }
-                    Op::Funcall{result, name, args} => {
-                        sb_appendf(output, c!("    Funcall(%zu, \"%s\""), result, name);
-                        for i in 0..args.count {
-                            sb_appendf(output, c!(", "));
-                            dump_arg(output, *args.items.add(i));
-                        }
-                        sb_appendf(output, c!(")\n"));
-                    }
-                    Op::JmpIfNot{addr, arg} => {
-                        sb_appendf(output, c!("    JmpIfNot(%zu, "), addr);
-                        dump_arg(output, arg);
-                        sb_appendf(output, c!(")\n"));
-                    }
-                    Op::Jmp{addr} => {
-                        sb_appendf(output, c!("    Jmp(%zu)\n"), addr);
-                    }
-                }
-            }
-        }
-    }
-}
-
-pub unsafe fn generate_data_section(output: *mut String_Builder, target: Target, data: *const [u8]) {
-    match target {
-        Target::Gas_AArch64_Linux => {
-            if data.len() > 0 {
-                sb_appendf(output, c!(".dat: .byte "));
-                for i in 0..data.len() {
-                    if i > 0 {
-                        sb_appendf(output, c!(","));
-                    }
-                    sb_appendf(output, c!("0x%02X"), (*data)[i] as c_uint);
-                }
-                sb_appendf(output, c!("\n"));
-            }
-        },
-        Target::Fasm_x86_64_Linux => {
-            if data.len() > 0 {
-                sb_appendf(output, c!("section \".data\"\n"));
-                sb_appendf(output, c!("dat: db "));
-                for i in 0..data.len() {
-                    if i > 0 {
-                        sb_appendf(output, c!(","));
-                    }
-                    sb_appendf(output, c!("0x%02X"), (*data)[i] as c_uint);
-                }
-                sb_appendf(output, c!("\n"));
-            }
-        }
-        Target::JavaScript => {
-            // TODO: Generate data section for js target
-        }
-        Target::IR => {
-            if data.len() > 0 {
-                sb_appendf(output, c!("\n"));
-                sb_appendf(output, c!("-- Data Section --\n"));
-                sb_appendf(output, c!("\n"));
-                sb_appendf(output, c!("    "));
-                // TODO: display the IR Data Section in hex editor style
-                for i in 0..data.len() {
-                    if i > 0 {
-                        sb_appendf(output, c!(","));
-                    }
-                    sb_appendf(output, c!("0x%02X"), (*data)[i] as c_uint);
-                }
-                sb_appendf(output, c!("\n"));
-            }
-        }
     }
 }
 
@@ -1049,53 +539,6 @@ pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Opti
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], target: Target) {
-    match target {
-        Target::Fasm_x86_64_Linux => {
-            for i in 0..extrns.len() {
-                sb_appendf(output, c!("extrn %s\n"), (*extrns)[i]);
-            }
-        }
-        Target::Gas_AArch64_Linux | Target::JavaScript => {
-            sb_appendf(output, c!("// External Symbols:\n"));
-            for i in 0..extrns.len() {
-                sb_appendf(output, c!("//    %s\n"), (*extrns)[i]);
-            }
-        }
-        Target::IR => {
-            sb_appendf(output, c!("\n"));
-            sb_appendf(output, c!("-- External Symbols --\n\n"));
-            for i in 0..extrns.len() {
-                sb_appendf(output, c!("    %s\n"), (*extrns)[i]);
-            }
-        }
-    }
-}
-
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], target: Target) {
-    match target {
-        Target::Fasm_x86_64_Linux => {
-            sb_appendf(output, c!("section \".text\" executable\n"));
-        }
-        Target::Gas_AArch64_Linux => {}
-        Target::JavaScript => {}
-        Target::IR => {
-            sb_appendf(output, c!("-- Functions --\n"));
-            sb_appendf(output, c!("\n"));
-        }
-    }
-    for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, target);
-    }
-}
-
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, target: Target) {
-    generate_executable(output, target);
-    generate_funcs(output, da_slice((*c).funcs), target);
-    generate_extrns(output, da_slice((*c).extrns), target);
-    generate_data_section(output, target, da_slice((*c).data));
-}
-
 pub unsafe fn usage() {
     fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
     fprintf(stderr, c!("OPTIONS:\n"));
@@ -1243,10 +686,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     compile_program(&mut l, input_path, &mut c)?;
 
     let mut output: String_Builder = zeroed();
-    generate_program(&mut output, &c, target);
 
     match target {
         Target::Gas_AArch64_Linux => {
+            codegen::gas_aarch64_linux::generate_program(&mut output, &c);
+
             let effective_output_path;
             if (*output_path).is_null() {
                 if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
@@ -1296,6 +740,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Fasm_x86_64_Linux => {
+            codegen::fasm_x86_64_linux::generate_program(&mut output, &c);
+
             // TODO: if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1346,6 +792,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::JavaScript => {
+            codegen::javascript::generate_program(&mut output, &c);
+
             let effective_output_path;
             if (*output_path).is_null() {
                 let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
@@ -1363,6 +811,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::IR => {
+            codegen::ir::generate_program(&mut output, &c);
+
             let effective_output_path;
             if (*output_path).is_null() {
                 let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
