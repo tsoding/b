@@ -37,6 +37,25 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
     }
 }
 
+pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
+    match arg {
+        Arg::AutoVar(index) => {
+            sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
+        }
+        Arg::Literal(value) => {
+            load_literal_to_reg(output, reg, value);
+        }
+        Arg::DataOffset(offset) => {
+            if offset == 0 {
+                sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
+                sb_appendf(output, c!("    add  %s, %s, :lo12:.dat\n"), reg, reg);
+            } else {
+                todo!();
+            }
+        }
+    };
+}
+
 pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     let stack_size = align_bytes((2 + auto_vars_count)*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
@@ -48,24 +67,8 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         match (*body)[i] {
             Op::UnaryNot   {..} => todo!(),
             Op::AutoBinop  {binop, index, lhs, rhs} => {
-                match lhs {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg(output, c!("x0"), value);
-                    },
-                    Arg::DataOffset(_) => todo!(),
-                };
-                match rhs {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x1, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg(output, c!("x1"), value);
-                    },
-                    Arg::DataOffset(_) => todo!(),
-                };
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
 
                 match binop {
                     Binop::Plus => {
@@ -82,22 +85,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
             Op::AutoAssign {index, arg} => {
-                match arg {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg(output, c!("x0"), value);
-                    }
-                    Arg::DataOffset(offset) => {
-                        if offset == 0 {
-                            sb_appendf(output, c!("    adrp x0, .dat\n"));
-                            sb_appendf(output, c!("    add  x0, x0, :lo12:.dat\n"));
-                        } else {
-                            todo!();
-                        }
-                    },
-                }
+                load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
             Op::Funcall {result: _, name, args} => {
@@ -109,22 +97,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];
-                    match *args.items.add(i) {
-                        Arg::AutoVar(index) => {
-                            sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
-                        },
-                        Arg::Literal(value)  => {
-                            load_literal_to_reg(output, reg, value)
-                        }
-                        Arg::DataOffset(offset)  => {
-                            if offset == 0 {
-                                sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
-                                sb_appendf(output, c!("    add  %s, %s, :lo12:.dat\n"), reg, reg);
-                            } else {
-                                todo!();
-                            }
-                        },
-                    };
+                    load_arg_to_reg(*args.items.add(i), reg, output);
                 }
                 sb_appendf(output, c!("    bl %s\n"), name);
                 // TODO: save the result of the function call to the auto var
@@ -133,15 +106,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
             },
             Op::JmpIfNot {addr, arg} => {
-                match arg {
-                    Arg::AutoVar(index) => {
-                        sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
-                    },
-                    Arg::Literal(value) => {
-                        load_literal_to_reg(output, c!("x0"), value);
-                    },
-                    Arg::DataOffset(_) => todo!(),
-                };
+                load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
                 sb_appendf(output, c!("    beq %s.op_%zu\n"), name, addr);
             },
