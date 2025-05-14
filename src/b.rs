@@ -1262,6 +1262,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
+            if !cfg!(target_arch = "aarch64") {
+                // TODO: think how to approach cross-compilation
+                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                return None;
+            }
+
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
                 &mut cmd,
@@ -1305,6 +1311,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
+
+            if !cfg!(target_arch = "x86_64") {
+                // TODO: think how to approach cross-compilation
+                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                return None;
+            }
 
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
