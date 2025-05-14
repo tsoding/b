@@ -2,6 +2,14 @@ use core::ffi::*;
 use crate::{Op, Arg, Func, Binop, Compiler};
 use crate::nob::*;
 
+pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
+    match arg {
+        Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
+        Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"), reg, value),
+        Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"), reg, offset),
+    };
+}
+
 pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     sb_appendf(output, c!("public %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
@@ -14,84 +22,38 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
             Op::AutoAssign{index, arg} => {
-                match arg {
-                    Arg::AutoVar(other_index) => {
-                        sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), other_index*8);
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
-                    }
-                    Arg::Literal(value) => {
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], %ld\n"), index*8, value);
-                    }
-                    Arg::DataOffset(offset) => {
-                        sb_appendf(output, c!("    mov rax, dat+%zu\n"), offset);
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
-                    }
-                }
+                load_arg_to_reg(arg, c!("rax"), output);
+                sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
             },
             Op::UnaryNot{result, arg} => {
                 sb_appendf(output, c!("    xor rbx, rbx\n"));
-                match arg {
-                    Arg::AutoVar(index) => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
-                    Arg::Literal(value) => sb_appendf(output, c!("    mov rax, %ld\n"), value),
-                    Arg::DataOffset(_offset) => todo!(),
-                };
+                load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    test rax, rax\n"));
                 sb_appendf(output, c!("    setz bl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rbx\n"), result*8);
             },
             Op::AutoBinop{binop, index, lhs, rhs} => {
-                match lhs {
-                    Arg::AutoVar(index)     => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
-                    Arg::Literal(value)     => sb_appendf(output, c!("    mov rax, %ld\n"), value),
-                    Arg::DataOffset(offset) => sb_appendf(output, c!("    mov rax, dat+%zu"), offset),
-                };
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
                 match binop {
                     Binop::Plus => {
-                        match rhs {
-                            Arg::AutoVar(index)     => sb_appendf(output, c!("    add rax, [rbp-%zu]\n"), index*8),
-                            Arg::Literal(value)     => sb_appendf(output, c!("    add rax, %ld\n"), value),
-                            Arg::DataOffset(offset) => sb_appendf(output, c!("    add rax, dat+%zu"), offset),
-                        };
-                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                        sb_appendf(output, c!("    add rax, rbx\n"));
                     }
                     Binop::Minus => {
-                        match rhs {
-                            Arg::AutoVar(index)     => sb_appendf(output, c!("    sub rax, [rbp-%zu]\n"), index*8),
-                            Arg::Literal(value)     => sb_appendf(output, c!("    sub rax, %ld\n"), value),
-                            Arg::DataOffset(offset) => sb_appendf(output, c!("    sub rax, dat+%zu\n"), offset),
-                        };
-                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                        sb_appendf(output, c!("    sub rax, rbx\n"));
                     }
                     Binop::Mult => {
                         sb_appendf(output, c!("    xor rdx, rdx\n"));
-                        match rhs {
-                            Arg::AutoVar(index) => {
-                                // TODO: how do we even distinguish signed and unsigned mul in B?
-                                sb_appendf(output, c!("    mul QWORD [rbp-%zu]\n"), index*8);
-                            }
-                            Arg::Literal(value) => {
-                                sb_appendf(output, c!("    mov rbx, %ld\n"), value);
-                                sb_appendf(output, c!("    mul rbx\n"));
-                            }
-                            Arg::DataOffset(offset) => {
-                                // TODO: should this be even allowed? We are potentially multiplying by a string address in here.
-                                sb_appendf(output, c!("    mov rbx, dat+%zu\n"), offset);
-                                sb_appendf(output, c!("    mul rbx\n"));
-                            }
-                        };
-                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                        sb_appendf(output, c!("    mul rbx\n"));
                     }
                     Binop::Less => {
-                        sb_appendf(output, c!("    xor rbx, rbx\n"), index*8);
-                        match rhs {
-                            Arg::AutoVar(index) => sb_appendf(output, c!("    cmp rax, [rbp-%zu]\n"), index*8),
-                            Arg::Literal(value) => sb_appendf(output, c!("    cmp rax, %ld\n"), value),
-                            Arg::DataOffset(_offset) => todo!(),
-                        };
-                        sb_appendf(output, c!("    setl bl\n"));
-                        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rbx\n"), index*8);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    setl dl\n"));
+                        sb_appendf(output, c!("    mov rax, rdx\n"));
                     }
                 }
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
             }
             Op::Funcall{result, name, args} => {
                 const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
@@ -100,11 +62,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];
-                    match *args.items.add(i) {
-                        Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
-                        Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"),       reg, value),
-                        Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"),   reg, offset),
-                    };
+                    load_arg_to_reg(*args.items.add(i), reg, output);
                 }
                 sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
                                                            // floating point args via al. Since B
@@ -115,11 +73,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
             Op::JmpIfNot{addr, arg} => {
-                match arg {
-                    Arg::AutoVar(index)     => sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8),
-                    Arg::Literal(value)     => sb_appendf(output, c!("    mov rax, %ld\n"), value),
-                    Arg::DataOffset(offset) => sb_appendf(output, c!("    mov rax, dat+%zu\n"), offset),
-                };
+                load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    test rax, rax\n"));
                 sb_appendf(output, c!("    jz .op_%zu\n"), addr);
             },
