@@ -77,6 +77,7 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
         CLEX_charlit    => c!("character literal"),
         CLEX_intlit     => c!("integer literal"),
         CLEX_floatlit   => c!("floating-point literal"),
+        CLEX_eof        => c!("end of file"),
         _ => {
             if token >= 0 && token < 256 {
                 temp_sprintf(c!("`%c`"), token)
@@ -392,6 +393,131 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
     compile_binop_expression(l, input_path, c, 0)
 }
 
+#[derive(Clone, Copy)]
+pub enum Expr {
+    Binop    {binop: Binop, lhs: *const Expr, rhs: *const Expr},
+    Not      {arg: *const Expr},
+    Intlit   {value: c_long},
+    Name     {name: *const c_char, name_where: *const c_char},
+    Dqstring {value: *const c_char},
+    Funcall  {name: *const c_char, name_where: *const c_char, args: Array<Expr> }
+}
+
+impl Expr {
+    unsafe fn new(a: *mut Arena) -> *mut Expr {
+        arena::alloc(a, size_of::<Expr>()) as *mut Expr
+    }
+
+    unsafe fn clone(a: *mut Arena, expr: Expr) -> *mut Expr {
+        let result = Self::new(a);
+        *result = expr;
+        result
+    }
+}
+
+#[allow(unused_variables)]
+pub unsafe fn parse_function_call_args(l: *mut stb_lexer, input_path: *const c_char, a: *mut Arena) -> Option<Array<Expr>> {
+    let mut args: Array<Expr> = zeroed();
+    let saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+    if (*l).token != ')' as c_long {
+        (*l).parse_point = saved_point;
+        loop {
+            let expr = parse_expression(l, input_path, a)?;
+            da_append(&mut args, expr);
+            stb_c_lexer_get_token(l);
+            expect_clexes(l, input_path, &[')' as c_long, ',' as c_long])?;
+            if (*l).token == ')' as c_long {
+                break;
+            } else if (*l).token == ',' as c_long {
+                continue;
+            } else {
+                unreachable!();
+            }
+        }
+    }
+    Some(args)
+}
+
+pub unsafe fn parse_primary_expression(l: *mut stb_lexer, input_path: *const c_char, a: *mut Arena) -> Option<Expr> {
+    stb_c_lexer_get_token(l);
+    match (*l).token {
+        token if token == '(' as i64 => {
+            let result = parse_expression(l, input_path, a)?;
+            get_and_expect_clex(l, input_path, ')' as i64)?;
+            Some(result)
+        }
+        token if token == '!' as i64 => {
+            let arg = parse_expression(l, input_path, a)?;
+            Some(Expr::Not {arg: Expr::clone(a, arg)})
+        }
+        CLEX_intlit => {
+            Some(Expr::Intlit {value: (*l).int_number})
+        }
+        CLEX_id => {
+            let name = arena::strdup(a, (*l).string);
+            let name_where = (*l).where_firstchar;
+
+            let saved_point = (*l).parse_point;
+            stb_c_lexer_get_token(l);
+
+            if (*l).token == '(' as i64 {
+                let args = parse_function_call_args(l, input_path, a)?;
+                Some(Expr::Funcall {name, name_where, args})
+            } else {
+                (*l).parse_point = saved_point;
+                Some(Expr::Name {name, name_where})
+            }
+        }
+        CLEX_dqstring => {
+            let value = arena::strdup(a, (*l).string);
+            Some(Expr::Dqstring{value})
+        }
+        _ => {
+            missingf!(l, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
+        }
+    }
+}
+
+pub unsafe fn parse_binop_expression(l: *mut stb_lexer, input_path: *const c_char, a: *mut Arena, precedence: usize) -> Option<Expr> {
+    if precedence >= Binop::MAX_PRECEDENCE {
+        return parse_primary_expression(l, input_path, a);
+    }
+
+    let mut lhs = parse_binop_expression(l, input_path, a, precedence + 1)?;
+
+    let mut saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+
+    if let Some(binop) = Binop::from_token((*l).token) {
+        if binop.precedence() == precedence {
+            while let Some(binop) = Binop::from_token((*l).token) {
+                if binop.precedence() != precedence { break; }
+
+                let token = (*l).token;
+                let rhs = parse_binop_expression(l, input_path, a, precedence)?;
+                let binop = Binop::from_token(token).unwrap();
+                let binop_expr = Expr::Binop {
+                    binop,
+                    lhs: Expr::clone(a, lhs),
+                    rhs: Expr::clone(a, rhs),
+                };
+                lhs = binop_expr;
+
+                saved_point = (*l).parse_point;
+                stb_c_lexer_get_token(l);
+            }
+        }
+    }
+
+    (*l).parse_point = saved_point;
+    Some(lhs)
+}
+
+pub unsafe fn parse_expression(l: *mut stb_lexer, input_path: *const c_char, a: *mut Arena) -> Option<Expr> {
+    parse_binop_expression(l, input_path, a, 0)
+}
+
 pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
     loop {
         let saved_point = (*l).parse_point;
@@ -630,7 +756,66 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
     Some(())
 }
 
-pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
+pub unsafe fn dump_expr(expr: Expr, level: usize) {
+    printf(c!("%*s"), 2*level, c!(""));
+    match expr {
+        Expr::Binop {binop, lhs, rhs} => {
+            match binop {
+                Binop::Plus  => printf(c!("Binop(Plus)\n")),
+                Binop::Minus => printf(c!("Binop(Minus)\n")),
+                Binop::Mult  => printf(c!("Binop(Mult)\n")),
+                Binop::Less  => printf(c!("Binop(Less)\n")),
+            };
+            dump_expr(*lhs, level + 1);
+            dump_expr(*rhs, level + 1);
+        }
+        Expr::Not {arg} => {
+            printf(c!("Not\n"));
+            dump_expr(*arg, level + 1);
+        }
+        Expr::Intlit {value} => {
+            printf(c!("Intlit(%ld)\n"), value);
+        }
+        Expr::Name {name, name_where: _} => {
+            printf(c!("Name(%s)\n"), name);
+        }
+        Expr::Dqstring {value} => {
+            // TODO: escape the dqstring properly
+            printf(c!("Dqstring(\"%s\")\n"), value);
+        }
+        Expr::Funcall {name, name_where: _, args} => {
+            printf(c!("Funcall(%s)\n"), name);
+            for i in 0..args.count {
+                dump_expr(*args.items.add(i), level + 1);
+            }
+        }
+    };
+}
+
+pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
+    let src = flag_str(c!("src"), c!(""), c!("Expression to parse"));
+    if !flag_parse(argc, argv) {
+        usage();
+        flag_print_error(stderr);
+        return None;
+    }
+
+    let mut l: stb_lexer = zeroed();
+    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
+    let src_len = strlen(*src);
+    stb_c_lexer_init(&mut l, *src, (*src).add(src_len), string_store.as_mut_ptr(), string_store.len() as i32);
+
+    let mut a: Arena = zeroed();
+
+    let expr = parse_expression(&mut l, ptr::null(), &mut a)?;
+    get_and_expect_clex(&mut l, ptr::null(), CLEX_eof)?;
+
+    dump_expr(expr, 0);
+
+    Some(())
+}
+
+pub unsafe fn main2(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") {
         default_target = Target::Gas_AArch64_Linux;
