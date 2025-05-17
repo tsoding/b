@@ -636,6 +636,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") {
         default_target = Target::Gas_AArch64_Linux;
+    } else if cfg!(target_arch = "riscv64") {
+        default_target = Target::Gas_Riscv64_Linux;
     } else {
         default_target = Target::Fasm_x86_64_Linux;
     }
@@ -706,6 +708,58 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut output: String_Builder = zeroed();
 
     match target {
+        Target::Gas_Riscv64_Linux => {
+            codegen::gas_riscv64_linux::generate_program(&mut output, &c);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), input_path);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), output_asm_path);
+
+            // TODO: make it errored as it's not supported yet
+            //if !cfg!(target_arch = "riscv64") {
+                // TODO: think how to approach cross-compilation
+                // fprintf(stderr, c!("ERROR: Cross-compilation of riscv64 is not supported for now\n"));
+                // return None;
+            // }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                c!("riscv64-unknown-linux-gnu-as"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                c!("riscv64-unknown-linux-gnu-gcc"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                // TODO: pass the extra arguments from command line
+                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
+                cmd_append! {
+                    &mut cmd,
+                    effective_output_path,
+                }
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            }
+        },
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64_linux::generate_program(&mut output, &c);
 
