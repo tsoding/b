@@ -30,3 +30,4 @@ Also check out more examples at [./examples/](./examples/).
 - https://web.archive.org/web/20241214022534/https://www.bell-labs.com/usr/dmr/www/kbman.html
 - https://github.com/tsoding/good_training_language
 - https://www.felixcloutier.com/x86/
+- https://www.scs.stanford.edu/~zyedidia/arm64/
