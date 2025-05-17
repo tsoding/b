@@ -46,11 +46,12 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             load_literal_to_reg(output, reg, value);
         }
         Arg::DataOffset(offset) => {
-            if offset == 0 {
-                sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
-                sb_appendf(output, c!("    add  %s, %s, :lo12:.dat\n"), reg, reg);
-            } else {
-                todo!();
+            sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
+            sb_appendf(output, c!("    add  %s, %s, :lo12:.dat\n"), reg, reg);
+            if offset >= 4095 {
+                todo!("Data offsets bigger than 4095 are not supported yet");
+            } else if offset > 0 {
+                sb_appendf(output, c!("    add %s, %s, %zu\n"), reg, reg, offset);
             }
         }
     };
