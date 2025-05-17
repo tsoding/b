@@ -305,7 +305,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             Some(result)
         }
         token if token == '!' as i64 => {
-            let (arg, _) = compile_expression(l, input_path, c)?;
+            let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
             da_append(&mut (*c).func_body, Op::UnaryNot{result, arg});
             Some((Arg::AutoVar(result), false))
