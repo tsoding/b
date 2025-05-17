@@ -30,28 +30,43 @@ pub unsafe fn generate_function(name : *const c_char, auto_vars_count: usize, bo
     // alloc memory on stack
     sb_appendf(output, c!("    addi sp, sp, -%zu\n"), stack_size);
     // store ra and s0
-    sb_appendf(output, c!("    sw ra,%zu(sp)\n"), stack_size-8);
-    sb_appendf(output, c!("    sw s0,%zu(sp)\n"), stack_size-16);
+    sb_appendf(output, c!("    sd ra,%zu(sp)\n"), stack_size-8);
+    sb_appendf(output, c!("    sd s0,%zu(sp)\n"), stack_size-16);
     // put s0 as top of stack
     sb_appendf(output, c!("    addi s0,sp,%zu\n"), stack_size);
 
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
-            Op::UnaryNot {..} => todo!(),
+            // TODO: rename result to index ?
+            Op::UnaryNot {result, arg} => {
+                load_arg_to_reg(arg, c!("t0"), output);
+                sb_appendf(output, c!("    snez t0, x0\n"));
+                sb_appendf(output, c!("    sd t0, %zu(sp)\n"), 8*(1+result));
+            },
             Op::Add {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("t0"), output);
                 load_arg_to_reg(rhs, c!("t1"), output);
                 sb_appendf(output, c!("    add t0, t0, t1\n"));
-                sb_appendf(output, c!("    sw t0, %zu(sp)\n"), 8*(1+index));
+                sb_appendf(output, c!("    sd t0, %zu(sp)\n"), 8*(1+index));
             },
-            Op::Sub {..} => todo!(),
-            Op::Mul {..} => todo!(),
+            Op::Sub {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("t0"), output);
+                load_arg_to_reg(rhs, c!("t1"), output);
+                sb_appendf(output, c!("    sub t0, t0, t1\n"));
+                sb_appendf(output, c!("    sd t0, %zu(sp)\n"), 8*(1+index));
+            },
+            Op::Mul {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("t0"), output);
+                load_arg_to_reg(rhs, c!("t1"), output);
+                sb_appendf(output, c!("    mul t0, t0, t1\n"));
+                sb_appendf(output, c!("    sd t0, %zu(sp)\n"), 8*(1+index));
+            },
             Op::Less {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("t0"), output);
                 load_arg_to_reg(rhs, c!("t1"), output);
                 sb_appendf(output, c!("    slt t0, t1, t0\n"));
-                sb_appendf(output, c!("    sw t0, %zu(sp)\n"), 8*(1+index));
+                sb_appendf(output, c!("    sd t0, %zu(sp)\n"), 8*(1+index));
             },
             Op::Funcall {result: _, name, args} => {
                 const REGISTERS: *const[*const c_char] = &[c!("a0"), c!("a1"), c!("a2"), c!("a3"), c!("a4"), c!("a5"), c!("a6"), c!("a7")];
@@ -67,7 +82,7 @@ pub unsafe fn generate_function(name : *const c_char, auto_vars_count: usize, bo
             },
             Op::AutoAssign {index, arg} => {
                 load_arg_to_reg(arg, c!("t0"), output);
-                sb_appendf(output, c!("    sw t0, %zu(sp)\n"), (index+1)*8);
+                sb_appendf(output, c!("    sd t0, %zu(sp)\n"), (index+1)*8);
             },
             Op::Jmp {addr} => {
                 sb_appendf(output, c!("    j %s.op_%zu\n"), name, addr);
