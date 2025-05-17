@@ -221,12 +221,10 @@ pub enum Binop {
     Minus,
     Mult,
     Less,
-    Assign,
 }
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
-    &[Binop::Assign],
     &[Binop::Less],
     &[Binop::Plus, Binop::Minus],
     &[Binop::Mult],
@@ -239,7 +237,6 @@ impl Binop {
             token if token == '-' as i64 => Some(Binop::Minus),
             token if token == '*' as i64 => Some(Binop::Mult),
             token if token == '<' as i64 => Some(Binop::Less),
-            token if token == '=' as i64 => Some(Binop::Assign),
             _ => None,
         }
     }
@@ -297,95 +294,50 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
     (*t).count
 }
 
-pub unsafe fn compile_lvalue(l: *mut stb_lexer, expr: Expr, input_path: *const c_char, c: *mut Compiler) -> Option<usize> {
-    match expr {
-        Expr::Binop {..} => todo!(),
-        Expr::Not {..} => todo!(),
-        Expr::Intlit {..} => todo!(),
-        Expr::Name {name, name_where} => {
-            let var_def = find_var_deep(&mut (*c).vars, name);
-            if var_def.is_null() {
-                diagf!(l, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
-                return None;
-            }
-
-            match (*var_def).storage {
-                Storage::Auto{index} => Some(index),
-                Storage::External{..} => {
-                    missingf!(l, input_path, name_where, c!("external variables in lvalues are not supported yet\n"));
-                }
-            }
-        },
-        Expr::Dqstring {..} => todo!(),
-        Expr::Funcall {..} => todo!(),
-    }
-}
-
-pub unsafe fn compile_rvalue(l: *mut stb_lexer, expr: Expr, input_path: *const c_char, c: *mut Compiler) -> Option<Arg> {
-    match expr {
-        Expr::Binop {binop, lhs, rhs} => {
-            match binop {
-                Binop::Plus => {
-                    let lhs = compile_rvalue(l, *lhs, input_path, c)?;
-                    let rhs = compile_rvalue(l, *rhs, input_path, c)?;
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs});
-                    Some(Arg::AutoVar(index))
-                },
-                Binop::Minus => {
-                    let lhs = compile_rvalue(l, *lhs, input_path, c)?;
-                    let rhs = compile_rvalue(l, *rhs, input_path, c)?;
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    da_append(&mut (*c).func_body, Op::Sub {index, lhs, rhs});
-                    Some(Arg::AutoVar(index))
-                },
-                Binop::Mult => {
-                    let lhs = compile_rvalue(l, *lhs, input_path, c)?;
-                    let rhs = compile_rvalue(l, *rhs, input_path, c)?;
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs});
-                    Some(Arg::AutoVar(index))
-                },
-                Binop::Less => {
-                    let lhs = compile_rvalue(l, *lhs, input_path, c)?;
-                    let rhs = compile_rvalue(l, *rhs, input_path, c)?;
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
-                    Some(Arg::AutoVar(index))
-                },
-                Binop::Assign => {
-                    let index = compile_lvalue(l, *lhs, input_path, c)?;
-                    let arg = compile_rvalue(l, *rhs, input_path, c)?;
-                    da_append(&mut (*c).func_body, Op::AutoAssign {index, arg});
-                    Some(Arg::AutoVar(index))
-                }
-            }
-        },
-        Expr::Not {arg} => {
-            let arg = compile_rvalue(l, *arg, input_path, c)?;
+pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<Arg> {
+    stb_c_lexer_get_token(l);
+    match (*l).token {
+        token if token == '(' as i64 => {
+            let result = compile_expression(l, input_path, c)?;
+            get_and_expect_clex(l, input_path, ')' as i64)?;
+            Some(result)
+        }
+        token if token == '!' as i64 => {
+            let arg = compile_expression(l, input_path, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
             da_append(&mut (*c).func_body, Op::UnaryNot{result, arg});
             Some(Arg::AutoVar(result))
-        },
-        Expr::Intlit {value} => Some(Arg::Literal(value)),
-        Expr::Name {name, name_where} => {
+        }
+        CLEX_intlit => Some(Arg::Literal((*l).int_number)),
+        CLEX_id => {
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let name_where = (*l).where_firstchar;
+
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
                 diagf!(l, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
                 return None;
             }
 
-            match (*var_def).storage {
-                Storage::Auto{index} => Some(Arg::AutoVar(index)),
-                Storage::External{..} => {
-                    missingf!(l, input_path, name_where, c!("external variables in lvalues are not supported yet\n"));
+            let saved_point = (*l).parse_point;
+            stb_c_lexer_get_token(l);
+
+            if (*l).token == '(' as i64 {
+                compile_function_call(l, input_path, c, name, name_where)
+            } else {
+                (*l).parse_point = saved_point;
+                match (*var_def).storage {
+                    Storage::Auto{index} => Some(Arg::AutoVar(index)),
+                    Storage::External{..} => {
+                        missingf!(l, input_path, name_where, c!("external variables in lvalues are not supported yet\n"));
+                    }
                 }
             }
-        },
-        Expr::Dqstring {data} => {
+        }
+        CLEX_dqstring => {
             let offset = (*c).data.count;
-            let string_len = strlen(data);
-            da_append_many(&mut (*c).data, slice::from_raw_parts(data as *const u8, string_len));
+            let string_len = strlen((*l).string);
+            da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
             // TODO: Strings in B are not NULL-terminated.
             // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
             // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
@@ -395,15 +347,50 @@ pub unsafe fn compile_rvalue(l: *mut stb_lexer, expr: Expr, input_path: *const c
             da_append(&mut (*c).data, 0); // NULL-terminator
             Some(Arg::DataOffset(offset))
         }
-        Expr::Funcall {name, name_where, args} => {
-            compile_function_call(l, input_path, c, name, name_where, da_slice(args))
+        _ => {
+            missingf!(l, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
         }
     }
 }
 
-pub unsafe fn compile_rvalue_from_lexer(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<Arg> {
-    let expr = parse_expression(l, input_path, &mut (*c).arena)?;
-    compile_rvalue(l, expr, input_path, c)
+pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, precedence: usize) -> Option<Arg> {
+    if precedence >= Binop::MAX_PRECEDENCE {
+        return compile_primary_expression(l, input_path, c);
+    }
+
+    let mut lhs = compile_binop_expression(l, input_path, c, precedence + 1)?;
+
+    let mut saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+
+    if let Some(binop) = Binop::from_token((*l).token) {
+        if binop.precedence() == precedence {
+            let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+            while let Some(binop) = Binop::from_token((*l).token) {
+                if binop.precedence() != precedence { break; }
+
+                let token = (*l).token;
+                let rhs = compile_binop_expression(l, input_path, c, precedence)?;
+                match Binop::from_token(token).unwrap() {
+                    Binop::Plus  => da_append(&mut (*c).func_body, Op::Add  {index, lhs, rhs}),
+                    Binop::Minus => da_append(&mut (*c).func_body, Op::Sub  {index, lhs, rhs}),
+                    Binop::Mult  => da_append(&mut (*c).func_body, Op::Mul  {index, lhs, rhs}),
+                    Binop::Less  => da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs}),
+                }
+                lhs = Arg::AutoVar(index);
+
+                saved_point = (*l).parse_point;
+                stb_c_lexer_get_token(l);
+            }
+        }
+    }
+
+    (*l).parse_point = saved_point;
+    Some(lhs)
+}
+
+pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<Arg> {
+    compile_binop_expression(l, input_path, c, 0)
 }
 
 #[derive(Clone, Copy)]
@@ -412,7 +399,7 @@ pub enum Expr {
     Not      {arg: *const Expr},
     Intlit   {value: c_long},
     Name     {name: *const c_char, name_where: *const c_char},
-    Dqstring {data: *const c_char},
+    Dqstring {value: *const c_char},
     Funcall  {name: *const c_char, name_where: *const c_char, args: Array<Expr> }
 }
 
@@ -483,8 +470,8 @@ pub unsafe fn parse_primary_expression(l: *mut stb_lexer, input_path: *const c_c
             }
         }
         CLEX_dqstring => {
-            let data = arena::strdup(a, (*l).string);
-            Some(Expr::Dqstring{data})
+            let value = arena::strdup(a, (*l).string);
+            Some(Expr::Dqstring{value})
         }
         _ => {
             missingf!(l, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
@@ -542,7 +529,7 @@ pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mu
     }
 }
 
-pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, name: *const c_char, name_where: *const c_char, exprs: *const [Expr]) -> Option<Arg> {
+pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, name: *const c_char, name_where: *const c_char) -> Option<Arg> {
     let var_def = find_var_deep(&(*c).vars, name);
     if var_def.is_null() {
         diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
@@ -550,9 +537,23 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     }
 
     let mut args: Array<Arg> = zeroed();
-    for i in 0..exprs.len() {
-        let arg = compile_rvalue(l, (*exprs)[i], input_path, c)?;
-        da_append(&mut args, arg);
+    let saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+    if (*l).token != ')' as c_long {
+        (*l).parse_point = saved_point;
+        loop {
+            let expr = compile_expression(l, input_path, c)?;
+            da_append(&mut args, expr);
+            stb_c_lexer_get_token(l);
+            expect_clexes(l, input_path, &[')' as c_long, ',' as c_long])?;
+            if (*l).token == ')' as c_long {
+                break;
+            } else if (*l).token == ',' as c_long {
+                continue;
+            } else {
+                unreachable!();
+            }
+        }
     }
 
     match (*var_def).storage {
@@ -577,7 +578,6 @@ pub unsafe fn extrn_declare_if_not_exists(extrns: *mut Array<*const c_char>, nam
 }
 
 pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
-    let saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
 
     if (*l).token == '{' as c_long {
@@ -588,7 +588,8 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
         scope_pop(&mut (*c).vars);
         Some(())
     } else {
-        if (*l).token == CLEX_id && (strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0) {
+        expect_clex(l, input_path, CLEX_id)?;
+        if strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0 {
             let extrn = strcmp((*l).string, c!("extrn")) == 0;
             'vars: loop {
                 get_and_expect_clex(l, input_path, CLEX_id)?;
@@ -614,11 +615,11 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             }
 
             Some(())
-        } else if  (*l).token == CLEX_id && strcmp((*l).string, c!("while")) == 0 {
+        } else if strcmp((*l).string, c!("while")) == 0 {
             let begin = (*c).func_body.count;
             get_and_expect_clex(l, input_path, '(' as c_long)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let arg = compile_rvalue_from_lexer(l, input_path, c)?;
+            let arg = compile_expression(l, input_path, c)?;
 
             get_and_expect_clex(l, input_path, ')' as c_long)?;
             let condition_jump = (*c).func_body.count;
@@ -631,10 +632,40 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             (*(*c).func_body.items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
             Some(())
         } else {
-            (*l).parse_point = saved_point;
-            compile_rvalue_from_lexer(l, input_path, c)?;
-            get_and_expect_clex(l, input_path, ';' as c_long);
-            Some(())
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let name_where = (*l).where_firstchar;
+
+            stb_c_lexer_get_token(l);
+            // TODO: assignment and function call must be expressions
+            if (*l).token == '=' as c_long {
+                let var_def = find_var_deep(&(*c).vars, name);
+                if var_def.is_null() {
+                    diagf!(l, input_path, name_where, c!("ERROR: could not find variable `%s`\n"), name);
+                    return None;
+                }
+
+                let saved_auto_vars_count = (*c).auto_vars_ator.count;
+                match (*var_def).storage {
+                    Storage::Auto{index} => {
+                        let arg = compile_expression(l, input_path, c)?;
+                        da_append(&mut (*c).func_body, Op::AutoAssign{index, arg})
+                    }
+                    Storage::External{..} => {
+                        missingf!(l, input_path, name_where, c!("assignment to external variables\n"));
+                    }
+                }
+                (*c).auto_vars_ator.count = saved_auto_vars_count;
+
+                get_and_expect_clex(l, input_path, ';' as c_long)
+            } else if (*l).token == '(' as c_long {
+                let saved_auto_vars_count = (*c).auto_vars_ator.count;
+                compile_function_call(l, input_path, c, name, name_where)?;
+                (*c).auto_vars_ator.count = saved_auto_vars_count;
+                get_and_expect_clex(l, input_path, ';' as c_long)
+            } else {
+                diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: unexpected token %s\n"), display_token_kind_temp((*l).token));
+                None
+            }
         }
     }
 }
@@ -730,11 +761,10 @@ pub unsafe fn dump_expr(expr: Expr, level: usize) {
     match expr {
         Expr::Binop {binop, lhs, rhs} => {
             match binop {
-                Binop::Plus   => printf(c!("Binop(Plus)\n")),
-                Binop::Minus  => printf(c!("Binop(Minus)\n")),
-                Binop::Mult   => printf(c!("Binop(Mult)\n")),
-                Binop::Less   => printf(c!("Binop(Less)\n")),
-                Binop::Assign => printf(c!("Binop(Assign)\n")),
+                Binop::Plus  => printf(c!("Binop(Plus)\n")),
+                Binop::Minus => printf(c!("Binop(Minus)\n")),
+                Binop::Mult  => printf(c!("Binop(Mult)\n")),
+                Binop::Less  => printf(c!("Binop(Less)\n")),
             };
             dump_expr(*lhs, level + 1);
             dump_expr(*rhs, level + 1);
@@ -749,9 +779,9 @@ pub unsafe fn dump_expr(expr: Expr, level: usize) {
         Expr::Name {name, name_where: _} => {
             printf(c!("Name(%s)\n"), name);
         }
-        Expr::Dqstring {data} => {
+        Expr::Dqstring {value} => {
             // TODO: escape the dqstring properly
-            printf(c!("Dqstring(\"%s\")\n"), data);
+            printf(c!("Dqstring(\"%s\")\n"), value);
         }
         Expr::Funcall {name, name_where: _, args} => {
             printf(c!("Funcall(%s)\n"), name);
@@ -762,7 +792,30 @@ pub unsafe fn dump_expr(expr: Expr, level: usize) {
     };
 }
 
-pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
+pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
+    let src = flag_str(c!("src"), c!(""), c!("Expression to parse"));
+    if !flag_parse(argc, argv) {
+        usage();
+        flag_print_error(stderr);
+        return None;
+    }
+
+    let mut l: stb_lexer = zeroed();
+    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
+    let src_len = strlen(*src);
+    stb_c_lexer_init(&mut l, *src, (*src).add(src_len), string_store.as_mut_ptr(), string_store.len() as i32);
+
+    let mut a: Arena = zeroed();
+
+    let expr = parse_expression(&mut l, ptr::null(), &mut a)?;
+    get_and_expect_clex(&mut l, ptr::null(), CLEX_eof)?;
+
+    dump_expr(expr, 0);
+
+    Some(())
+}
+
+pub unsafe fn main2(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") {
         default_target = Target::Gas_AArch64_Linux;

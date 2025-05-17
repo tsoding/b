@@ -8,8 +8,10 @@ main() {
     extrn InitWindow, BeginDrawing, EndDrawing, WindowShouldClose, ClearBackground, DrawRectangle, SetTargetFPS;
     auto x, y, dx, dy;
 
-    x  = y  = 100;
-    dx = dy = 1;
+    x = 100;
+    y = 100;
+    dx = 1;
+    dy = 1;
     InitWindow(800, 600, "Hello, from B");
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
