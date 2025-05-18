@@ -14,10 +14,10 @@ main() {
     InitWindow(800, 600, "Hello, from B");
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
-        x = x + dx;
-        y = y + dy;
+        x += dx;                     // B originally had =+ operator not +=. See TODO(2025-05-18 07:06:26).
+        y += dy;
         BeginDrawing();
-        ClearBackground(0xFF181818); // B originally does not support hex literals actually
+        ClearBackground(0xFF181818); // B originally does not support hex literals actually. See TODO(2025-05-18 07:06:26).
         DrawRectangle(x, y, sx, sy, 0xFF1818FF);
         EndDrawing();
     }

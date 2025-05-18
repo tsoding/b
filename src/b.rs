@@ -217,6 +217,7 @@ pub enum Arg {
 #[derive(Clone, Copy, PartialEq)]
 pub enum Binop {
     Assign,
+    AssignPlus,
     Plus,
     Minus,
     Mult,
@@ -225,7 +226,7 @@ pub enum Binop {
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
-    &[Binop::Assign],
+    &[Binop::Assign, Binop::AssignPlus],
     &[Binop::Less],
     &[Binop::Plus, Binop::Minus],
     &[Binop::Mult],
@@ -239,6 +240,7 @@ impl Binop {
             token if token == '*' as i64 => Some(Binop::Mult),
             token if token == '<' as i64 => Some(Binop::Less),
             token if token == '=' as i64 => Some(Binop::Assign),
+            CLEX_pluseq                  => Some(Binop::AssignPlus),
             _ => None,
         }
     }
@@ -394,7 +396,20 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
                         lhs = Arg::AutoVar(index);
                     }
-                    Binop::Assign  => {
+                    Binop::AssignPlus => {
+                        if !lvalue {
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            return None;
+                        }
+
+                        match lhs {
+                            Arg::AutoVar(index) => {
+                                da_append(&mut (*c).func_body, Op::Add  {index, lhs, rhs})
+                            }
+                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+                        }
+                    }
+                    Binop::Assign => {
                         if !lvalue {
                             diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
                             return None;
@@ -849,6 +864,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     Some(())
 }
 
-// TODO: B lexing is different from the C one.
+// TODO(2025-05-18 07:06:26): B lexing is different from the C one.
 //   Hack stb_c_lexer.h into stb_b_lexer.h
 // TODO: Looks like B does not have hex literals, which means we will have to remove the from stb_c_lexer.h

@@ -4,6 +4,6 @@ main() {
     a = 0;
     while (a < 100) {
         printf("%02d\n", a);
-        a = a + 1;
+        a += 1;
     }
 }
