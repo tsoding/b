@@ -4,8 +4,9 @@ use crate::{Op, Arg, Func, Compiler};
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
-        Arg::Literal(value) => sb_appendf(output, c!("Literal(%ld)"), value),
-        Arg::AutoVar(index) => sb_appendf(output, c!("AutoVar(%zu)"), index),
+        Arg::Ref(index)         => sb_appendf(output, c!("Ref(%zu)"), index),
+        Arg::Literal(value)     => sb_appendf(output, c!("Literal(%ld)"), value),
+        Arg::AutoVar(index)     => sb_appendf(output, c!("AutoVar(%zu)"), index),
         Arg::DataOffset(offset) => sb_appendf(output, c!("DataOffset(%zu)"), offset),
     };
 }
@@ -15,6 +16,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     for i in 0..body.len() {
         sb_appendf(output, c!("%8zu"), i);
         match (*body)[i] {
+            Op::Store{index, arg} => {
+                sb_appendf(output, c!("    Store(%zu, "), index);
+                dump_arg(output, arg);
+                sb_appendf(output, c!(")\n"));
+            }
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("    AutoAssign(%zu, "), index);
                 dump_arg(output, arg);
@@ -23,6 +29,34 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
             Op::UnaryNot{result, arg} => {
                 sb_appendf(output, c!("    UnaryNot(%zu, "), result);
                 dump_arg(output, arg);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::BitOr {index, lhs, rhs} => {
+                sb_appendf(output, c!("    BitOr(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::BitAnd {index, lhs, rhs} => {
+                sb_appendf(output, c!("    BitAnd(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::BitShl {index, lhs, rhs} => {
+                sb_appendf(output, c!("    BitShl(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
+            Op::BitShr {index, lhs, rhs} => {
+                sb_appendf(output, c!("    BitShr(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
                 sb_appendf(output, c!(")\n"));
             }
             Op::Add {index, lhs, rhs} => {

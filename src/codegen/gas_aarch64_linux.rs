@@ -39,6 +39,7 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
+        Arg::Ref(_) => todo!(),
         Arg::AutoVar(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
         }
@@ -67,6 +68,10 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
             Op::UnaryNot   {..} => todo!(),
+            Op::BitOr {..} => todo!(),
+            Op::BitAnd {..} => todo!(),
+            Op::BitShl {..} => todo!(),
+            Op::BitShr {..} => todo!(),
             Op::Add {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("x0"), output);
                 load_arg_to_reg(rhs, c!("x1"), output);
@@ -86,6 +91,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
+            Op::Store {..} => todo!(),
             Op::Funcall {result: _, name, args} => {
                 // TODO: add the rest of the registers.
                 // The first 8 args go to x0-x7

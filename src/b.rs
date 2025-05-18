@@ -114,13 +114,27 @@ pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clex
     None
 }
 
-unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: i64) -> Option<()> {
+pub unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: i64) -> Option<()> {
     expect_clexes(l, input_path, &[clex])
 }
 
-unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, clex: c_long) -> Option<()> {
+pub unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, clex: c_long) -> Option<()> {
     stb_c_lexer_get_token(l);
     expect_clex(l, input_path, clex)
+}
+
+pub unsafe fn expect_clex_id(l: *const stb_lexer, input_path: *const c_char, id: *const c_char) -> Option<()> {
+    expect_clex(l, input_path, CLEX_id)?;
+    if strcmp((*l).string, id) != 0 {
+        diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
+        return None;
+    }
+    Some(())
+}
+
+pub unsafe fn get_and_expect_clex_id(l: *mut stb_lexer, input_path: *const c_char, id: *const c_char) -> Option<()> {
+    stb_c_lexer_get_token(l);
+    expect_clex_id(l, input_path, id)
 }
 
 #[repr(C)]
@@ -210,6 +224,7 @@ unsafe fn is_keyword(name: *const c_char) -> bool {
 #[derive(Clone, Copy)]
 pub enum Arg {
     AutoVar(usize),
+    Ref(usize),
     Literal(i64),
     DataOffset(usize),
 }
@@ -223,11 +238,20 @@ pub enum Binop {
     Minus,
     Mult,
     Less,
+    BitOr,
+    BitAnd,
+    BitShl,
+    BitShr,
+    AssignBitOr,
+    AssignBitShl,
 }
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
-    &[Binop::Assign, Binop::AssignPlus],
+    &[Binop::Assign, Binop::AssignPlus, Binop::AssignBitOr, Binop::AssignBitShl],
+    &[Binop::BitOr],
+    &[Binop::BitAnd],
+    &[Binop::BitShl, Binop::BitShr],
     &[Binop::Less],
     &[Binop::Plus, Binop::Minus],
     &[Binop::Mult],
@@ -241,7 +265,13 @@ impl Binop {
             token if token == '*' as i64 => Some(Binop::Mult),
             token if token == '<' as i64 => Some(Binop::Less),
             token if token == '=' as i64 => Some(Binop::Assign),
+            token if token == '|' as i64 => Some(Binop::BitOr),
+            token if token == '&' as i64 => Some(Binop::BitAnd),
+            CLEX_shleq                   => Some(Binop::AssignBitShl),
+            CLEX_oreq                    => Some(Binop::AssignBitOr),
             CLEX_pluseq                  => Some(Binop::AssignPlus),
+            CLEX_shl                     => Some(Binop::BitShl),
+            CLEX_shr                     => Some(Binop::BitShr),
             _ => None,
         }
     }
@@ -267,7 +297,12 @@ pub enum Op {
     Sub        {index: usize, lhs: Arg, rhs: Arg},
     Mul        {index: usize, lhs: Arg, rhs: Arg},
     Less       {index: usize, lhs: Arg, rhs: Arg},
+    BitOr      {index: usize, lhs: Arg, rhs: Arg},
+    BitAnd     {index: usize, lhs: Arg, rhs: Arg},
+    BitShl     {index: usize, lhs: Arg, rhs: Arg},
+    BitShr     {index: usize, lhs: Arg, rhs: Arg},
     AutoAssign {index: usize, arg: Arg},
+    Store      {index: usize, arg: Arg},
     Funcall    {result: usize, name: *const c_char, args: Array<Arg>},
     Jmp        {addr: usize},
     JmpIfNot   {addr: usize, arg: Arg},
@@ -312,6 +347,12 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
             da_append(&mut (*c).func_body, Op::UnaryNot{result, arg});
             Some((Arg::AutoVar(result), false))
+        }
+        token if token == '*' as i64 => {
+            let (arg, _) = compile_primary_expression(l, input_path, c)?;
+            let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+            da_append(&mut (*c).func_body, Op::AutoAssign {index, arg});
+            Some((Arg::Ref(index), true))
         }
         CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
@@ -377,6 +418,26 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                 let binop_where = (*l).where_firstchar;
                 let (rhs, _) = compile_binop_expression(l, input_path, c, precedence)?;
                 match Binop::from_token(token).unwrap() {
+                    Binop::BitShl => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::BitShr => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::BitShr {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::BitOr => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::BitAnd => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::BitAnd {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
                     Binop::Plus  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                         da_append(&mut (*c).func_body, Op::Add  {index, lhs, rhs});
@@ -397,6 +458,34 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
                         lhs = Arg::AutoVar(index);
                     }
+                    Binop::AssignBitOr => {
+                        if !lvalue {
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            return None;
+                        }
+
+                        match lhs {
+                            Arg::Ref(_) => todo!(),
+                            Arg::AutoVar(index) => {
+                                da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs})
+                            }
+                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+                        }
+                    }
+                    Binop::AssignBitShl => {
+                        if !lvalue {
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            return None;
+                        }
+
+                        match lhs {
+                            Arg::Ref(_) => todo!(),
+                            Arg::AutoVar(index) => {
+                                da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs})
+                            }
+                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+                        }
+                    }
                     Binop::AssignPlus => {
                         if !lvalue {
                             diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
@@ -404,8 +493,9 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         }
 
                         match lhs {
+                            Arg::Ref(_) => todo!(),
                             Arg::AutoVar(index) => {
-                                da_append(&mut (*c).func_body, Op::Add  {index, lhs, rhs})
+                                da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs})
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
@@ -417,6 +507,9 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         }
 
                         match lhs {
+                            Arg::Ref(index) => {
+                                da_append(&mut (*c).func_body, Op::Store {index, arg: rhs});
+                            }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::AutoAssign {index, arg: rhs});
                             }
@@ -535,6 +628,31 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
                     unreachable!()
                 }
             }
+
+            Some(())
+        } else if (*l).token == CLEX_id && strcmp((*l).string, c!("if")) == 0 {
+            // if (..)
+            get_and_expect_clex(l, input_path, '(' as c_long)?;
+            let saved_auto_vars_count = (*c).auto_vars_ator.count;
+            let (cond, _) = compile_expression(l, input_path, c)?;
+            get_and_expect_clex(l, input_path, ')' as c_long)?;
+
+            let addr_condition = (*c).func_body.count;
+            da_append(&mut (*c).func_body, Op::JmpIfNot{addr: 0, arg: cond});
+            (*c).auto_vars_ator.count = saved_auto_vars_count;
+
+                compile_statement(l, input_path, c)?;
+                let addr_skips_else = (*c).func_body.count;
+                da_append(&mut (*c).func_body, Op::Jmp{addr: 0});
+
+            get_and_expect_clex_id(l, input_path, c!("else"))?; // TODO: make `else` optional
+
+                let addr_else = (*c).func_body.count;
+                compile_statement(l, input_path, c)?;
+                let addr_after_else = (*c).func_body.count;
+
+            *(*c).func_body.items.add(addr_condition)  = Op::JmpIfNot {addr: addr_else, arg: cond};
+            *(*c).func_body.items.add(addr_skips_else) = Op::Jmp      {addr: addr_after_else};
 
             Some(())
         } else if (*l).token == CLEX_id && strcmp((*l).string, c!("while")) == 0 {

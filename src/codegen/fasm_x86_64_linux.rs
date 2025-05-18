@@ -4,6 +4,10 @@ use crate::nob::*;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
+        Arg::Ref(index) => {
+            sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8);
+            sb_appendf(output, c!("    mov %s, [%s]\n"), reg, reg)
+        }
         Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
         Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"), reg, value),
         Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"), reg, offset),
@@ -21,6 +25,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
+            Op::Store {index, arg} => {
+                sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8);
+                load_arg_to_reg(arg, c!("rbx"), output);
+                sb_appendf(output, c!("    mov [rax], rbx\n"));
+            }
             Op::AutoAssign{index, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
@@ -32,6 +41,30 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    setz bl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rbx\n"), result*8);
             },
+            Op::BitOr {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    or rax, rbx\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
+            Op::BitAnd {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    and rax, rbx\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
+            Op::BitShl {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rcx"), output);
+                sb_appendf(output, c!("    shl rax, cl\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
+            Op::BitShr {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rcx"), output);
+                sb_appendf(output, c!("    shr rax, cl\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+            }
             Op::Add  {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("rax"), output);
                 load_arg_to_reg(rhs, c!("rbx"), output);

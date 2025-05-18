@@ -2,8 +2,10 @@ use core::ffi::*;
 use crate::{Op, Arg, Func, Compiler};
 use crate::nob::*;
 
+
 pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
     match arg {
+        Arg::Ref(_)              => todo!(),
         Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
         Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
         Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
@@ -17,12 +19,17 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     }
     for i in 0..body.len() {
         match (*body)[i] {
+            Op::Store {..} => todo!(),
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("    vars[%zu] = "), index - 1);
                 generate_arg(arg, output);
                 sb_appendf(output, c!(";\n"));
             },
             Op::UnaryNot{..} => todo!(),
+            Op::BitOr{..} => todo!(),
+            Op::BitAnd{..} => todo!(),
+            Op::BitShl{..} => todo!(),
+            Op::BitShr{..} => todo!(),
             Op::Add {index, lhs, rhs} => {
                 sb_appendf(output, c!("    vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
