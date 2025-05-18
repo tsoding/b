@@ -77,6 +77,7 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
         CLEX_charlit    => c!("character literal"),
         CLEX_intlit     => c!("integer literal"),
         CLEX_floatlit   => c!("floating-point literal"),
+        CLEX_eof        => c!("end of file"),
         _ => {
             if token >= 0 && token < 256 {
                 temp_sprintf(c!("`%c`"), token)
