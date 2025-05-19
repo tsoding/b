@@ -4,13 +4,13 @@ use crate::strcmp;
 pub mod gas_aarch64_linux;
 pub mod fasm_x86_64_linux;
 pub mod ir;
-pub mod javascript;
+pub mod html_js;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Target {
     Fasm_x86_64_Linux,
     Gas_AArch64_Linux,
-    JavaScript,
+    Html_Js,
     IR,
 }
 
@@ -25,7 +25,7 @@ pub struct Target_Name {
 pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("fasm-x86_64-linux"), target: Target::Fasm_x86_64_Linux },
     Target_Name { name: c!("gas-aarch64-linux"), target: Target::Gas_AArch64_Linux },
-    Target_Name { name: c!("js"),                target: Target::JavaScript        },
+    Target_Name { name: c!("html-js"),           target: Target::Html_Js           },
     Target_Name { name: c!("ir"),                target: Target::IR                },
 ];
 

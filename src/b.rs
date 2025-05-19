@@ -943,23 +943,26 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
-        Target::JavaScript => {
-            codegen::javascript::generate_program(&mut output, &c);
+        Target::Html_Js => {
+            codegen::html_js::generate_program(&mut output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {
                 let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.js"), base_path);
+                effective_output_path = temp_sprintf(c!("%s.html"), base_path);
             } else {
                 effective_output_path = *output_path;
             }
 
-            // TODO(2025-05-08 07:18:15): make the js target automatically generate the html file
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
             if *run {
-                // TODO: when (2025-05-08 07:18:15) is done, open the html file in browser with html
-                todo!("Run the JavaScript program");
+                cmd_append! {
+                    &mut cmd,
+                    c!("xdg-open"),
+                    effective_output_path,
+                }
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
         Target::IR => {
@@ -976,7 +979,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
             if *run {
-                todo!("Interpret the IR");
+                todo!("Interpret the IR?");
             }
         }
     }

@@ -80,7 +80,25 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
 }
 
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    sb_appendf(output, c!("\"use strict\"\n"));
+    sb_appendf(output, c!(r#"<!DOCTYPE html>
+<html>
+  <head>
+    <title>B Program</title>
+  </head>
+  <body>
+    <h2>Console:</h2>
+    <pre id="log"></pre>
+    <script>
+"#));
     generate_funcs(output, da_slice((*c).funcs));
     // TODO: Generate data section for js target
+    sb_appendf(output, c!(r#"
+      const log = document.getElementById("log");
+      function putchar(code) {
+          log.innerText += String.fromCharCode(code);
+      }
+      main();
+    </script>
+  </body>
+</html>"#));
 }
