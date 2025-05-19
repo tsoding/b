@@ -70,7 +70,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
-            Op::UnaryNot{result, arg} => {
+            Op::UnaryNot {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
                 sb_appendf(output, c!("    cset x0, eq\n"));
@@ -130,7 +130,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
             Op::Store {index, arg} => {
-                sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"),(index + 1)*8);
+                sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
                 load_arg_to_reg(arg, c!("x1"), output);
                 sb_appendf(output, c!("    str x1, [x0]\n"));
             },
