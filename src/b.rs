@@ -673,7 +673,9 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             Some(())
         } else {
             (*l).parse_point = saved_point;
+            let saved_auto_vars_count = (*c).auto_vars_ator.count;
             compile_expression(l, input_path, c)?;
+            (*c).auto_vars_ator.count = saved_auto_vars_count;
             get_and_expect_clex(l, input_path, ';' as c_long)?;
             Some(())
         }
