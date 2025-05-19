@@ -99,10 +99,12 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     <h2>Console:</h2>
     <pre id="log"></pre>
     <script>
+    // The compile B program
 "#));
     generate_funcs(output, da_slice((*c).funcs));
     generate_data_section(output, da_slice((*c).data));
     sb_appendf(output, c!(r#"
+      // The B runtime
       const log = document.getElementById("log");
       const utf8decoder = new TextDecoder();
       function putchar(code) {
@@ -110,10 +112,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
       }
       function strlen(s) {
           let n = 0;
-          while (data[s] != 0) {
-              s++;
-              n++;
-          }
+          while (data[s++] != 0) n++;
           return n;
       }
       function printf(fmt, ...args) {
