@@ -1,3 +1,4 @@
+// -*- mode: simpc -*-
 main() {
     extrn malloc, printf, memset, exit;
     auto base, it, i, j, n, word, state;
@@ -9,6 +10,8 @@ main() {
     memset(base, 0, word*n);
     *(base + (n - 2)*word) = 1;
 
+    // TODO: factor out the row rendering to a separate function
+    //   Requires TODO(2025-05-11 15:45:38)
     it = base;
     i  = 0;
     while (i < n) {
