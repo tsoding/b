@@ -47,16 +47,10 @@
        x="26.565481"
        y="50.311974"
        ry="27.540792" />
-    <text
-       xml:space="preserve"
-       style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:147.063px;font-family:Cantarell;-inkscape-font-specification:Cantarell;text-align:center;writing-mode:lr-tb;direction:ltr;text-anchor:middle;fill:#ffffff;fill-opacity:1;stroke-width:2.89494"
-       x="107.35291"
-       y="181.70473"
-       id="text2"><tspan
-         sodipodi:role="line"
-         id="tspan2"
-         style="font-style:normal;font-variant:normal;font-weight:bold;font-stretch:normal;font-family:Cantarell;-inkscape-font-specification:Cantarell;fill:#ffffff;fill-opacity:1;stroke-width:2.89494"
-         x="107.35291"
-         y="181.70473">B</tspan></text>
+    <path
+       style="font-weight:bold;font-size:147.063px;font-family:Cantarell;-inkscape-font-specification:Cantarell;text-align:center;text-anchor:middle;fill:#ffffff;stroke-width:2.89494"
+       d="m 71.469568,181.70473 h 38.089322 c 24.70658,0 40.1482,-12.20623 40.1482,-31.47149 0,-17.64756 -12.94155,-28.82434 -33.97156,-28.82434 H 83.381671 v 14.85336 h 28.971409 c 10.88267,0 17.79463,6.47077 17.79463,16.47106 0,9.41203 -5.73546,13.67685 -18.08875,13.67685 H 90.14657 V 95.084618 h 13.67686 c 11.9121,0 18.52994,4.853079 18.52994,13.676862 0,7.20608 -4.70602,12.20623 -15.58868,15.8828 l 18.677,2.05888 c 9.70616,-3.23538 16.02987,-12.35329 16.02987,-22.79476 0,-15.58868 -12.79448,-24.265397 -36.1775,-24.265397 H 71.469568 Z"
+       id="text2"
+       aria-label="B" />
   </g>
 </svg>
