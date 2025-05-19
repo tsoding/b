@@ -117,7 +117,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 load_arg_to_reg(lhs, c!("x0"), output);
                 load_arg_to_reg(rhs, c!("x1"), output);
                 sb_appendf(output, c!("    cmp x0, x1\n"));
-                sb_appendf(output, c!("    cset x0, ls\n"));
+                sb_appendf(output, c!("    cset x0, lt\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             }
             Op::AutoAssign {index, arg} => {
