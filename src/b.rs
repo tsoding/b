@@ -988,4 +988,3 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
 // TODO(2025-05-18 07:06:26): B lexing is different from the C one.
 //   Hack stb_c_lexer.h into stb_b_lexer.h
-// TODO: Looks like B does not have hex literals, which means we will have to remove the from stb_c_lexer.h
