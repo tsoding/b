@@ -3,7 +3,7 @@ THIRDPARTY=thirdparty
 SRC=src
 EXAMPLES=examples
 
-$(BUILD)/b: $(SRC)/b.rs $(SRC)/crust.rs $(SRC)/nob.rs $(SRC)/stb_c_lexer.rs $(BUILD)/nob.o $(BUILD)/stb_c_lexer.o $(BUILD)/flag.o $(BUILD)/arena.o
+$(BUILD)/b: $(SRC)/arena.rs $(SRC)/b.rs $(SRC)/crust.rs $(SRC)/flag.rs $(SRC)/nob.rs $(SRC)/stb_c_lexer.rs $(SRC)/codegen/fasm_x86_64_linux.rs $(SRC)/codegen/gas_aarch64_linux.rs $(SRC)/codegen/html_js.rs $(SRC)/codegen/ir.rs $(SRC)/codegen/mod.rs $(BUILD)/nob.o $(BUILD)/stb_c_lexer.o $(BUILD)/flag.o $(BUILD)/arena.o
 	rustc --edition 2021 -g -C opt-level=z -C link-args="$(BUILD)/nob.o $(BUILD)/stb_c_lexer.o $(BUILD)/flag.o $(BUILD)/arena.o -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
 
 $(BUILD)/nob.o: $(THIRDPARTY)/nob.h | $(BUILD)
