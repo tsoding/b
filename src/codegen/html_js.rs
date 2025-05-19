@@ -119,6 +119,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
           const n = strlen(fmt);
           const bytes = new Uint8Array(data.buffer, fmt, n);
           log.innerText += utf8decoder.decode(bytes);
+          // TODO: print formatting is not fully implemented
       }
       main();
     </script>
