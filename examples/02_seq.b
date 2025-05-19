@@ -3,7 +3,7 @@ main() {
     auto a;
     a = 0;
     while (a < 100) {
-        printf("%02d\n", a);
+        printf("%d\n", a);
         a += 1;
     }
 }
