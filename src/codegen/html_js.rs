@@ -8,7 +8,7 @@ pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
         Arg::Ref(_)              => todo!(),
         Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
         Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
-        Arg::DataOffset(_offset) => todo!("DataOffset in js target"),
+        Arg::DataOffset(offset)  => sb_appendf(output, c!("%ld"), offset),
     };
 }
 
@@ -79,6 +79,16 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
     }
 }
 
+pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+    if data.len() > 0 {
+        sb_appendf(output, c!("let data = new Uint8Array(["));
+        for i in 0..data.len() {
+            sb_appendf(output, c!("0x%02X,"), (*data)[i] as i64);
+        }
+        sb_appendf(output, c!("])\n"));
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     sb_appendf(output, c!(r#"<!DOCTYPE html>
 <html>
@@ -91,11 +101,25 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     <script>
 "#));
     generate_funcs(output, da_slice((*c).funcs));
-    // TODO: Generate data section for js target
+    generate_data_section(output, da_slice((*c).data));
     sb_appendf(output, c!(r#"
       const log = document.getElementById("log");
+      const utf8decoder = new TextDecoder();
       function putchar(code) {
           log.innerText += String.fromCharCode(code);
+      }
+      function strlen(s) {
+          let n = 0;
+          while (data[s] != 0) {
+              s++;
+              n++;
+          }
+          return n;
+      }
+      function printf(fmt, ...args) {
+          const n = strlen(fmt);
+          const bytes = new Uint8Array(data.buffer, fmt, n);
+          log.innerText += utf8decoder.decode(bytes);
       }
       main();
     </script>
