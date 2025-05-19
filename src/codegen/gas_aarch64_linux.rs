@@ -39,7 +39,10 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
-        Arg::Ref(_) => todo!(),
+        Arg::Ref(index) => {
+            sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
+            sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
+        },
         Arg::AutoVar(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
         }
@@ -68,18 +71,48 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
             Op::UnaryNot   {..} => todo!(),
-            Op::BitOr {..} => todo!(),
-            Op::BitAnd {..} => todo!(),
-            Op::BitShl {..} => todo!(),
-            Op::BitShr {..} => todo!(),
+            Op::BitOr {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    orr x0, x0, x1\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
+            Op::BitAnd {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    and x0, x0, x1\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
+            Op::BitShl {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    lsl x0, x0, x1\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
+            Op::BitShr {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    lsr x0, x0, x1\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
             Op::Add {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("x0"), output);
                 load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    add x0, x1, x0\n"));
+                sb_appendf(output, c!("    add x0, x0, x1\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             }
-            Op::Sub {..} => todo!(),
-            Op::Mul {..} => todo!(),
+            Op::Sub {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    sub x0, x0, x1\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
+            Op::Mul {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    mul x0, x0, x1\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
             Op::Less {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("x0"), output);
                 load_arg_to_reg(rhs, c!("x1"), output);
@@ -91,8 +124,12 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
-            Op::Store {..} => todo!(),
-            Op::Funcall {result: _, name, args} => {
+            Op::Store {index, arg} => {
+                sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"),(index + 1)*8);
+                load_arg_to_reg(arg, c!("x1"), output);
+                sb_appendf(output, c!("    str x1, [x0]\n"));
+            },
+            Op::Funcall {result, name, args} => {
                 // TODO: add the rest of the registers.
                 // The first 8 args go to x0-x7
                 const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
@@ -104,7 +141,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                     load_arg_to_reg(*args.items.add(i), reg, output);
                 }
                 sb_appendf(output, c!("    bl %s\n"), name);
-                // TODO: save the result of the function call to the auto var
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
             },
             Op::Jmp {addr} => {
                 sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
