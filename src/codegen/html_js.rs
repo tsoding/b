@@ -4,8 +4,9 @@ use crate::nob::*;
 
 
 pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
+    // TODO: convert all autovars to BigInt
     match arg {
-        Arg::Ref(_)              => todo!(),
+        Arg::Ref(index)          => sb_appendf(output, c!("Number((new DataView(memory)).getBigUint64(vars[%zu]))"), index - 1),
         Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
         Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
         Arg::DataOffset(offset)  => sb_appendf(output, c!("%ld"), offset),
@@ -17,59 +18,105 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     if auto_vars_count > 0 {
         sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), auto_vars_count);
     }
+    sb_appendf(output, c!("    let pc = 0;\n"));
+    sb_appendf(output, c!("    while (pc < %zu) {\n"), body.len());
+    sb_appendf(output, c!("        switch(pc) {\n"));
     for i in 0..body.len() {
+        sb_appendf(output, c!("            case %zu: "), i);
         match (*body)[i] {
-            Op::Store {..} => todo!(),
+            Op::Store {index, arg} => {
+                sb_appendf(output, c!("(new DataView(memory)).setBigUint64(vars[%zu], BigInt("), index - 1);
+                generate_arg(arg, output);
+                sb_appendf(output, c!("));\n"));
+            },
             Op::AutoAssign{index, arg} => {
-                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(arg, output);
                 sb_appendf(output, c!(";\n"));
             },
-            Op::UnaryNot{..} => todo!(),
-            Op::BitOr{..} => todo!(),
-            Op::BitAnd{..} => todo!(),
-            Op::BitShl{..} => todo!(),
-            Op::BitShr{..} => todo!(),
+            Op::UnaryNot{result, arg} => {
+                sb_appendf(output, c!("vars[%zu] = "), result - 1);
+                sb_appendf(output, c!("!"));
+                generate_arg(arg, output);
+                sb_appendf(output, c!(";\n"));
+            },
+            Op::BitOr{index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" | "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            },
+            Op::BitAnd{index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" & "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            },
+            Op::BitShl{index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" << "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            },
+            Op::BitShr{index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" >> "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            },
             Op::Add {index, lhs, rhs} => {
-                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
                 sb_appendf(output, c!(" + "));
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
             Op::Sub {index, lhs, rhs} => {
-                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
                 sb_appendf(output, c!(" - "));
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
             Op::Mul {index, lhs, rhs} => {
-                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
                 sb_appendf(output, c!(" * "));
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
             Op::Less {index, lhs, rhs} => {
-                sb_appendf(output, c!("    vars[%zu] = "), index - 1);
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
                 sb_appendf(output, c!(" < "));
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
             Op::Funcall{result, name, args} => {
-                sb_appendf(output, c!("    vars[%zu] = %s("), result - 1, name);
+                sb_appendf(output, c!("vars[%zu] = %s("), result - 1, name);
                 for i in 0..args.count {
                     if i > 0 { sb_appendf(output, c!(", ")); }
                     generate_arg(*args.items.add(i), output);
                 }
                 sb_appendf(output, c!(");\n"));
             },
-            Op::JmpIfNot{..} => todo!(),
-            Op::Jmp{..} => todo!(),
+            Op::JmpIfNot{addr, arg} => {
+                sb_appendf(output, c!("if ("));
+                generate_arg(arg, output);
+                sb_appendf(output, c!(" == 0) { pc = %zu; continue; };\n"), addr);
+            },
+            Op::Jmp{addr} => {
+                sb_appendf(output, c!("pc = %zu; continue;\n"), addr);
+            },
         }
     }
+    sb_appendf(output, c!("        }\n"));
+    sb_appendf(output, c!("        break;\n"));
+    sb_appendf(output, c!("    }\n"));
     sb_appendf(output, c!("}\n"));
 }
 
@@ -80,8 +127,9 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
 }
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+    sb_appendf(output, c!("const memory = new ArrayBuffer(%zu, { maxByteLength: 2**31-1 });\n"), data.len());
     if data.len() > 0 {
-        sb_appendf(output, c!("let data = new Uint8Array(["));
+        sb_appendf(output, c!("(new Uint8Array(memory)).set(["));
         for i in 0..data.len() {
             sb_appendf(output, c!("0x%02X,"), (*data)[i] as i64);
         }
@@ -101,8 +149,8 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     <script>
     // The compile B program
 "#));
-    generate_funcs(output, da_slice((*c).funcs));
     generate_data_section(output, da_slice((*c).data));
+    generate_funcs(output, da_slice((*c).funcs));
     sb_appendf(output, c!(r#"
       // The B runtime
       const log = document.getElementById("log");
@@ -110,16 +158,28 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
       function putchar(code) {
           log.innerText += String.fromCharCode(code);
       }
-      function strlen(s) {
-          let n = 0;
-          while (data[s++] != 0) n++;
-          return n;
+      function strlen(ptr) {
+          return (new Uint8Array(memory, ptr)).indexOf(0);
       }
       function printf(fmt, ...args) {
           const n = strlen(fmt);
-          const bytes = new Uint8Array(data.buffer, fmt, n);
-          log.innerText += utf8decoder.decode(bytes);
           // TODO: print formatting is not fully implemented
+          const bytes = new Uint8Array(memory, fmt, n);
+          const str = utf8decoder.decode(bytes);
+
+          let index = 0;
+          const output = str.replaceAll("%%d", () => args[index++]);
+          log.innerText += output;
+      }
+      function malloc(size) {
+          const ptr = memory.byteLength;
+          memory.resize(ptr+size);
+          return ptr;
+      }
+      function memset(ptr, byte, size) {
+          let view = new Uint8Array(memory, ptr, size);
+          let bytes = Array(size).fill(byte);
+          view.set(bytes);
       }
       main();
     </script>
