@@ -6,7 +6,7 @@
 
 main() {
     extrn InitWindow, BeginDrawing, EndDrawing, WindowShouldClose, ClearBackground, DrawRectangle, SetTargetFPS;
-    auto x, y, dx, dy, sx, sy; // TODO: adding one more variable in here crashes on x86_64
+    auto x, y, dx, dy, sx, sy; // TODO: Adding one more variable in here crashes on x86_64. This is somehow related to the WindowShouldClose() call down below. If you replace it with 1 the segfault goes away.
 
     sx = sy = 100;
     x  = y  = 200;
