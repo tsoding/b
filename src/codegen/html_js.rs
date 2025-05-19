@@ -164,7 +164,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
       function printf(fmt, ...args) {
           const n = strlen(fmt);
           // TODO: print formatting is not fully implemented
-          const bytes = new Uint8Array(memory, fmt, n);
+          const bytes = memory.slice(fmt, fmt+n);
           const str = utf8decoder.decode(bytes);
 
           let index = 0;
