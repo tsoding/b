@@ -154,9 +154,20 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     sb_appendf(output, c!(r#"
       // The B runtime
       const log = document.getElementById("log");
+      let logBuffer = "";
       const utf8decoder = new TextDecoder();
+      function __flush() {
+          log.innerText += logBuffer;
+          logBuffer = "";
+      }
+      function __print_string(s) {
+          for (let i = 0; i < s.length; ++i) {
+              logBuffer += s[i];
+              if (s[i] === '\n') __flush();
+          }
+      }
       function putchar(code) {
-          log.innerText += String.fromCharCode(code);
+          __print_string(String.fromCharCode(code));
       }
       function strlen(ptr) {
           return (new Uint8Array(memory, ptr)).indexOf(0);
@@ -169,7 +180,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
 
           let index = 0;
           const output = str.replaceAll("%%d", () => args[index++]);
-          log.innerText += output;
+          __print_string(output);
       }
       function malloc(size) {
           const ptr = memory.byteLength;
