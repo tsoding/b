@@ -34,6 +34,12 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 generate_arg(arg, output);
                 sb_appendf(output, c!(";\n"));
             },
+            Op::Negate{result, arg} => {
+                sb_appendf(output, c!("vars[%zu] = "), result - 1);
+                sb_appendf(output, c!("-"));
+                generate_arg(arg, output);
+                sb_appendf(output, c!(";\n"));
+            }
             Op::UnaryNot{result, arg} => {
                 sb_appendf(output, c!("vars[%zu] = "), result - 1);
                 sb_appendf(output, c!("!"));
@@ -86,6 +92,13 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
                 sb_appendf(output, c!(" * "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            }
+            Op::Mod {index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" % "));
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }

@@ -234,10 +234,13 @@ pub enum Arg {
 pub enum Binop {
     Assign,
     AssignPlus,
+    AssignMult,
     Plus,
     Minus,
     Mult,
+    Mod,
     Less,
+    GreaterEqual,
     BitOr,
     BitAnd,
     BitShl,
@@ -248,13 +251,13 @@ pub enum Binop {
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
-    &[Binop::Assign, Binop::AssignPlus, Binop::AssignBitOr, Binop::AssignBitShl],
+    &[Binop::Assign, Binop::AssignPlus, Binop::AssignMult, Binop::AssignBitOr, Binop::AssignBitShl],
     &[Binop::BitOr],
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
-    &[Binop::Less],
+    &[Binop::Less, Binop::GreaterEqual],
     &[Binop::Plus, Binop::Minus],
-    &[Binop::Mult],
+    &[Binop::Mult, Binop::Mod],
 ];
 
 impl Binop {
@@ -263,13 +266,16 @@ impl Binop {
             token if token == '+' as i64 => Some(Binop::Plus),
             token if token == '-' as i64 => Some(Binop::Minus),
             token if token == '*' as i64 => Some(Binop::Mult),
+            token if token == '%' as i64 => Some(Binop::Mod),
             token if token == '<' as i64 => Some(Binop::Less),
+            CLEX_greatereq               => Some(Binop::GreaterEqual),
             token if token == '=' as i64 => Some(Binop::Assign),
             token if token == '|' as i64 => Some(Binop::BitOr),
             token if token == '&' as i64 => Some(Binop::BitAnd),
             CLEX_shleq                   => Some(Binop::AssignBitShl),
             CLEX_oreq                    => Some(Binop::AssignBitOr),
             CLEX_pluseq                  => Some(Binop::AssignPlus),
+            CLEX_muleq                   => Some(Binop::AssignMult),
             CLEX_shl                     => Some(Binop::BitShl),
             CLEX_shr                     => Some(Binop::BitShr),
             _ => None,
@@ -293,9 +299,12 @@ impl Binop {
 #[derive(Clone, Copy)]
 pub enum Op {
     UnaryNot   {result: usize, arg: Arg},
+    Negate     {result: usize, arg: Arg},
     Add        {index: usize, lhs: Arg, rhs: Arg},
     Sub        {index: usize, lhs: Arg, rhs: Arg},
     Mul        {index: usize, lhs: Arg, rhs: Arg},
+    // TODO: Maybe we should have something like DivMod instruction because many CPUs just do div and mod simultaneously
+    Mod        {index: usize, lhs: Arg, rhs: Arg},
     Less       {index: usize, lhs: Arg, rhs: Arg},
     BitOr      {index: usize, lhs: Arg, rhs: Arg},
     BitAnd     {index: usize, lhs: Arg, rhs: Arg},
@@ -353,6 +362,12 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
             da_append(&mut (*c).func_body, Op::AutoAssign {index, arg});
             Some((Arg::Ref(index), true))
+        }
+        token if token == '-' as i64 => {
+            let (arg, _) = compile_primary_expression(l, input_path, c)?;
+            let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+            da_append(&mut (*c).func_body, Op::Negate {result: index, arg});
+            Some((Arg::AutoVar(index), false))
         }
         CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
@@ -453,9 +468,22 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         da_append(&mut (*c).func_body, Op::Mul  {index, lhs, rhs});
                         lhs = Arg::AutoVar(index);
                     }
+                    Binop::Mod  => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::Mod {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
                     Binop::Less  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                         da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::GreaterEqual  => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        // TODO: Introduce Op::GreaterEqual so we can generate more efficient assembly
+                        //   This is just a stopgap.
+                        da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
+                        da_append(&mut (*c).func_body, Op::UnaryNot {result: index, arg: Arg::AutoVar(index)});
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::AssignBitOr => {
@@ -496,6 +524,20 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                             Arg::Ref(_) => todo!(),
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs})
+                            }
+                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+                        }
+                    }
+                    Binop::AssignMult => {
+                        if !lvalue {
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            return None;
+                        }
+
+                        match lhs {
+                            Arg::Ref(_) => todo!(),
+                            Arg::AutoVar(index) => {
+                                da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs})
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }

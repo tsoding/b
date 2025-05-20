@@ -36,6 +36,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
             },
+            Op::Negate {result, arg} => {
+                load_arg_to_reg(arg, c!("rax"), output);
+                sb_appendf(output, c!("    neg rax\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
+            }
             Op::UnaryNot{result, arg} => {
                 sb_appendf(output, c!("    xor rbx, rbx\n"));
                 load_arg_to_reg(arg, c!("rax"), output);
@@ -79,11 +84,18 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    sub rax, rbx\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
             }
-            Op::Mul  {index, lhs, rhs} => {
+            Op::Mod {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("rax"), output);
                 load_arg_to_reg(rhs, c!("rbx"), output);
                 sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    mul rbx\n"));
+                sb_appendf(output, c!("    idiv rbx\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+            }
+            Op::Mul {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    xor rdx, rdx\n"));
+                sb_appendf(output, c!("    imul rbx\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
             }
             Op::Less {index, lhs, rhs} => {
