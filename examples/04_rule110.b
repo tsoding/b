@@ -30,7 +30,7 @@ main() {
         while (i < n) {
             state <<= 1;
             state  |= *it;
-            state  = state & 7;
+            state  = state & 7; // TODO: use &= here
             *(it - word) = (110>>state)&1;
             i  += 1;
             it += word;
