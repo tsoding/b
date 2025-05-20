@@ -98,7 +98,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
             Op::Mod {index, lhs, rhs} => {
                 sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(lhs, output);
-                sb_appendf(output, c!(" % "));
+                sb_appendf(output, c!(" %% "));
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
