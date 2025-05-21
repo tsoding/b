@@ -488,7 +488,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     }
                     Binop::AssignBitOr => {
                         if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
                             return None;
                         }
 
@@ -502,7 +502,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     }
                     Binop::AssignBitShl => {
                         if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
                             return None;
                         }
 
@@ -516,7 +516,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     }
                     Binop::AssignPlus => {
                         if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
                             return None;
                         }
 
@@ -530,7 +530,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     }
                     Binop::AssignMult => {
                         if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
                             return None;
                         }
 
@@ -544,7 +544,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     }
                     Binop::Assign => {
                         if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to lvalue\n"));
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
                             return None;
                         }
 
