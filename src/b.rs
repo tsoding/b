@@ -241,6 +241,8 @@ pub enum Binop {
     Mult,
     Mod,
     Less,
+    Equal,
+    NotEqual,
     GreaterEqual,
     BitOr,
     BitAnd,
@@ -256,6 +258,7 @@ pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitOr],
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
+    &[Binop::Equal, Binop::NotEqual],
     &[Binop::Less, Binop::GreaterEqual],
     &[Binop::Plus, Binop::Minus],
     &[Binop::Mult, Binop::Mod],
@@ -279,6 +282,8 @@ impl Binop {
             CLEX_muleq                   => Some(Binop::AssignMult),
             CLEX_shl                     => Some(Binop::BitShl),
             CLEX_shr                     => Some(Binop::BitShr),
+            CLEX_eq                      => Some(Binop::Equal),
+            CLEX_noteq                   => Some(Binop::NotEqual),
             _ => None,
         }
     }
@@ -307,6 +312,8 @@ pub enum Op {
     // TODO: Maybe we should have something like DivMod instruction because many CPUs just do div and mod simultaneously
     Mod            {index: usize, lhs: Arg, rhs: Arg},
     Less           {index: usize, lhs: Arg, rhs: Arg},
+    Equal          {index: usize, lhs: Arg, rhs: Arg},
+    NotEqual       {index: usize, lhs: Arg, rhs: Arg},
     BitOr          {index: usize, lhs: Arg, rhs: Arg},
     BitAnd         {index: usize, lhs: Arg, rhs: Arg},
     BitShl         {index: usize, lhs: Arg, rhs: Arg},
@@ -476,6 +483,16 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     Binop::Less  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                         da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::Equal => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::Equal {index, lhs, rhs});
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::NotEqual => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        da_append(&mut (*c).func_body, Op::NotEqual {index, lhs, rhs});
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::GreaterEqual  => {

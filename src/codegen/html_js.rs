@@ -115,6 +115,20 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
+            Op::Equal {index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" === "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            }
+            Op::NotEqual {index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
+                sb_appendf(output, c!(" !== "));
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
+            }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("vars[%zu] = %s("), result - 1, name);
                 for i in 0..args.count {
