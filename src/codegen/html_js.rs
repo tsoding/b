@@ -6,6 +6,7 @@ use crate::crust::libc::*;
 pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
     // TODO: convert all autovars to BigInt
     match arg {
+        Arg::Global(_)           => todo!(),
         Arg::Ref(index)          => sb_appendf(output, c!("Number((new DataView(memory)).getBigUint64(vars[%zu]))"), index - 1),
         Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
         Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
@@ -29,6 +30,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 generate_arg(arg, output);
                 sb_appendf(output, c!("));\n"));
             },
+            Op::GlobalAssign {..} => todo!(),
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(arg, output);

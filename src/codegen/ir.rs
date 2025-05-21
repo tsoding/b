@@ -4,6 +4,7 @@ use crate::{Op, Arg, Func, Compiler};
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
+        Arg::Global(index)      => sb_appendf(output, c!("Global(%zu)"), index),
         Arg::Ref(index)         => sb_appendf(output, c!("Ref(%zu)"), index),
         Arg::Literal(value)     => sb_appendf(output, c!("Literal(%ld)"), value),
         Arg::AutoVar(index)     => sb_appendf(output, c!("AutoVar(%zu)"), index),
@@ -21,6 +22,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 dump_arg(output, arg);
                 sb_appendf(output, c!(")\n"));
             }
+            Op::GlobalAssign{..} => todo!(),
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("    AutoAssign(%zu, "), index);
                 dump_arg(output, arg);

@@ -4,6 +4,9 @@ use crate::nob::*;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
+        Arg::Global(index) => {
+            sb_appendf(output, c!("    mov %s, [globals+%zu*8]\n"), reg, index)
+        }
         Arg::Ref(index) => {
             sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8);
             sb_appendf(output, c!("    mov %s, [%s]\n"), reg, reg)
@@ -17,8 +20,8 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
 
-    sb_appendf(output, c!("public %s\n"), name);
-    sb_appendf(output, c!("%s:\n"), name);
+    sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
+    sb_appendf(output, c!("_%s:\n"), name);
     sb_appendf(output, c!("    push rbp\n"));
     sb_appendf(output, c!("    mov rbp, rsp\n"));
     if stack_size > 0 {
@@ -32,6 +35,10 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 load_arg_to_reg(arg, c!("rbx"), output);
                 sb_appendf(output, c!("    mov [rax], rbx\n"));
             }
+            Op::GlobalAssign{index, arg} => {
+                load_arg_to_reg(arg, c!("rax"), output);
+                sb_appendf(output, c!("    mov [globals+%zu*8], rax\n"), index);
+            },
             Op::AutoAssign{index, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), index*8);
@@ -120,7 +127,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                                                            // does not distinguish regular and
                                                            // variadic functions we set al to 0 just
                                                            // in case.
-                sb_appendf(output, c!("    call %s\n"), name);
+                sb_appendf(output, c!("    call _%s\n"), name);
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
             Op::JmpIfNot{addr, arg} => {
@@ -149,11 +156,11 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
 
 pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
     for i in 0..extrns.len() {
-        sb_appendf(output, c!("extrn %s\n"), (*extrns)[i]);
+        sb_appendf(output, c!("extrn '%s' as _%s\n"), (*extrns)[i], (*extrns)[i]);
     }
 }
 
-pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8], global_count: usize) {
     if data.len() > 0 {
         sb_appendf(output, c!("section \".data\"\n"));
         sb_appendf(output, c!("dat: db "));
@@ -165,11 +172,14 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
         }
         sb_appendf(output, c!("\n"));
     }
+    if global_count > 0 {
+        sb_appendf(output, c!("globals: rq %zu"), global_count);
+    }
 }
 
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     sb_appendf(output, c!("format ELF64\n"));
     generate_funcs(output, da_slice((*c).funcs));
     generate_extrns(output, da_slice((*c).extrns));
-    generate_data_section(output, da_slice((*c).data));
+    generate_data_section(output, da_slice((*c).data), (*c).global_count);
 }

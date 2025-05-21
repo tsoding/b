@@ -140,8 +140,9 @@ pub unsafe fn get_and_expect_clex_id(l: *mut stb_lexer, input_path: *const c_cha
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum Storage {
-    External{name: *const c_char},
-    Auto{index: usize},
+    External {name: *const c_char},
+    Auto     {index: usize},
+    Global   {index: usize},
 }
 
 #[derive(Clone, Copy)]
@@ -225,6 +226,7 @@ unsafe fn is_keyword(name: *const c_char) -> bool {
 pub enum Arg {
     AutoVar(usize),
     Ref(usize),
+    Global(usize),
     Literal(i64),
     DataOffset(usize),
 }
@@ -298,23 +300,24 @@ impl Binop {
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
-    UnaryNot   {result: usize, arg: Arg},
-    Negate     {result: usize, arg: Arg},
-    Add        {index: usize, lhs: Arg, rhs: Arg},
-    Sub        {index: usize, lhs: Arg, rhs: Arg},
-    Mul        {index: usize, lhs: Arg, rhs: Arg},
+    UnaryNot     {result: usize, arg: Arg},
+    Negate       {result: usize, arg: Arg},
+    Add          {index: usize, lhs: Arg, rhs: Arg},
+    Sub          {index: usize, lhs: Arg, rhs: Arg},
+    Mul          {index: usize, lhs: Arg, rhs: Arg},
     // TODO: Maybe we should have something like DivMod instruction because many CPUs just do div and mod simultaneously
-    Mod        {index: usize, lhs: Arg, rhs: Arg},
-    Less       {index: usize, lhs: Arg, rhs: Arg},
-    BitOr      {index: usize, lhs: Arg, rhs: Arg},
-    BitAnd     {index: usize, lhs: Arg, rhs: Arg},
-    BitShl     {index: usize, lhs: Arg, rhs: Arg},
-    BitShr     {index: usize, lhs: Arg, rhs: Arg},
-    AutoAssign {index: usize, arg: Arg},
-    Store      {index: usize, arg: Arg},
-    Funcall    {result: usize, name: *const c_char, args: Array<Arg>},
-    Jmp        {addr: usize},
-    JmpIfNot   {addr: usize, arg: Arg},
+    Mod          {index: usize, lhs: Arg, rhs: Arg},
+    Less         {index: usize, lhs: Arg, rhs: Arg},
+    BitOr        {index: usize, lhs: Arg, rhs: Arg},
+    BitAnd       {index: usize, lhs: Arg, rhs: Arg},
+    BitShl       {index: usize, lhs: Arg, rhs: Arg},
+    BitShr       {index: usize, lhs: Arg, rhs: Arg},
+    AutoAssign   {index: usize, arg: Arg},
+    GlobalAssign {index: usize, arg: Arg},
+    Store        {index: usize, arg: Arg},
+    Funcall      {result: usize, name: *const c_char, args: Array<Arg>},
+    Jmp          {addr: usize},
+    JmpIfNot     {addr: usize, arg: Arg},
 }
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
@@ -389,6 +392,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
                 (*l).parse_point = saved_point;
                 match (*var_def).storage {
                     Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
+                    Storage::Global{index} => Some((Arg::Global(index), true)),
                     Storage::External{..} => {
                         missingf!(l, input_path, name_where, c!("external variables in lvalues are not supported yet\n"));
                     }
@@ -494,6 +498,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                         match lhs {
                             Arg::Ref(_) => todo!(),
+                            Arg::Global(global_index) => {
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::GlobalAssign {index: global_index, arg: Arg::AutoVar(index)})
+                            }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs})
                             }
@@ -508,6 +517,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                         match lhs {
                             Arg::Ref(_) => todo!(),
+                            Arg::Global(global_index) => {
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::GlobalAssign {index: global_index, arg: Arg::AutoVar(index)})
+                            }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs})
                             }
@@ -522,6 +536,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                         match lhs {
                             Arg::Ref(_) => todo!(),
+                            Arg::Global(global_index) => {
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::GlobalAssign {index: global_index, arg: Arg::AutoVar(index)})
+                            }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs})
                             }
@@ -536,6 +555,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                         match lhs {
                             Arg::Ref(_) => todo!(),
+                            Arg::Global(global_index) => {
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::GlobalAssign {index: global_index, arg: Arg::AutoVar(index)})
+                            }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs})
                             }
@@ -551,6 +575,9 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         match lhs {
                             Arg::Ref(index) => {
                                 da_append(&mut (*c).func_body, Op::Store {index, arg: rhs});
+                            }
+                            Arg::Global(index) => {
+                                da_append(&mut (*c).func_body, Op::GlobalAssign {index, arg: rhs});
                             }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::AutoAssign {index, arg: rhs});
@@ -621,6 +648,9 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
         }
         Storage::Auto{..} => {
             missingf!(l, input_path, name_where, c!("calling functions from auto variables\n"));
+        }
+        Storage::Global{..} => {
+            missingf!(l, input_path, name_where, c!("calling functions from global variables\n"));
         }
     }
 }
@@ -757,6 +787,7 @@ pub struct Compiler {
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub arena: Arena,
+    pub global_count: usize,
 }
 
 pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
@@ -784,6 +815,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             return None;
         }
 
+        let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
         if (*l).token == '(' as c_long { // Function definition
             // TODO(2025-05-11 15:45:38): functions with several parameters
@@ -802,7 +834,11 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             (*c).func_body = zeroed();
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
-            missingf!(l, input_path, (*l).where_firstchar, c!("variable definitions\n"));
+            (*l).parse_point = saved_point;
+            let index = (*c).global_count;
+            (*c).global_count += 1;
+            declare_var(l, input_path, &mut (*c).vars, name, name_where, Storage::Global{index})?;
+            get_and_expect_clex(l, input_path, ';' as c_long)?;
         }
     }
     scope_pop(&mut (*c).vars);          // end global scope
