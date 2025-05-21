@@ -307,6 +307,7 @@ pub enum Op {
     // TODO: Maybe we should have something like DivMod instruction because many CPUs just do div and mod simultaneously
     Mod            {index: usize, lhs: Arg, rhs: Arg},
     Less           {index: usize, lhs: Arg, rhs: Arg},
+    GTEq           {index: usize, lhs: Arg, rhs: Arg},
     BitOr          {index: usize, lhs: Arg, rhs: Arg},
     BitAnd         {index: usize, lhs: Arg, rhs: Arg},
     BitShl         {index: usize, lhs: Arg, rhs: Arg},
@@ -482,8 +483,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                         // TODO: Introduce Op::GreaterEqual so we can generate more efficient assembly
                         //   This is just a stopgap.
-                        da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
-                        da_append(&mut (*c).func_body, Op::UnaryNot {result: index, arg: Arg::AutoVar(index)});
+                        da_append(&mut (*c).func_body, Op::GTEq {index, lhs, rhs});
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::AssignBitOr => {
