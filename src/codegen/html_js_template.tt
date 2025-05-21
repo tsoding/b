@@ -7,9 +7,9 @@
     <h2>Console:</h2>
     <pre id="log"></pre>
     <script>
+"use strict";
 // The compile B program
-<<<DATA_SECTION>>>
-<<<CODE_SECTION>>>
+<<<GENERATED>>>
 
 // The B runtime
 const log = document.getElementById("log");
