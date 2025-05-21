@@ -39,7 +39,11 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
-        Arg::External(_) => todo!(),
+        Arg::External(name) => {
+            sb_appendf(output, c!("    adrp %s, %s\n"), reg, name);
+            sb_appendf(output, c!("    add  %s, %s, :lo12:%s\n"), reg, reg, name);
+            sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
+        }
         Arg::Ref(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
@@ -128,7 +132,12 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    cset x0, lt\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             }
-            Op::ExternalAssign{..} => todo!(),
+            Op::ExternalAssign{name, arg} => {
+                load_arg_to_reg(arg, c!("x0"), output);
+                sb_appendf(output, c!("    adrp x1, %s\n"), name);
+                sb_appendf(output, c!("    add  x1, x1, :lo12:%s\n"), name);
+                sb_appendf(output, c!("    str x0, [x1]\n"), name);
+            }
             Op::AutoAssign {index, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
@@ -170,6 +179,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+    sb_appendf(output, c!(".text\n"));
     for i in 0..funcs.len() {
         generate_function((*funcs)[i].name, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
@@ -177,6 +187,7 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
+        sb_appendf(output, c!(".data\n"));
         sb_appendf(output, c!(".dat: .byte "));
         for i in 0..data.len() {
             if i > 0 {
@@ -188,7 +199,19 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+    if globals.len() > 0 {
+        sb_appendf(output, c!(".bss\n"));
+        for i in 0..globals.len() {
+            let name = (*globals)[i];
+            sb_appendf(output, c!(".global %s\n"), name);
+            sb_appendf(output, c!("%s: .zero 8\n"), name);
+        }
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     generate_funcs(output, da_slice((*c).funcs));
+    generate_globals(output, da_slice((*c). globals));
     generate_data_section(output, da_slice((*c).data));
 }
