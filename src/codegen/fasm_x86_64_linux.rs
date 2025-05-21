@@ -4,13 +4,11 @@ use crate::nob::*;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
-        Arg::Global(index) => {
-            sb_appendf(output, c!("    mov %s, [globals+%zu*8]\n"), reg, index)
-        }
         Arg::Ref(index) => {
             sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8);
             sb_appendf(output, c!("    mov %s, [%s]\n"), reg, reg)
         }
+        Arg::External(name)     => sb_appendf(output, c!("    mov %s, [_%s]\n"), reg, name),
         Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
         Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"), reg, value),
         Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"), reg, offset),
@@ -35,9 +33,9 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 load_arg_to_reg(arg, c!("rbx"), output);
                 sb_appendf(output, c!("    mov [rax], rbx\n"));
             }
-            Op::GlobalAssign{index, arg} => {
+            Op::ExternalAssign{name, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
-                sb_appendf(output, c!("    mov [globals+%zu*8], rax\n"), index);
+                sb_appendf(output, c!("    mov [_%s], rax\n"), name);
             },
             Op::AutoAssign{index, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
@@ -160,7 +158,15 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8], global_count: usize) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+    for i in 0..globals.len() {
+        let name = (*globals)[i];
+        sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
+        sb_appendf(output, c!("_%s: rq 1\n"), name);
+    }
+}
+
+pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
         sb_appendf(output, c!("section \".data\"\n"));
         sb_appendf(output, c!("dat: db "));
@@ -172,14 +178,12 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
         }
         sb_appendf(output, c!("\n"));
     }
-    if global_count > 0 {
-        sb_appendf(output, c!("globals: rq %zu"), global_count);
-    }
 }
 
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     sb_appendf(output, c!("format ELF64\n"));
     generate_funcs(output, da_slice((*c).funcs));
     generate_extrns(output, da_slice((*c).extrns));
-    generate_data_section(output, da_slice((*c).data), (*c).global_count);
+    generate_data_section(output, da_slice((*c).data));
+    generate_globals(output, da_slice((*c).globals));
 }

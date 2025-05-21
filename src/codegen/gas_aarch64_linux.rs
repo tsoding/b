@@ -39,7 +39,7 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
-        Arg::Global(_) => todo!(),
+        Arg::External(_) => todo!(),
         Arg::Ref(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
@@ -128,7 +128,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    cset x0, lt\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             }
-            Op::GlobalAssign{..} => todo!(),
+            Op::ExternalAssign{..} => todo!(),
             Op::AutoAssign {index, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
