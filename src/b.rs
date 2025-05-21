@@ -493,7 +493,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         }
 
                         match lhs {
-                            Arg::Ref(_) => todo!(),
+                            Arg::Ref(index) => {
+                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::BitOr {index: tmp, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                            },
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs})
                             }
@@ -507,7 +511,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         }
 
                         match lhs {
-                            Arg::Ref(_) => todo!(),
+                            Arg::Ref(index) => {
+                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::BitShl {index: tmp, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                            },
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs})
                             }
@@ -521,7 +529,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         }
 
                         match lhs {
-                            Arg::Ref(_) => todo!(),
+                            Arg::Ref(index) => {
+                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::Add {index: tmp, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                            },
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs})
                             }
@@ -535,7 +547,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         }
 
                         match lhs {
-                            Arg::Ref(_) => todo!(),
+                            Arg::Ref(index) => {
+                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::Mul {index: tmp, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                            },
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs})
                             }
