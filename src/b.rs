@@ -817,7 +817,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     } else {
         default_target = Target::Fasm_x86_64_Linux;
     }
-    let default_target_name = name_of_target(default_target).expect("default target name not found");
+    let default_target_name = name_of_target(default_target);
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
@@ -852,7 +852,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     if strcmp(*target_name, c!("list")) == 0 {
         fprintf(stderr, c!("Compilation targets:\n"));
         for i in 0..TARGET_NAMES.len() {
-            fprintf(stderr, c!("    %s\n"), (*TARGET_NAMES)[i].name);
+            fprintf(stderr, c!("    %s\n"), (*TARGET_NAMES)[i]);
         }
         return Some(());
     }
