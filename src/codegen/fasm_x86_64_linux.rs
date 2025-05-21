@@ -111,7 +111,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    setl dl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
             }
-            Op::GTEq {index, lhs, rhs} => {
+            Op::GreaterEqual {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("rax"), output);
                 load_arg_to_reg(rhs, c!("rbx"), output);
                 sb_appendf(output, c!("    xor rdx, rdx\n"));

@@ -132,7 +132,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    cset x0, lt\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             }
-            Op::GTEq {..} => todo!(),
+            Op::GreaterEqual {..} => todo!(),
             Op::ExternalAssign{name, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    adrp x1, %s\n"), name);
