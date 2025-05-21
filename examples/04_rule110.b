@@ -2,9 +2,7 @@
 
 base; word; n;
 
-// TODO: I wanted to call this function display() but it's a reserved word of fasm
-//   Come up with some function name mangling mechanism
-render() {
+display() {
     extrn printf;
     auto it, i;
 
@@ -44,12 +42,12 @@ main() {
     memset(base, 0, word*n);
     *(base + (n - 2)*word) = 1;
 
-    render();
+    display();
     auto i;
     i = 0;
     while (i < n - 3) {
         next();
-        render();
+        display();
         i += 1;
     }
 }
