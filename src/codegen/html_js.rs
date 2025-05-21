@@ -1,7 +1,7 @@
 use core::ffi::*;
 use crate::{Op, Arg, Func, Compiler};
 use crate::nob::*;
-
+use crate::crust::libc::*;
 
 pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
     // TODO: convert all autovars to BigInt
@@ -151,62 +151,22 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 }
 
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    sb_appendf(output, c!(r#"<!DOCTYPE html>
-<html>
-  <head>
-    <title>B Program</title>
-  </head>
-  <body>
-    <h2>Console:</h2>
-    <pre id="log"></pre>
-    <script>
-    // The compile B program
-"#));
-    generate_data_section(output, da_slice((*c).data));
-    generate_funcs(output, da_slice((*c).funcs));
-    sb_appendf(output, c!(r#"
-      // The B runtime
-      const log = document.getElementById("log");
-      let logBuffer = "";
-      const utf8decoder = new TextDecoder();
-      function __flush() {
-          log.innerText += logBuffer;
-          logBuffer = "";
-      }
-      function __print_string(s) {
-          for (let i = 0; i < s.length; ++i) {
-              logBuffer += s[i];
-              if (s[i] === '\n') __flush();
-          }
-      }
-      function putchar(code) {
-          __print_string(String.fromCharCode(code));
-      }
-      function strlen(ptr) {
-          return (new Uint8Array(memory, ptr)).indexOf(0);
-      }
-      function printf(fmt, ...args) {
-          const n = strlen(fmt);
-          // TODO: print formatting is not fully implemented
-          const bytes = memory.slice(fmt, fmt+n);
-          const str = utf8decoder.decode(bytes);
-
-          let index = 0;
-          const output = str.replaceAll("%%d", () => args[index++]);
-          __print_string(output);
-      }
-      function malloc(size) {
-          const ptr = memory.byteLength;
-          memory.resize(ptr+size);
-          return ptr;
-      }
-      function memset(ptr, byte, size) {
-          let view = new Uint8Array(memory, ptr, size);
-          let bytes = Array(size).fill(byte);
-          view.set(bytes);
-      }
-      main();
-    </script>
-  </body>
-</html>"#));
+    let template_cstr = c!(include_str!("html_js_template.tt"));
+    let template_len = strlen(template_cstr);
+    let data_section = sv_from_cstr(c!("<<<DATA_SECTION>>>"));
+    let code_section = sv_from_cstr(c!("<<<CODE_SECTION>>>"));
+    let mut i = 0;
+    while i < template_len {
+        let prefix = sv_from_parts(template_cstr.add(i), template_len - i);
+        if sv_starts_with(prefix, data_section) {
+            generate_data_section(output, da_slice((*c).data));
+            i += data_section.count;
+        } else if sv_starts_with(prefix, code_section) {
+            generate_funcs(output, da_slice((*c).funcs));
+            i += code_section.count;
+        } else {
+            da_append(output, *template_cstr.add(i));
+            i += 1;
+        }
+    }
 }

@@ -93,4 +93,8 @@ extern "C" {
     pub fn sv_end_with(sv: String_View, cstr: *const c_char) -> bool;
     #[link_name = "nob_temp_sv_to_cstr"]
     pub fn temp_sv_to_cstr(sv: String_View) -> *const c_char;
+    #[link_name = "nob_sv_from_parts"]
+    pub fn sv_from_parts(data: *const c_char, count: usize) -> String_View;
+    #[link_name = "nob_sv_starts_with"]
+    pub fn sv_starts_with(sv: String_View, expected_prefix: String_View) -> bool;
 }
