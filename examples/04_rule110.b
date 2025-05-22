@@ -1,17 +1,11 @@
 // -*- mode: simpc -*-
-main() {
-    extrn malloc, printf, memset, exit;
-    auto base, it, i, j, n, word, state;
 
-    n    = 100;
-    word = 8;
+base; word; n;
 
-    base = malloc(word*n);
-    memset(base, 0, word*n);
-    *(base + (n - 2)*word) = 1;
+display() {
+    extrn printf;
+    auto it, i;
 
-    // TODO: factor out the row rendering to a separate function
-    //   Requires TODO(2025-05-11 15:45:38)
     it = base;
     i  = 0;
     while (i < n) {
@@ -20,31 +14,40 @@ main() {
         i  += 1;
     }
     printf("\n");
+}
 
-    j = 0;
-    while (j < n - 3) {
-        it = base;
-        state = *it | *(it + word) << 1;
-        i  = 2;
-        it = base + 2*word;
-        while (i < n) {
-            state <<= 1;
-            state  |= *it;
-            state  = state & 7; // TODO: use &= here
-            *(it - word) = (110>>state)&1;
-            i  += 1;
-            it += word;
-        }
+next() {
+    auto it, i, state;
 
-        it = base;
-        i  = 0;
-        while (i < n) {
-            if (*it) printf("#"); else printf(".");
-            it += word;
-            i  += 1;
-        }
-        printf("\n");
+    it = base;
+    state = *it | *(it + word) << 1;
+    i  = 2;
+    it = base + 2*word;
+    while (i < n) {
+        state <<= 1;
+        state  |= *it;
+        state  = state & 7; // TODO: use &= here
+        *(it - word) = (110>>state)&1;
+        i  += 1;
+        it += word;
+    }
+}
 
-        j += 1;
+main() {
+    extrn malloc, memset;
+
+    n    = 100;
+    word = 8;
+    base = malloc(word*n);
+    memset(base, 0, word*n);
+    *(base + (n - 2)*word) = 1;
+
+    display();
+    auto i;
+    i = 0;
+    while (i < n - 3) {
+        next();
+        display();
+        i += 1;
     }
 }

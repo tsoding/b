@@ -6,6 +6,7 @@ use crate::crust::libc::*;
 pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
     // TODO: convert all autovars to BigInt
     match arg {
+        Arg::External(name)      => sb_appendf(output, c!("%s"), name),
         Arg::Ref(index)          => sb_appendf(output, c!("Number((new DataView(memory)).getBigUint64(vars[%zu]))"), index - 1),
         Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
         Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
@@ -29,6 +30,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 generate_arg(arg, output);
                 sb_appendf(output, c!("));\n"));
             },
+            Op::ExternalAssign {name, arg} => {
+                sb_appendf(output, c!("%s = "), name);
+                generate_arg(arg, output);
+                sb_appendf(output, c!(";\n"));
+            }
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("vars[%zu] = "), index - 1);
                 generate_arg(arg, output);
@@ -150,20 +156,25 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+    for i in 0..globals.len() {
+        let name = (*globals)[i];
+        sb_appendf(output, c!("let %s = 0;\n"), name);
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     let template_cstr = c!(include_str!("html_js_template.tt"));
     let template_len = strlen(template_cstr);
-    let data_section = sv_from_cstr(c!("<<<DATA_SECTION>>>"));
-    let code_section = sv_from_cstr(c!("<<<CODE_SECTION>>>"));
+    let generated = sv_from_cstr(c!("<<<GENERATED>>>"));
     let mut i = 0;
     while i < template_len {
         let prefix = sv_from_parts(template_cstr.add(i), template_len - i);
-        if sv_starts_with(prefix, data_section) {
+        if sv_starts_with(prefix, generated) {
             generate_data_section(output, da_slice((*c).data));
-            i += data_section.count;
-        } else if sv_starts_with(prefix, code_section) {
+            generate_globals(output, da_slice((*c).globals));
             generate_funcs(output, da_slice((*c).funcs));
-            i += code_section.count;
+            i += generated.count;
         } else {
             da_append(output, *template_cstr.add(i));
             i += 1;
