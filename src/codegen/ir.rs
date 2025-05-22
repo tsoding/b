@@ -142,15 +142,37 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
         sb_appendf(output, c!("\n"));
         sb_appendf(output, c!("-- Data Section --\n"));
         sb_appendf(output, c!("\n"));
-        sb_appendf(output, c!("    "));
-        // TODO: display the IR Data Section in hex editor style
-        for i in 0..data.len() {
-            if i > 0 {
-                sb_appendf(output, c!(","));
+
+        const ROW_SIZE: usize = 12;
+        for i in (0..data.len()).step_by(ROW_SIZE) {
+            sb_appendf(output, c!("%04X:"), i as c_uint);
+            for j in i..(i+ROW_SIZE) {
+                if j < data.len() {
+                    sb_appendf(output, c!(" "));
+                    sb_appendf(output, c!("%02X"), (*data)[j] as c_uint);
+                } else {
+                    sb_appendf(output, c!("   "));
+                }
             }
-            sb_appendf(output, c!("0x%02X"), (*data)[i] as c_uint);
+
+            sb_appendf(output, c!(" | "));
+            for j in i..(i+ROW_SIZE).min(data.len()) {
+                let ch = (*data)[j] as char;
+                let c = if ch.is_ascii_whitespace() {
+                    // display all whitespace as a regular space
+                    // stops '\t', '\n', '\b' from messing up the formatting
+                    ' '
+                } else if ch.is_ascii_graphic() {
+                    ch
+                } else {
+                    // display all non-printable characters as '.' (eg. NULL)
+                    '.'
+                };
+                sb_appendf(output, c!("%c"), c as c_uint);
+            }
+
+            sb_appendf(output, c!("\n"));
         }
-        sb_appendf(output, c!("\n"));
     }
 }
 
