@@ -44,7 +44,7 @@ function printf(fmt, ...args) {
             const prefix = str.slice(i);
             const number_arg = ['lu', 'd'].find((arg) => prefix.startsWith(arg));
             if (number_arg !== undefined) {
-                __print_string(args.shift().toString());
+                __print_string(Number(args.shift()).toString());
                 i += number_arg.length;
             } else {
                 throw new Error(`Unknown format sequence starts with ${str[i]}`);
