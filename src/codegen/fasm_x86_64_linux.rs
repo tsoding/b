@@ -118,7 +118,6 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    cmp rax, rbx\n"));
                 sb_appendf(output, c!("    setge dl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
- 
             }
             Op::Funcall{result, name, args} => {
                 const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
