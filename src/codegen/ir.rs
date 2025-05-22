@@ -22,7 +22,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 dump_arg(output, arg);
                 sb_appendf(output, c!(")\n"));
             }
-            Op::ExternalAssign{..} => todo!(),
+            Op::ExternalAssign{name, arg} => {
+                sb_appendf(output, c!("    ExternalAssign(%s, "), name);
+                dump_arg(output, arg);
+                sb_appendf(output, c!(")\n"));
+            }
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("    AutoAssign(%zu, "), index);
                 dump_arg(output, arg);
@@ -137,6 +141,14 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+    sb_appendf(output, c!("\n"));
+    sb_appendf(output, c!("-- Global Variables --\n\n"));
+    for i in 0..globals.len() {
+        sb_appendf(output, c!("    %s\n"), (*globals)[i]);
+    }
+}
+
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
         sb_appendf(output, c!("\n"));
@@ -179,5 +191,6 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     generate_funcs(output, da_slice((*c).funcs));
     generate_extrns(output, da_slice((*c).extrns));
+    generate_globals(output, da_slice((*c).globals));
     generate_data_section(output, da_slice((*c).data));
 }
