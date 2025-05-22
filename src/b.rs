@@ -673,7 +673,6 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
 
             Some(())
         } else if (*l).token == CLEX_id && strcmp((*l).string, c!("if")) == 0 {
-            // if (..)
             get_and_expect_clex(l, input_path, '(' as c_long)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (cond, _) = compile_expression(l, input_path, c)?;
@@ -683,7 +682,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             da_append(&mut (*c).func_body, Op::JmpIfNot{addr: 0, arg: cond});
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
-                compile_statement(l, input_path, c)?;
+            compile_statement(l, input_path, c)?;
 
             let saved_point = (*l).parse_point;
             stb_c_lexer_get_token(l);
@@ -701,7 +700,6 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
                 let addr_after_if = (*c).func_body.count;
                 *(*c).func_body.items.add(addr_condition)  = Op::JmpIfNot {addr: addr_after_if , arg: cond};
             }
-
 
             Some(())
         } else if (*l).token == CLEX_id && strcmp((*l).string, c!("while")) == 0 {
