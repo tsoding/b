@@ -11,7 +11,8 @@ main() {
     // Raylib
     extrn InitWindow, BeginDrawing, EndDrawing,
           WindowShouldClose, ClearBackground, DrawRectangle,
-          SetTargetFPS, GetScreenWidth, GetScreenHeight;
+          SetTargetFPS, GetScreenWidth, GetScreenHeight,
+          IsKeyPressed;
 
     auto word;
     word = 8;
@@ -32,13 +33,23 @@ main() {
     x  = y  = 200;
     dx = dy = 5;
 
+    auto paused;
+    paused = 0;
+
     InitWindow(800, 600, "Hello, from B");
     SetTargetFPS(60);
     while (!WindowShouldClose()) {
-        // TODO: Use logic-or || operation here instead of the bit-or
-        auto nx, ny;
-        nx = x + dx; if (nx < 0 | nx + sx >= GetScreenWidth())  { dx = -dx; c = (c + 1)%cn; } else x = nx;
-        ny = y + dy; if (ny < 0 | ny + sy >= GetScreenHeight()) { dy = -dy; c = (c + 1)%cn; } else y = ny;
+        if (IsKeyPressed(32)) {
+            paused = !paused;
+        }
+
+        if (!paused) {
+            // TODO: Use logic-or || operation here instead of the bit-or
+            auto nx, ny;
+            nx = x + dx; if (nx < 0 | nx + sx >= GetScreenWidth())  { dx = -dx; c = (c + 1)%cn; } else x = nx;
+            ny = y + dy; if (ny < 0 | ny + sy >= GetScreenHeight()) { dy = -dy; c = (c + 1)%cn; } else y = ny;
+        }
+
         BeginDrawing();
         ClearBackground(0xFF181818);
         DrawRectangle(x, y, sx, sy, *(cs + word*c));

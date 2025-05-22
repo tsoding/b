@@ -22,7 +22,11 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 dump_arg(output, arg);
                 sb_appendf(output, c!(")\n"));
             }
-            Op::ExternalAssign{..} => todo!(),
+            Op::ExternalAssign{name, arg} => {
+                sb_appendf(output, c!("    ExternalAssign(%s, "), name);
+                dump_arg(output, arg);
+                sb_appendf(output, c!(")\n"));
+            }
             Op::AutoAssign{index, arg} => {
                 sb_appendf(output, c!("    AutoAssign(%zu, "), index);
                 dump_arg(output, arg);
@@ -115,6 +119,13 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 dump_arg(output, rhs);
                 sb_appendf(output, c!(")\n"));
             }
+            Op::GreaterEqual {index, lhs, rhs} => {
+                sb_appendf(output, c!("    GreaterEqual(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("    Funcall(%zu, \"%s\""), result, name);
                 for i in 0..args.count {
@@ -151,25 +162,56 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+    sb_appendf(output, c!("\n"));
+    sb_appendf(output, c!("-- Global Variables --\n\n"));
+    for i in 0..globals.len() {
+        sb_appendf(output, c!("    %s\n"), (*globals)[i]);
+    }
+}
+
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
         sb_appendf(output, c!("\n"));
         sb_appendf(output, c!("-- Data Section --\n"));
         sb_appendf(output, c!("\n"));
-        sb_appendf(output, c!("    "));
-        // TODO: display the IR Data Section in hex editor style
-        for i in 0..data.len() {
-            if i > 0 {
-                sb_appendf(output, c!(","));
+
+        const ROW_SIZE: usize = 12;
+        for i in (0..data.len()).step_by(ROW_SIZE) {
+            sb_appendf(output, c!("%04X:"), i as c_uint);
+            for j in i..(i+ROW_SIZE) {
+                if j < data.len() {
+                    sb_appendf(output, c!(" "));
+                    sb_appendf(output, c!("%02X"), (*data)[j] as c_uint);
+                } else {
+                    sb_appendf(output, c!("   "));
+                }
             }
-            sb_appendf(output, c!("0x%02X"), (*data)[i] as c_uint);
+
+            sb_appendf(output, c!(" | "));
+            for j in i..(i+ROW_SIZE).min(data.len()) {
+                let ch = (*data)[j] as char;
+                let c = if ch.is_ascii_whitespace() {
+                    // display all whitespace as a regular space
+                    // stops '\t', '\n', '\b' from messing up the formatting
+                    ' '
+                } else if ch.is_ascii_graphic() {
+                    ch
+                } else {
+                    // display all non-printable characters as '.' (eg. NULL)
+                    '.'
+                };
+                sb_appendf(output, c!("%c"), c as c_uint);
+            }
+
+            sb_appendf(output, c!("\n"));
         }
-        sb_appendf(output, c!("\n"));
     }
 }
 
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     generate_funcs(output, da_slice((*c).funcs));
     generate_extrns(output, da_slice((*c).extrns));
+    generate_globals(output, da_slice((*c).globals));
     generate_data_section(output, da_slice((*c).data));
 }
