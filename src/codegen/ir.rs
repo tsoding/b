@@ -105,6 +105,13 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 dump_arg(output, rhs);
                 sb_appendf(output, c!(")\n"));
             }
+            Op::GreaterEqual {index, lhs, rhs} => {
+                sb_appendf(output, c!("    GreaterEqual(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("    Funcall(%zu, \"%s\""), result, name);
                 for i in 0..args.count {
