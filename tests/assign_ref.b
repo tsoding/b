@@ -2,7 +2,6 @@ main() {
     extrn printf, malloc;
     auto v;
     v = malloc(8);
-    printf("v=%p\n", v);
 
     *v =   1;  printf("*v =   1    v=%d\n", *v);
     *v |=  16; printf("*v |=  16   v=%d\n", *v);

@@ -132,7 +132,27 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    cset x0, lt\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             }
-            Op::GreaterEqual {..} => todo!(),
+            Op::Equal {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    cmp x0, x1\n"));
+                sb_appendf(output, c!("    cset x0, eq\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            }
+            Op::NotEqual {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    cmp x0, x1\n"));
+                sb_appendf(output, c!("    cset x0, ne\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            }
+            Op::GreaterEqual {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                sb_appendf(output, c!("    cmp x0, x1\n"));
+                sb_appendf(output, c!("    cset x0, ge\n"));
+                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            },
             Op::ExternalAssign{name, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    adrp x1, %s\n"), name);
