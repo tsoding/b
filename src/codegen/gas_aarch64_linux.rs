@@ -75,7 +75,15 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
-            Op::Negate {..} => todo!(),
+            Op::Negate {result, arg} => {
+                load_arg_to_reg(arg, c!("x0"), output);
+                sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow
+                                                           // supply 1 to the 3rd argument of mneg
+                                                           // as an immediate value without moving
+                                                           // it to a separate register?
+                sb_appendf(output, c!("    mneg x2, x0, x1\n"));
+                sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (result + 1)*8);
+            }
             Op::UnaryNot {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
@@ -118,7 +126,14 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    sub x0, x0, x1\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
             },
-            Op::Mod {..} => todo!(),
+            Op::Mod {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("x0"), output);
+                load_arg_to_reg(rhs, c!("x1"), output);
+                // https://stackoverflow.com/questions/35351470/obtaining-remainder-using-single-aarch64-instruction
+                sb_appendf(output, c!("    sdiv x2, x0, x1\n"));
+                sb_appendf(output, c!("    msub x2, x2, x1, x0\n"));
+                sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
+            }
             Op::Mul {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("x0"), output);
                 load_arg_to_reg(rhs, c!("x1"), output);
