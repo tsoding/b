@@ -301,6 +301,7 @@ impl Binop {
     }
 }
 
+
 // TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
@@ -325,6 +326,27 @@ pub enum Op {
     Funcall        {result: usize, name: *const c_char, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
+}
+
+// TODO: Rename to a more sensible name (naming is the hardest)
+#[derive(Clone, Copy)]
+pub struct OpWithLocation {
+    pub opcode: Op,
+    pub input_path: *const c_char,
+    pub location: *stb_lex_location 
+}
+
+// TODO: Move file path to struct Compiler.
+//       Also move lexer to it.
+pub unsafe fn push_opcode(op: Op, input_path: *const c_char l: *mut stb_lexer, c: *mut Compiler) {
+    let mut loc: stb_lex_location = zeroed();
+    stb_c_lexer_get_location(l, (l*).where_firstchar, &mut loc);
+ 
+    da_append(&mut (*c).func_body, OpWithLocation {
+        opcode: op,
+        input_path: input_path,
+        location: &loc
+    });
 }
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
@@ -364,19 +386,19 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         token if token == '!' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            da_append(&mut (*c).func_body, Op::UnaryNot{result, arg});
+            push_opcode(Op::UnaryNot{result, arg}, input_path, l, c);
             Some((Arg::AutoVar(result), false))
         }
         token if token == '*' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            da_append(&mut (*c).func_body, Op::AutoAssign {index, arg});
+            push_opcode(Op::AutoAssign {index, arg}, input_path, l, c);
             Some((Arg::Ref(index), true))
         }
         token if token == '-' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            da_append(&mut (*c).func_body, Op::Negate {result: index, arg});
+            push_opcode(Op::Negate {result: index, arg}, input_path, l, c);
             Some((Arg::AutoVar(index), false))
         }
         CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
@@ -443,57 +465,57 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                 match Binop::from_token(token).unwrap() {
                     Binop::BitShl => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs});
+                        push_opcode(Op::BitShl {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::BitShr => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::BitShr {index, lhs, rhs});
+                        push_opcode(Op::BitShr {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::BitOr => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs});
+                        push_opcode(Op::BitOr {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::BitAnd => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::BitAnd {index, lhs, rhs});
+                        push_opcode(Op::BitAnd {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::Plus  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::Add  {index, lhs, rhs});
+                        push_opcode(Op::Add  {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::Minus => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::Sub  {index, lhs, rhs});
+                        push_opcode(Op::Sub  {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::Mult  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::Mul  {index, lhs, rhs});
+                        push_opcode(Op::Mul  {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::Mod  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::Mod {index, lhs, rhs});
+                        push_opcode(Op::Mod {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::Less  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::Less {index, lhs, rhs});
+                        push_opcode(Op::Less {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::Equal => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::Equal {index, lhs, rhs});
+                        push_opcode(Op::Equal {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::NotEqual => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body, Op::NotEqual {index, lhs, rhs});
+                        push_opcode(Op::NotEqual {index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::GreaterEqual  => {
@@ -510,16 +532,16 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         match lhs {
                             Arg::Ref(index) => {
                                 let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::BitOr {index: tmp, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                                push_opcode(Op::BitOr {index: tmp, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
                             },
                             Arg::External(name) => {
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::ExternalAssign {name, arg: Arg::AutoVar(index)})
+                                push_opcode(Op::BitOr {index, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
                             }
                             Arg::AutoVar(index) => {
-                                da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs})
+                                push_opcode(Op::BitOr {index, lhs, rhs}, input_path, l, c)
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
@@ -533,16 +555,16 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         match lhs {
                             Arg::Ref(index) => {
                                 let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::BitShl {index: tmp, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                                push_opcode(Op::BitShl {index: tmp, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
                             },
                             Arg::External(name) => {
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::ExternalAssign {name, arg: Arg::AutoVar(index)})
+                                push_opcode(Op::BitShl {index, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
                             }
                             Arg::AutoVar(index) => {
-                                da_append(&mut (*c).func_body, Op::BitShl {index, lhs, rhs})
+                                push_opcode(Op::BitShl {index, lhs, rhs}, input_path, l, c)
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
@@ -556,16 +578,16 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         match lhs {
                             Arg::Ref(index) => {
                                 let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::Add {index: tmp, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                                push_opcode(Op::Add {index: tmp, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
                             },
                             Arg::External(name) => {
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::ExternalAssign {name, arg: Arg::AutoVar(index)})
+                                push_opcode(Op::Add {index, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
                             }
                             Arg::AutoVar(index) => {
-                                da_append(&mut (*c).func_body, Op::Add {index, lhs, rhs})
+                                push_opcode(Op::Add {index, lhs, rhs}, input_path, l, c)
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
@@ -579,16 +601,16 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                         match lhs {
                             Arg::Ref(index) => {
                                 let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::Mul {index: tmp, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                                push_opcode(Op::Mul {index: tmp, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
                             },
                             Arg::External(name) => {
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs});
-                                da_append(&mut (*c).func_body, Op::ExternalAssign {name, arg: Arg::AutoVar(index)})
+                                push_opcode(Op::Mul {index, lhs, rhs}, input_path, l, c);
+                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
                             }
                             Arg::AutoVar(index) => {
-                                da_append(&mut (*c).func_body, Op::Mul {index, lhs, rhs})
+                                push_opcode(Op::Mul {index, lhs, rhs}, input_path, l, c)
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
@@ -601,13 +623,13 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                         match lhs {
                             Arg::Ref(index) => {
-                                da_append(&mut (*c).func_body, Op::Store {index, arg: rhs});
+                                push_opcode(Op::Store {index, arg: rhs}, input_path, l, c);
                             }
                             Arg::External(name) => {
-                                da_append(&mut (*c).func_body, Op::ExternalAssign {name, arg: rhs});
+                                push_opcode(Op::ExternalAssign {name, arg: rhs}, input_path, l, c);
                             }
                             Arg::AutoVar(index) => {
-                                da_append(&mut (*c).func_body, Op::AutoAssign {index, arg: rhs});
+                                push_opcode(Op::AutoAssign {index, arg: rhs}, input_path, l, c);
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
@@ -670,7 +692,7 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     match (*var_def).storage {
         Storage::External{name} => {
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            da_append(&mut (*c).func_body, Op::Funcall {result, name, args});
+            push_opcode(Op::Funcall {result, name, args}, input_path, l, c);
             Some(Arg::AutoVar(result))
         }
         Storage::Auto{..} => {
@@ -733,7 +755,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             get_and_expect_clex(l, input_path, ')' as c_long)?;
 
             let addr_condition = (*c).func_body.count;
-            da_append(&mut (*c).func_body, Op::JmpIfNot{addr: 0, arg: cond});
+            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, input_path, l, c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, input_path, c)?;
@@ -743,16 +765,16 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
 
             if (*l).token == CLEX_id && strcmp((*l).string, c!("else")) == 0 {
                 let addr_skips_else = (*c).func_body.count;
-                da_append(&mut (*c).func_body, Op::Jmp{addr: 0});
+                push_opcode(Op::Jmp{addr: 0}, input_path, l, c);
                 let addr_else = (*c).func_body.count;
                 compile_statement(l, input_path, c)?;
                 let addr_after_else = (*c).func_body.count;
-                *(*c).func_body.items.add(addr_condition)  = Op::JmpIfNot {addr: addr_else, arg: cond};
-                *(*c).func_body.items.add(addr_skips_else) = Op::Jmp      {addr: addr_after_else};
+                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_else, arg: cond};
+                (*(*c).func_body.items.add(addr_skips_else)).opcode = Op::Jmp      {addr: addr_after_else};
             } else {
                 (*l).parse_point = saved_point;
                 let addr_after_if = (*c).func_body.count;
-                *(*c).func_body.items.add(addr_condition)  = Op::JmpIfNot {addr: addr_after_if , arg: cond};
+                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_after_if , arg: cond};
             }
 
             Some(())
@@ -764,13 +786,13 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
 
             get_and_expect_clex(l, input_path, ')' as c_long)?;
             let condition_jump = (*c).func_body.count;
-            da_append(&mut (*c).func_body, Op::JmpIfNot{addr: 0, arg});
+            push_opcode(Op::JmpIfNot{addr: 0, arg}, input_path, l, c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, input_path, c)?;
-            da_append(&mut (*c).func_body, Op::Jmp{addr: begin});
+            push_opcode(Op::Jmp{addr: begin}, input_path, l, c);
             let end = (*c).func_body.count;
-            (*(*c).func_body.items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
+            (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
             Some(())
         } else {
             (*l).parse_point = saved_point;
@@ -803,7 +825,7 @@ pub unsafe fn usage() {
 #[derive(Clone, Copy)]
 pub struct Func {
     name: *const c_char,
-    body: Array<Op>,
+    body: Array<OpWithLocation>,
     auto_vars_count: usize,
 }
 
@@ -812,7 +834,7 @@ pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
     pub funcs: Array<Func>,
-    pub func_body: Array<Op>,
+    pub func_body: Array<OpWithLocation>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<*const c_char>,
