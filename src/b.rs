@@ -333,7 +333,7 @@ pub enum Op {
 pub struct OpWithLocation {
     pub opcode: Op,
     pub input_path: *const c_char,
-    pub location: *mut stb_lex_location 
+    pub location: stb_lex_location 
 }
 
 // TODO: Move file path to struct Compiler.
@@ -345,7 +345,7 @@ pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, 
     da_append(&mut (*c).func_body, OpWithLocation {
         opcode: op,
         input_path: input_path,
-        location: &mut loc
+        location: loc
     });
 }
 

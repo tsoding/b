@@ -26,7 +26,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         sb_appendf(output, c!("    sub rsp, %zu\n"), stack_size);
     }
     for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
+        sb_appendf(output, c!(".op_%zu: ; [%zu:%zu]\n"), i, (*body)[i].location.line_number,(*body)[i].location.line_offset);
         match (*body)[i].opcode {
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8);
