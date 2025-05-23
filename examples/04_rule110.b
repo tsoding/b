@@ -26,7 +26,7 @@ next() {
     while (i < n) {
         state <<= 1;
         state  |= *it;
-        state  = state & 7; // TODO: use &= here
+        state  &= 7;
         *(it - word) = (110>>state)&1;
         i  += 1;
         it += word;

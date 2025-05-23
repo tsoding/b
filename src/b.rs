@@ -249,12 +249,13 @@ pub enum Binop {
     BitShl,
     BitShr,
     AssignBitOr,
+    AssignBitAnd,
     AssignBitShl,
 }
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
-    &[Binop::Assign, Binop::AssignPlus, Binop::AssignMult, Binop::AssignBitOr, Binop::AssignBitShl],
+    &[Binop::Assign, Binop::AssignPlus, Binop::AssignMult, Binop::AssignBitOr, Binop::AssignBitAnd, Binop::AssignBitShl],
     &[Binop::BitOr],
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
@@ -278,6 +279,7 @@ impl Binop {
             token if token == '&' as i64 => Some(Binop::BitAnd),
             CLEX_shleq                   => Some(Binop::AssignBitShl),
             CLEX_oreq                    => Some(Binop::AssignBitOr),
+            CLEX_andeq                   => Some(Binop::AssignBitAnd),
             CLEX_pluseq                  => Some(Binop::AssignPlus),
             CLEX_muleq                   => Some(Binop::AssignMult),
             CLEX_shl                     => Some(Binop::BitShl),
@@ -520,6 +522,29 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                             }
                             Arg::AutoVar(index) => {
                                 da_append(&mut (*c).func_body, Op::BitOr {index, lhs, rhs})
+                            }
+                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+                        }
+                    }
+                    Binop::AssignBitAnd => {
+                        if !lvalue {
+                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
+                            return None;
+                        }
+
+                        match lhs {
+                            Arg::Ref(index) => {
+                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::BitAnd {index: tmp, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::Store {index, arg: Arg::AutoVar(tmp)});
+                            },
+                            Arg::External(name) => {
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                da_append(&mut (*c).func_body, Op::BitAnd {index, lhs, rhs});
+                                da_append(&mut (*c).func_body, Op::ExternalAssign {name, arg: Arg::AutoVar(index)})
+                            }
+                            Arg::AutoVar(index) => {
+                                da_append(&mut (*c).func_body, Op::BitAnd {index, lhs, rhs})
                             }
                             Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
                         }
