@@ -333,19 +333,19 @@ pub enum Op {
 pub struct OpWithLocation {
     pub opcode: Op,
     pub input_path: *const c_char,
-    pub location: *stb_lex_location 
+    pub location: *mut stb_lex_location 
 }
 
 // TODO: Move file path to struct Compiler.
 //       Also move lexer to it.
-pub unsafe fn push_opcode(op: Op, input_path: *const c_char l: *mut stb_lexer, c: *mut Compiler) {
+pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
     let mut loc: stb_lex_location = zeroed();
-    stb_c_lexer_get_location(l, (l*).where_firstchar, &mut loc);
+    stb_c_lexer_get_location(l, (*l).where_firstchar, &mut loc);
  
     da_append(&mut (*c).func_body, OpWithLocation {
         opcode: op,
         input_path: input_path,
-        location: &loc
+        location: &mut loc
     });
 }
 
@@ -520,7 +520,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     }
                     Binop::GreaterEqual  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        da_append(&mut (*c).func_body,  Op::GreaterEqual{index, lhs, rhs});
+                        push_opcode(Op::GreaterEqual{index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::AssignBitOr => {

@@ -1,5 +1,5 @@
 use core::ffi::*;
-use crate::{Op, Arg, Func, Compiler};
+use crate::{Op, OpWithLocation, Arg, Func, Compiler};
 use crate::nob::*;
 use crate::crust::libc::*;
 
@@ -14,7 +14,7 @@ pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     sb_appendf(output, c!("function %s() {\n"), name);
     if auto_vars_count > 0 {
         sb_appendf(output, c!("    let vars = Array(%zu).fill(0);\n"), auto_vars_count);
@@ -24,7 +24,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     sb_appendf(output, c!("        switch(pc) {\n"));
     for i in 0..body.len() {
         sb_appendf(output, c!("            case %zu: "), i);
-        match (*body)[i] {
+        match (*body)[i].opcode {
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("(new DataView(memory)).setBigUint64(vars[%zu], BigInt("), index - 1);
                 generate_arg(arg, output);

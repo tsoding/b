@@ -1,5 +1,5 @@
 use core::ffi::*;
-use crate::{Op, Arg, Func, Compiler, align_bytes};
+use crate::{Op, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
@@ -15,7 +15,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
 
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
@@ -27,7 +27,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     }
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
-        match (*body)[i] {
+        match (*body)[i].opcode {
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8);
                 load_arg_to_reg(arg, c!("rbx"), output);
