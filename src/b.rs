@@ -1061,7 +1061,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cfg!(target_arch = "x86_64") {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                fprintf(stderr, c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
                 return None;
             }
 
