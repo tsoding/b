@@ -12,7 +12,7 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, _params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     sb_appendf(output, c!("%s(%zu):\n"), name, auto_vars_count);
     for i in 0..body.len() {
         sb_appendf(output, c!("%8zu"), i);
@@ -150,7 +150,7 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
     sb_appendf(output, c!("-- Functions --\n"));
     sb_appendf(output, c!("\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
 }
 

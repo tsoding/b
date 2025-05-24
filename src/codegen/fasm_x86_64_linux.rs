@@ -15,9 +15,9 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
-
+    if params_count > 0 { todo!("Function definition parameters") }
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
     sb_appendf(output, c!("    push rbp\n"));
@@ -172,7 +172,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
     sb_appendf(output, c!("section \".text\" executable\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
 }
 
