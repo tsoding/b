@@ -7,7 +7,7 @@ pub unsafe fn generate_arg(arg: Arg, output: *mut String_Builder) {
     // TODO: convert all autovars to BigInt
     match arg {
         Arg::External(name)      => sb_appendf(output, c!("%s"), name),
-        Arg::Ref(index)          => sb_appendf(output, c!("Number((new DataView(memory)).getBigUint64(vars[%zu]))"), index - 1),
+        Arg::Ref(index)          => sb_appendf(output, c!("Number((new DataView(memory)).getBigUint64(vars[%zu], true))"), index - 1),
         Arg::AutoVar(index)      => sb_appendf(output, c!("vars[%zu]"), index - 1),
         Arg::Literal(value)      => sb_appendf(output, c!("%ld"), value),
         Arg::DataOffset(offset)  => sb_appendf(output, c!("%ld"), offset),
@@ -28,7 +28,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("(new DataView(memory)).setBigUint64(vars[%zu], BigInt("), index - 1);
                 generate_arg(arg, output);
-                sb_appendf(output, c!("));\n"));
+                sb_appendf(output, c!("), true);\n"));
             },
             Op::ExternalAssign {name, arg} => {
                 sb_appendf(output, c!("%s = "), name);
