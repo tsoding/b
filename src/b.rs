@@ -45,6 +45,20 @@ macro_rules! missingf {
         abort();
     }}
 }
+// TODO: Migrate missingf_codegen to missingf 
+//       Needed right now due to it still requiring the lexer.
+#[macro_export]
+macro_rules! missingf_codegen {
+    ($t:expr, $($args:tt)*) => {{
+        let file = file!();
+        fprintf(stderr, c!("%s:%d:%d: TODO: "), $t.input_path, $t.location.line_number, $t.location.line_offset + 1);
+        fprintf(stderr, $($args)*);
+        fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
+        abort();
+    }}
+}
+
+
 
 unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
     match token {
