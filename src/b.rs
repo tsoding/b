@@ -837,6 +837,7 @@ pub unsafe fn usage() {
 pub struct Func {
     name: *const c_char,
     body: Array<Op>,
+    params_count: usize,
     auto_vars_count: usize,
 }
 
@@ -880,10 +881,30 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
         let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
         if (*l).token == '(' as c_long { // Function definition
-            // TODO(2025-05-11 15:45:38): functions with several parameters
-            get_and_expect_clex(l, input_path, ')' as c_long)?;
-
             scope_push(&mut (*c).vars); // begin function scope
+            let mut params_count = 0;
+            let saved_point = (*l).parse_point;
+            stb_c_lexer_get_token(l);
+            if (*l).token != ')' as c_long {
+                (*l).parse_point = saved_point;
+                'params: loop {
+                    get_and_expect_clex(l, input_path, CLEX_id)?;
+                    let name = arena::strdup(&mut (*c).arena, (*l).string);
+                    let name_where = (*l).where_firstchar;
+                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    declare_var(l, input_path, &mut (*c).vars, name, name_where, Storage::Auto{index})?;
+                    params_count += 1;
+                    stb_c_lexer_get_token(l);
+                    expect_clexes(l, input_path, &[',' as c_long, ')' as c_long])?;
+                    if (*l).token == ')' as c_long {
+                        break 'params;
+                    } else if (*l).token == ',' as c_long {
+                        continue 'params;
+                    } else {
+                        unreachable!()
+                    }
+                }
+            }
             compile_statement(l, input_path, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
@@ -891,6 +912,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             da_append(&mut (*c).funcs, Func {
                 name,
                 body: (*c).func_body,
+                params_count,
                 auto_vars_count: (*c).auto_vars_ator.max,
             });
             (*c).func_body = zeroed();
