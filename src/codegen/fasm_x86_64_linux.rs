@@ -17,13 +17,21 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 
 pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
-    if params_count > 0 { todo!("Function definition parameters") }
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
     sb_appendf(output, c!("    push rbp\n"));
     sb_appendf(output, c!("    mov rbp, rsp\n"));
     if stack_size > 0 {
         sb_appendf(output, c!("    sub rsp, %zu\n"), stack_size);
+    }
+    assert!(auto_vars_count >= params_count);
+    const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
+    if params_count > REGISTERS.len() {
+        todo!("Too many parameters in function definition. We support only {} but {} were provided", REGISTERS.len(), params_count);
+    }
+    for i in 0..params_count {
+        let reg = (*REGISTERS)[i];
+        sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
     }
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
@@ -136,7 +144,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
             }
             Op::Funcall{result, name, args} => {
-                const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
                 if args.count > REGISTERS.len() {
                     todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
                 }
