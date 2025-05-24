@@ -66,12 +66,23 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
     let stack_size = align_bytes((2 + auto_vars_count)*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
     sb_appendf(output, c!("    stp x29, x30, [sp, -%zu]!\n"), stack_size);
     sb_appendf(output, c!("    mov x29, sp\n"), name);
+    assert!(auto_vars_count >= params_count);
+    // TODO: add the rest of the registers.
+    // The first 8 args go to x0-x7
+    const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
+    if params_count > REGISTERS.len() {
+        todo!("Too many parameters in function definition. We support only {} but {} were provided", REGISTERS.len(), params_count);
+    }
+    for i in 0..params_count {
+        let reg = (*REGISTERS)[i];
+        sb_appendf(output, c!("    str %s, [sp, %zu]\n"), reg, (2 + i)*8);
+    }
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i] {
@@ -184,9 +195,6 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 sb_appendf(output, c!("    str x1, [x0]\n"));
             },
             Op::Funcall {result, name, args} => {
-                // TODO: add the rest of the registers.
-                // The first 8 args go to x0-x7
-                const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
                 if args.count > REGISTERS.len() {
                     todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
                 }
@@ -217,7 +225,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
     sb_appendf(output, c!(".text\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
 }
 
