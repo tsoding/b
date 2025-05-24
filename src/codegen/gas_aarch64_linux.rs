@@ -1,7 +1,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
-use crate::{Compiler, Op, Arg, Func, align_bytes};
+use crate::{Compiler, Op, OpWithLocation, Arg, Func, align_bytes};
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64) {
     if literal < 0 {
@@ -66,7 +66,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     let stack_size = align_bytes((2 + auto_vars_count)*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
@@ -74,7 +74,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     sb_appendf(output, c!("    mov x29, sp\n"), name);
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
-        match (*body)[i] {
+        match (*body)[i].opcode {
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow

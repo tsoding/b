@@ -67,6 +67,7 @@ pub struct stb_lexer {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct stb_lex_location {
     pub line_number: c_int,
     pub line_offset: c_int,
