@@ -21,7 +21,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
     assert!(auto_vars_count >= params_count);
     for i in 0..params_count {
-        sb_appendf(output, c!("vars[%zu] = arguments[%zu];\n"), i, i);
+        sb_appendf(output, c!("    vars[%zu] = arguments[%zu];\n"), i, i);
     }
     sb_appendf(output, c!("    let pc = 0;\n"));
     sb_appendf(output, c!("    while (pc < %zu) {\n"), body.len());
