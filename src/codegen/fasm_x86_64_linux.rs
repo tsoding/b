@@ -28,6 +28,12 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
         match (*body)[i] {
+            Op::Return {arg} => {
+                if let Some(arg) = arg {
+                    load_arg_to_reg(arg, c!("rax"), output);
+                }
+                sb_appendf(output, c!("    jmp .op_%zu\n"), body.len());
+            }
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8);
                 load_arg_to_reg(arg, c!("rbx"), output);
@@ -165,7 +171,6 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
     sb_appendf(output, c!(".op_%zu:\n"), body.len());
     sb_appendf(output, c!("    mov rsp, rbp\n"));
     sb_appendf(output, c!("    pop rbp\n"));
-    sb_appendf(output, c!("    mov rax, 0\n"));
     sb_appendf(output, c!("    ret\n"));
 }
 
