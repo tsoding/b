@@ -79,7 +79,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("x0"), output);
                 }
-                sb_appendf(output, c!("    b %s.op_%zu:\n"), name, body.len());
+                sb_appendf(output, c!("    b %s.op_%zu\n"), name, body.len());
             }
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
