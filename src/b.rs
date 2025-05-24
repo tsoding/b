@@ -255,6 +255,8 @@ pub enum Binop {
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
+    // Precedence 0 is reserved for assignment operators which are always bind right to left.
+    // The reset of the operators bind left to right.
     &[Binop::Assign, Binop::AssignPlus, Binop::AssignMult, Binop::AssignBitOr, Binop::AssignBitAnd, Binop::AssignBitShl],
     &[Binop::BitOr],
     &[Binop::BitAnd],
@@ -441,7 +443,13 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 
                 let token = (*l).token;
                 let binop_where = (*l).where_firstchar;
-                let (rhs, _) = compile_binop_expression(l, input_path, c, precedence)?;
+                let (rhs, _) = if precedence == 0 {
+                    // This is an assignment operator. Binding right to left.
+                    compile_binop_expression(l, input_path, c, precedence)?
+                } else {
+                    compile_binop_expression(l, input_path, c, precedence + 1)?
+                };
+
                 match Binop::from_token(token).unwrap() {
                     Binop::BitShl => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);

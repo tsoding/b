@@ -46,6 +46,9 @@ function printf(fmt, ...args) {
             if (number_arg !== undefined) {
                 __print_string(Number(args.shift()).toString());
                 i += number_arg.length;
+            } else if (prefix.startsWith('%')) {
+                __print_string('%');
+                i += 1;
             } else {
                 throw new Error(`Unknown format sequence starts with ${str[i]}`);
             }
