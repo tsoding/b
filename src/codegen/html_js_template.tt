@@ -49,6 +49,9 @@ function printf(fmt, ...args) {
             } else if (prefix.startsWith('%')) {
                 __print_string('%');
                 i += 1;
+            } else if (prefix.startsWith('c')) {
+                __print_string(String.fromCharCode(args.shift()));
+                i += 1;
             } else {
                 throw new Error(`Unknown format sequence starts with ${str[i]}`);
             }
