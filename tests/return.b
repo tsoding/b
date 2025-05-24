@@ -6,7 +6,7 @@ a; // TODO: Pass as function parameter once parameters implemented.
 b; // TODO: Pass as function parameter once parameters implemented.
 
 add() {
-    return a + b;
+    return (a + b);
 }
 
 main() {
@@ -15,5 +15,4 @@ main() {
     a = 34;
     b = 35;
     printf("%d\n", add());
-    return 0;
 }

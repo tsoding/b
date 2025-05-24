@@ -807,15 +807,17 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             (*(*c).func_body.items.add(condition_jump)) = Op::JmpIfNot{addr: end, arg};
             Some(())
         } else if (*l).token == CLEX_id && strcmp((*l).string, c!("return")) == 0 {
-            let saved_point = (*l).parse_point;
             stb_c_lexer_get_token(l);
+            expect_clexes(l, input_path, &[';' as c_long, '(' as c_long])?;
             if (*l).token == ';' as c_long {
                 da_append(&mut (*c).func_body, Op::Return {arg: None});
-            } else {
-                (*l).parse_point = saved_point;
+            } else if (*l).token == '(' as c_long {
                 let (arg, _) = compile_expression(l, input_path, c)?;
+                get_and_expect_clex(l, input_path, ')' as c_long)?;
                 get_and_expect_clex(l, input_path, ';' as c_long)?;
                 da_append(&mut (*c).func_body, Op::Return {arg: Some(arg)});
+            } else {
+                unreachable!();
             }
             Some(())
         } else {
