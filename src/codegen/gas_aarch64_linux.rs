@@ -79,7 +79,8 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("x0"), output);
                 }
-                sb_appendf(output, c!("    b %s.op_%zu\n"), name, body.len());
+                sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
+                sb_appendf(output, c!("    ret\n"));
             }
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
@@ -214,6 +215,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
         }
     }
     sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());
+    sb_appendf(output, c!("    mov x0, 0\n"));
     sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
     sb_appendf(output, c!("    ret\n"));
 }
