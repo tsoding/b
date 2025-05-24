@@ -12,8 +12,8 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, _params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
-    sb_appendf(output, c!("%s(%zu):\n"), name, auto_vars_count);
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+    sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
         sb_appendf(output, c!("%8zu"), i);
         match (*body)[i] {
