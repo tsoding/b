@@ -1012,6 +1012,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
     let mut input_path: *const c_char = ptr::null();
+    let mut run_args: Array<*const c_char> = zeroed();
     while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
@@ -1021,12 +1022,15 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         argc = flag_rest_argc();
         argv = flag_rest_argv();
         if argc > 0 {
-            if !input_path.is_null() {
+            if input_path.is_null() {
+                input_path = shift!(argv, argc);
+            } else if *run {
+                da_append(&mut run_args, shift!(argv, argc));
+            } else {
                 // TODO: support compiling several files?
                 fprintf(stderr, c!("ERROR: Serveral input files is not supported yet\n"));
                 return None;
             }
-            input_path = shift!(argv, argc);
         }
     }
 
@@ -1112,9 +1116,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // TODO: pass the extra arguments from command line
-                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
-
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1127,6 +1128,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     &mut cmd,
                     run_path,
                 }
+
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }                   
+                }
+
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         },
@@ -1172,9 +1181,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // TODO: pass the extra arguments from command line
-                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
-
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1187,6 +1193,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     &mut cmd,
                     run_path,
                 }
+
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }                   
+                }
+
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
