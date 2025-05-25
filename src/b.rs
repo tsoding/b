@@ -347,8 +347,6 @@ pub struct OpWithLocation {
     pub location: stb_lex_location
 }
 
-// TODO: Move file path to struct Compiler.
-//       Also move lexer to it.
 pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
     let mut loc: stb_lex_location = zeroed();
     stb_c_lexer_get_location(l, (*l).where_firstchar, &mut loc);
