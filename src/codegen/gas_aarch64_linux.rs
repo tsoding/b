@@ -1,7 +1,9 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
+use crate::crust::libc::*;
 use crate::{Compiler, Op, OpWithLocation, Arg, Func, align_bytes};
+use crate::missingf_loc;
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64) {
     if literal < 0 {
@@ -188,7 +190,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
                 // The first 8 args go to x0-x7
                 const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
                 if args.count > REGISTERS.len() {
-                    todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
+                    missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %zu but %zu were provided"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];
