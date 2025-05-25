@@ -17,6 +17,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     for i in 0..body.len() {
         sb_appendf(output, c!("%8zu"), i);
         match (*body)[i].opcode {
+            Op::Return {arg} => {
+                sb_appendf(output, c!("    Return("));
+                if let Some(arg) = arg {
+                    dump_arg(output, arg);
+                }
+                sb_appendf(output, c!(")\n"));
+            },
             Op::Store{index, arg} => {
                 sb_appendf(output, c!("    Store(%zu, "), index);
                 dump_arg(output, arg);

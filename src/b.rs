@@ -345,6 +345,7 @@ pub enum Op {
     Funcall        {result: usize, name: *const c_char, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
+    Return         {arg: Option<Arg>},
 }
 
 #[derive(Clone, Copy)]
@@ -856,6 +857,20 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             push_opcode(Op::Jmp{addr: begin}, input_path, l, c);
             let end = (*c).func_body.count;
             (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
+            Some(())
+        } else if (*l).token == CLEX_id && strcmp((*l).string, c!("return")) == 0 {
+            stb_c_lexer_get_token(l);
+            expect_clexes(l, input_path, &[';' as c_long, '(' as c_long])?;
+            if (*l).token == ';' as c_long {
+                push_opcode(Op::Return {arg: None}, input_path, l, c);
+            } else if (*l).token == '(' as c_long {
+                let (arg, _) = compile_expression(l, input_path, c)?;
+                get_and_expect_clex(l, input_path, ')' as c_long)?;
+                get_and_expect_clex(l, input_path, ';' as c_long)?;
+                push_opcode(Op::Return {arg: Some(arg)}, input_path, l, c);
+            } else {
+                unreachable!();
+            }
             Some(())
         } else {
             (*l).parse_point = saved_point;

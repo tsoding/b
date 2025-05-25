@@ -88,6 +88,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         match (*body)[i].opcode {
+            Op::Return {arg} => {
+                if let Some(arg) = arg {
+                    load_arg_to_reg(arg, c!("x0"), output);
+                }
+                sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
+                sb_appendf(output, c!("    ret\n"));
+            }
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow
@@ -218,10 +225,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         }
     }
     sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());
-    sb_appendf(output, c!("    mov w0, 0\n"));
+    sb_appendf(output, c!("    mov x0, 0\n"));
     sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
     sb_appendf(output, c!("    ret\n"));
-
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {

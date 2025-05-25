@@ -29,6 +29,14 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     for i in 0..body.len() {
         sb_appendf(output, c!("            case %zu: "), i);
         match (*body)[i].opcode {
+            Op::Return {arg} => {
+                sb_appendf(output, c!("return"));
+                if let Some(arg) = arg {
+                    sb_appendf(output, c!(" "));
+                    generate_arg(arg, output);
+                }
+                sb_appendf(output, c!(";\n"));
+            },
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("(new DataView(memory)).setBigUint64(vars[%zu], BigInt("), index - 1);
                 generate_arg(arg, output);
