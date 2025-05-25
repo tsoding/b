@@ -478,9 +478,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         }
     };
 
-    let Some((arg, is_lvalue)) = arg else {
-        return None;
-    };
+    let (arg, is_lvalue) = arg?;
 
     let saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
