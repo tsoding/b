@@ -45,7 +45,7 @@ macro_rules! missingf {
         abort();
     }}
 }
-// TODO: Migrate missingf_codegen to missingf 
+// TODO: Migrate missingf_codegen to missingf
 //       Needed right now due to it still requiring the lexer.
 #[macro_export]
 macro_rules! missingf_codegen {
@@ -315,8 +315,6 @@ impl Binop {
     }
 }
 
-
-// TODO: associate location within the source code with each op
 #[derive(Clone, Copy)]
 pub enum Op {
     UnaryNot       {result: usize, arg: Arg},
@@ -347,7 +345,7 @@ pub enum Op {
 pub struct OpWithLocation {
     pub opcode: Op,
     pub input_path: *const c_char,
-    pub location: stb_lex_location 
+    pub location: stb_lex_location
 }
 
 // TODO: Move file path to struct Compiler.
@@ -355,7 +353,7 @@ pub struct OpWithLocation {
 pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
     let mut loc: stb_lex_location = zeroed();
     stb_c_lexer_get_location(l, (*l).where_firstchar, &mut loc);
- 
+
     da_append(&mut (*c).func_body, OpWithLocation {
         opcode: op,
         input_path: input_path,
