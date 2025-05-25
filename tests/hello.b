@@ -8,9 +8,9 @@ hello() {
     b = a;  putchar(b);
     putchar(79);
     putchar(79);
-    putchar(79);
-    putchar(79);
-    putchar(79);
+    putchar('O');
+    putchar('O');
+    putchar('O');
     putchar(10);
 }
 

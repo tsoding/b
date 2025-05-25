@@ -1,6 +1,8 @@
 use core::ffi::*;
-use crate::{Op, Arg, Func, Compiler, align_bytes};
+use crate::{Op, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
+use crate::crust::libc::*;
+use crate::missingf_loc;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
@@ -15,7 +17,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
@@ -34,8 +36,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
     }
     for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
-        match (*body)[i] {
+        sb_appendf(output, c!(".op_%zu: ; [%zu:%zu]\n"), i, (*body)[i].location.line_number,(*body)[i].location.line_offset);
+        match (*body)[i].opcode {
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8);
                 load_arg_to_reg(arg, c!("rbx"), output);
@@ -145,7 +147,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             }
             Op::Funcall{result, name, args} => {
                 if args.count > REGISTERS.len() {
-                    todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
+                    missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];

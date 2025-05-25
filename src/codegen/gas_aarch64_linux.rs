@@ -1,7 +1,9 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
-use crate::{Compiler, Op, Arg, Func, align_bytes};
+use crate::crust::libc::*;
+use crate::{Compiler, Op, OpWithLocation, Arg, Func, align_bytes};
+use crate::missingf_loc;
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64) {
     if literal < 0 {
@@ -66,7 +68,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Op], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     let stack_size = align_bytes((2 + auto_vars_count)*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
@@ -85,7 +87,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
-        match (*body)[i] {
+        match (*body)[i].opcode {
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow
@@ -196,7 +198,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
             Op::Funcall {result, name, args} => {
                 if args.count > REGISTERS.len() {
-                    todo!("Too many function call arguments. We support only {} but {} were provided", REGISTERS.len(), args.count);
+                    missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %zu but %zu were provided"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];
