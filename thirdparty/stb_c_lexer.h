@@ -1,4 +1,8 @@
-// stb_c_lexer.h - v0.12 - public domain Sean Barrett 2013
+// Originally taken from https://github.com/nothings/stb/blob/802cd454f25469d3123e678af41364153c132c2a/stb_c_lexer.h
+// Custom changes:
+// - Fix char literal parsing by Wonshtrum - https://github.com/nothings/stb/pull/1653
+
+// stb_c_lexer.h - v0.12+ - public domain Sean Barrett 2013
 // lexer for making little C-like languages with recursive-descent parsers
 //
 // This file provides both the interface and the implementation.
@@ -672,7 +676,7 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
                return stb__clex_token(lexer, CLEX_parse_error, start,start);
             if (p == lexer->eof || *p != '\'')
                return stb__clex_token(lexer, CLEX_parse_error, start,p);
-            return stb__clex_token(lexer, CLEX_charlit, start, p+1);
+            return stb__clex_token(lexer, CLEX_charlit, start, p);
          })
          goto single_char;
 
