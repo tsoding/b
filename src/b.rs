@@ -277,7 +277,7 @@ pub const PRECEDENCE: *const [*const [Binop]] = &[
 ];
 
 impl Binop {
-    // The outer Option indicates that success.
+    // The outer Option indicates success.
     // The inner Option indicates whether the assign has binop associated with it.
     // It's kinda confusing but I don't know how to make it "prettier"
     pub fn from_assign_token(token: c_long) -> Option<Option<Self>> {
