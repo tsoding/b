@@ -1,5 +1,5 @@
 use core::ffi::*;
-use crate::{Op, OpWithLocation, Arg, Func, Compiler, align_bytes};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::missingf_loc;
@@ -71,95 +71,99 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("    setz bl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rbx\n"), result*8);
             },
-            Op::BitOr {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    or rax, rbx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::BitAnd {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    and rax, rbx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::BitShl {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rcx"), output);
-                sb_appendf(output, c!("    shl rax, cl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::BitShr {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rcx"), output);
-                sb_appendf(output, c!("    shr rax, cl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::Add  {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    add rax, rbx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::Sub  {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    sub rax, rbx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::Mod {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    cqo\n"));
-                sb_appendf(output, c!("    idiv rbx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
-            }
-            Op::Mul {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    imul rbx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
-            }
-            Op::Less {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    cmp rax, rbx\n"));
-                sb_appendf(output, c!("    setl dl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
-            }
-            Op::Equal {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    cmp rax, rbx\n"));
-                sb_appendf(output, c!("    sete dl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
-            }
-            Op::NotEqual {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    cmp rax, rbx\n"));
-                sb_appendf(output, c!("    setne dl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
-            }
-            Op::GreaterEqual {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    cmp rax, rbx\n"));
-                sb_appendf(output, c!("    setge dl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
-            }
-            Op::LessEqual {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("rax"), output);
-                load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
-                sb_appendf(output, c!("    cmp rax, rbx\n"));
-                sb_appendf(output, c!("    setle dl\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+            Op::Binop {binop, index, lhs, rhs} => {
+                match binop {
+                    Binop::BitOr => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    or rax, rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::BitAnd => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    and rax, rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::BitShl => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rcx"), output);
+                        sb_appendf(output, c!("    shl rax, cl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::BitShr => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rcx"), output);
+                        sb_appendf(output, c!("    shr rax, cl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::Plus => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    add rax, rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::Minus  => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    sub rax, rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::Mod => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    cqo\n"));
+                        sb_appendf(output, c!("    idiv rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
+                    Binop::Mult => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    imul rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
+                    Binop::Less => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    setl dl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
+                    Binop::Equal => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    sete dl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
+                    Binop::NotEqual => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    setne dl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
+                    Binop::GreaterEqual => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    setge dl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
+                    Binop::LessEqual => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    setle dl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
+                }
             }
             Op::Funcall{result, name, args} => {
                 if args.count > REGISTERS.len() {

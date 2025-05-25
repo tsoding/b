@@ -1,6 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
@@ -49,96 +49,100 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, arg);
                 sb_appendf(output, c!(")\n"));
             }
-            Op::BitOr {index, lhs, rhs} => {
-                sb_appendf(output, c!("    BitOr(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::BitAnd {index, lhs, rhs} => {
-                sb_appendf(output, c!("    BitAnd(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::BitShl {index, lhs, rhs} => {
-                sb_appendf(output, c!("    BitShl(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::BitShr {index, lhs, rhs} => {
-                sb_appendf(output, c!("    BitShr(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Add {index, lhs, rhs} => {
-                sb_appendf(output, c!("    Add(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Sub {index, lhs, rhs} => {
-                sb_appendf(output, c!("    Sub(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Mod {index, lhs, rhs} => {
-                sb_appendf(output, c!("    Mod(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Mul {index, lhs, rhs} => {
-                sb_appendf(output, c!("    Mul(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Less {index, lhs, rhs} => {
-                sb_appendf(output, c!("    Less(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Equal {index, lhs, rhs} => {
-                sb_appendf(output, c!("    Equal(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::NotEqual {index, lhs, rhs} => {
-                sb_appendf(output, c!("    NotEqual(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::GreaterEqual {index, lhs, rhs} => {
-                sb_appendf(output, c!("    GreaterEqual(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::LessEqual {index, lhs, rhs} => {
-                sb_appendf(output, c!("    LessEqual(%zu, "), index);
-                dump_arg(output, lhs);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, rhs);
-                sb_appendf(output, c!(")\n"));
+            Op::Binop {binop, index, lhs, rhs} => {
+                match binop {
+                    Binop::BitOr => {
+                        sb_appendf(output, c!("    BitOr(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::BitAnd => {
+                        sb_appendf(output, c!("    BitAnd(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::BitShl => {
+                        sb_appendf(output, c!("    BitShl(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::BitShr => {
+                        sb_appendf(output, c!("    BitShr(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::Plus => {
+                        sb_appendf(output, c!("    Plus(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::Minus => {
+                        sb_appendf(output, c!("    Minus(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::Mod => {
+                        sb_appendf(output, c!("    Mod(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::Mult => {
+                        sb_appendf(output, c!("    Mult(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::Less => {
+                        sb_appendf(output, c!("    Less(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::Equal => {
+                        sb_appendf(output, c!("    Equal(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::NotEqual => {
+                        sb_appendf(output, c!("    NotEqual(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::GreaterEqual => {
+                        sb_appendf(output, c!("    GreaterEqual(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                    Binop::LessEqual => {
+                        sb_appendf(output, c!("    LessEqual(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
+                }
             }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("    Funcall(%zu, \"%s\""), result, name);

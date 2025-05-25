@@ -2,7 +2,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Op, OpWithLocation, Arg, Func, align_bytes};
+use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, align_bytes};
 use crate::missingf_loc;
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64) {
@@ -110,91 +110,95 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("    cset x0, eq\n"));
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
             },
-            Op::BitOr {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    orr x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::BitAnd {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    and x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::BitShl {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    lsl x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::BitShr {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    lsr x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::Add {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    add x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+            Op::Binop {binop, index, lhs, rhs} => {
+                match binop {
+                    Binop::BitOr => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    orr x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::BitAnd => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    and x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::BitShl => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    lsl x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::BitShr => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    lsr x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::Plus => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    add x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    }
+                    Binop::Minus => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    sub x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::Mod => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        // https://stackoverflow.com/questions/35351470/obtaining-remainder-using-single-aarch64-instruction
+                        sb_appendf(output, c!("    sdiv x2, x0, x1\n"));
+                        sb_appendf(output, c!("    msub x2, x2, x1, x0\n"));
+                        sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
+                    }
+                    Binop::Mult => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    mul x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::Less => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    cmp x0, x1\n"));
+                        sb_appendf(output, c!("    cset x0, lt\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    }
+                    Binop::Equal => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    cmp x0, x1\n"));
+                        sb_appendf(output, c!("    cset x0, eq\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    }
+                    Binop::NotEqual => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    cmp x0, x1\n"));
+                        sb_appendf(output, c!("    cset x0, ne\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    }
+                    Binop::GreaterEqual => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    cmp x0, x1\n"));
+                        sb_appendf(output, c!("    cset x0, ge\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                    Binop::LessEqual => {
+                        load_arg_to_reg(lhs, c!("x0"), output);
+                        load_arg_to_reg(rhs, c!("x1"), output);
+                        sb_appendf(output, c!("    cmp x0, x1\n"));
+                        sb_appendf(output, c!("    cset x0, le\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    },
+                }
             }
-            Op::Sub {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    sub x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::Mod {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                // https://stackoverflow.com/questions/35351470/obtaining-remainder-using-single-aarch64-instruction
-                sb_appendf(output, c!("    sdiv x2, x0, x1\n"));
-                sb_appendf(output, c!("    msub x2, x2, x1, x0\n"));
-                sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
-            }
-            Op::Mul {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    mul x0, x0, x1\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::Less {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    cmp x0, x1\n"));
-                sb_appendf(output, c!("    cset x0, lt\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            }
-            Op::Equal {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    cmp x0, x1\n"));
-                sb_appendf(output, c!("    cset x0, eq\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            }
-            Op::NotEqual {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    cmp x0, x1\n"));
-                sb_appendf(output, c!("    cset x0, ne\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            }
-            Op::GreaterEqual {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    cmp x0, x1\n"));
-                sb_appendf(output, c!("    cset x0, ge\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
-            Op::LessEqual {index, lhs, rhs} => {
-                load_arg_to_reg(lhs, c!("x0"), output);
-                load_arg_to_reg(rhs, c!("x1"), output);
-                sb_appendf(output, c!("    cmp x0, x1\n"));
-                sb_appendf(output, c!("    cset x0, le\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
-            },
             Op::ExternalAssign{name, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output);
                 sb_appendf(output, c!("    adrp x1, %s\n"), name);

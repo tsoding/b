@@ -250,9 +250,6 @@ pub enum Arg {
 // TODO: add support for binary division expression
 #[derive(Clone, Copy, PartialEq)]
 pub enum Binop {
-    Assign,
-    AssignPlus,
-    AssignMult,
     Plus,
     Minus,
     Mult,
@@ -266,16 +263,10 @@ pub enum Binop {
     BitAnd,
     BitShl,
     BitShr,
-    AssignBitOr,
-    AssignBitAnd,
-    AssignBitShl,
 }
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
-    // Precedence 0 is reserved for assignment operators which are always bind right to left.
-    // The reset of the operators bind left to right.
-    &[Binop::Assign, Binop::AssignPlus, Binop::AssignMult, Binop::AssignBitOr, Binop::AssignBitAnd, Binop::AssignBitShl],
     &[Binop::BitOr],
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
@@ -286,6 +277,21 @@ pub const PRECEDENCE: *const [*const [Binop]] = &[
 ];
 
 impl Binop {
+    // The outer Option indicates that success.
+    // The inner Option indicates whether the assign has binop associated with it.
+    // It's kinda confusing but I don't know how to make it "prettier"
+    pub fn from_assign_token(token: c_long) -> Option<Option<Self>> {
+        match token {
+            token if token == '=' as i64 => Some(None),
+            CLEX_shleq                   => Some(Some(Binop::BitShl)),
+            CLEX_oreq                    => Some(Some(Binop::BitOr)),
+            CLEX_andeq                   => Some(Some(Binop::BitAnd)),
+            CLEX_pluseq                  => Some(Some(Binop::Plus)),
+            CLEX_muleq                   => Some(Some(Binop::Mult)),
+            _ => None,
+        }
+    }
+
     pub fn from_token(token: c_long) -> Option<Self> {
         match token {
             token if token == '+' as i64 => Some(Binop::Plus),
@@ -295,14 +301,8 @@ impl Binop {
             token if token == '<' as i64 => Some(Binop::Less),
             CLEX_greatereq               => Some(Binop::GreaterEqual),
             CLEX_lesseq                  => Some(Binop::LessEqual),
-            token if token == '=' as i64 => Some(Binop::Assign),
             token if token == '|' as i64 => Some(Binop::BitOr),
             token if token == '&' as i64 => Some(Binop::BitAnd),
-            CLEX_shleq                   => Some(Binop::AssignBitShl),
-            CLEX_oreq                    => Some(Binop::AssignBitOr),
-            CLEX_andeq                   => Some(Binop::AssignBitAnd),
-            CLEX_pluseq                  => Some(Binop::AssignPlus),
-            CLEX_muleq                   => Some(Binop::AssignMult),
             CLEX_shl                     => Some(Binop::BitShl),
             CLEX_shr                     => Some(Binop::BitShr),
             CLEX_eq                      => Some(Binop::Equal),
@@ -328,20 +328,7 @@ impl Binop {
 pub enum Op {
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
-    Add            {index: usize, lhs: Arg, rhs: Arg},
-    Sub            {index: usize, lhs: Arg, rhs: Arg},
-    Mul            {index: usize, lhs: Arg, rhs: Arg},
-    // TODO: Maybe we should have something like DivMod instruction because many CPUs just do div and mod simultaneously
-    Mod            {index: usize, lhs: Arg, rhs: Arg},
-    Less           {index: usize, lhs: Arg, rhs: Arg},
-    Equal          {index: usize, lhs: Arg, rhs: Arg},
-    NotEqual       {index: usize, lhs: Arg, rhs: Arg},
-    GreaterEqual   {index: usize, lhs: Arg, rhs: Arg},
-    LessEqual      {index: usize, lhs: Arg, rhs: Arg},
-    BitOr          {index: usize, lhs: Arg, rhs: Arg},
-    BitAnd         {index: usize, lhs: Arg, rhs: Arg},
-    BitShl         {index: usize, lhs: Arg, rhs: Arg},
-    BitShr         {index: usize, lhs: Arg, rhs: Arg},
+    Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
@@ -491,7 +478,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         get_and_expect_clex(l, input_path, ']' as i64)?;
 
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::Add {index: result, lhs: arg, rhs: offset}, input_path, l, c);
+        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, input_path, l, c);
 
         Some((Arg::Ref(result), true))
     } else {
@@ -515,216 +502,17 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
             while let Some(binop) = Binop::from_token((*l).token) {
                 if binop.precedence() != precedence { break; }
 
-                let token = (*l).token;
-                let binop_where = (*l).where_firstchar;
-                let (rhs, _) = if precedence == 0 {
-                    // This is an assignment operator. Binding right to left.
-                    compile_binop_expression(l, input_path, c, precedence)?
-                } else {
-                    compile_binop_expression(l, input_path, c, precedence + 1)?
-                };
+                let (rhs, _) = compile_binop_expression(l, input_path, c, precedence + 1)?;
 
-                match Binop::from_token(token).unwrap() {
-                    Binop::BitShl => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::BitShl {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::BitShr => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::BitShr {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::BitOr => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::BitOr {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::BitAnd => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::BitAnd {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::Plus  => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::Add  {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::Minus => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::Sub  {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::Mult  => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::Mul  {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::Mod  => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::Mod {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::Less  => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::Less {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::Equal => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::Equal {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::NotEqual => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::NotEqual {index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::GreaterEqual  => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::GreaterEqual{index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::LessEqual  => {
-                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                        push_opcode(Op::LessEqual{index, lhs, rhs}, input_path, l, c);
-                        lhs = Arg::AutoVar(index);
-                    }
-                    Binop::AssignBitOr => {
-                        if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
-                            return None;
-                        }
+                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                // TODO(2025-05-26 02:39:20): the location of this opcode is pointing at the end of rhs.
+                // But it should point at the location of the binop token.
+                // We should introduce a variant of push_opcode with a custom location
+                //
+                // See also TODO(2025-05-26 02:39:23)
+                push_opcode(Op::Binop {binop, index, lhs, rhs}, input_path, l, c);
+                lhs = Arg::AutoVar(index);
 
-                        match lhs {
-                            Arg::Ref(index) => {
-                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::BitOr {index: tmp, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
-                            },
-                            Arg::External(name) => {
-                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::BitOr {index, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
-                            }
-                            Arg::AutoVar(index) => {
-                                push_opcode(Op::BitOr {index, lhs, rhs}, input_path, l, c)
-                            }
-                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-                        }
-                    }
-                    Binop::AssignBitAnd => {
-                        if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
-                            return None;
-                        }
-
-                        match lhs {
-                            Arg::Ref(index) => {
-                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::BitAnd {index: tmp, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
-                            },
-                            Arg::External(name) => {
-                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::BitAnd {index, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
-                            }
-                            Arg::AutoVar(index) => {
-                                push_opcode(Op::BitAnd {index, lhs, rhs}, input_path, l, c)
-                            }
-                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-                        }
-                    }
-                    Binop::AssignBitShl => {
-                        if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
-                            return None;
-                        }
-
-                        match lhs {
-                            Arg::Ref(index) => {
-                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::BitShl {index: tmp, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
-                            },
-                            Arg::External(name) => {
-                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::BitShl {index, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
-                            }
-                            Arg::AutoVar(index) => {
-                                push_opcode(Op::BitShl {index, lhs, rhs}, input_path, l, c)
-                            }
-                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-                        }
-                    }
-                    Binop::AssignPlus => {
-                        if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
-                            return None;
-                        }
-
-                        match lhs {
-                            Arg::Ref(index) => {
-                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::Add {index: tmp, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
-                            },
-                            Arg::External(name) => {
-                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::Add {index, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
-                            }
-                            Arg::AutoVar(index) => {
-                                push_opcode(Op::Add {index, lhs, rhs}, input_path, l, c)
-                            }
-                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-                        }
-                    }
-                    Binop::AssignMult => {
-                        if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
-                            return None;
-                        }
-
-                        match lhs {
-                            Arg::Ref(index) => {
-                                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::Mul {index: tmp, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
-                            },
-                            Arg::External(name) => {
-                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                                push_opcode(Op::Mul {index, lhs, rhs}, input_path, l, c);
-                                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
-                            }
-                            Arg::AutoVar(index) => {
-                                push_opcode(Op::Mul {index, lhs, rhs}, input_path, l, c)
-                            }
-                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-                        }
-                    }
-                    Binop::Assign => {
-                        if !lvalue {
-                            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
-                            return None;
-                        }
-
-                        match lhs {
-                            Arg::Ref(index) => {
-                                push_opcode(Op::Store {index, arg: rhs}, input_path, l, c);
-                            }
-                            Arg::External(name) => {
-                                push_opcode(Op::ExternalAssign {name, arg: rhs}, input_path, l, c);
-                            }
-                            Arg::AutoVar(index) => {
-                                push_opcode(Op::AutoAssign {index, arg: rhs}, input_path, l, c);
-                            }
-                            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-                        }
-                    }
-                }
                 lvalue = false;
 
                 saved_point = (*l).parse_point;
@@ -737,8 +525,71 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
     Some((lhs, lvalue))
 }
 
+#[allow(unused_variables)]
+pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
+    let (lhs, mut lvalue) = compile_binop_expression(l, input_path, c, 0)?;
+
+    let mut saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+
+    while let Some(binop) = Binop::from_assign_token((*l).token) {
+        let binop_where = (*l).where_firstchar;
+        let (rhs, _) = compile_assign_expression(l, input_path, c, precedence + 1)?;
+
+        if !lvalue {
+            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
+            return None;
+        }
+
+        // TODO(2025-05-26 02:39:23): the locations of all these opcodes in the expression bellow are pointing at the end of rhs.
+        // But they should point at the location of the binop token.
+        // We should introduce a variant of push_opcode with a custom location
+        //
+        // See also TODO(2025-05-26 02:39:20)
+        if let Some(binop) = binop {
+            match lhs {
+                Arg::Ref(index) => {
+                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, input_path, l, c);
+                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
+                },
+                Arg::External(name) => {
+                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop, index, lhs, rhs}, input_path, l, c);
+                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
+                }
+                Arg::AutoVar(index) => {
+                    push_opcode(Op::Binop {binop, index, lhs, rhs}, input_path, l, c)
+                }
+                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+            }
+        } else {
+            match lhs {
+                Arg::Ref(index) => {
+                    push_opcode(Op::Store {index, arg: rhs}, input_path, l, c);
+                }
+                Arg::External(name) => {
+                    push_opcode(Op::ExternalAssign {name, arg: rhs}, input_path, l, c);
+                }
+                Arg::AutoVar(index) => {
+                    push_opcode(Op::AutoAssign {index, arg: rhs}, input_path, l, c);
+                }
+                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+            }
+        }
+
+        lvalue = false;
+
+        saved_point = (*l).parse_point;
+        stb_c_lexer_get_token(l);
+    }
+
+    (*l).parse_point = saved_point;
+    Some((lhs, lvalue))
+}
+
 pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
-    compile_binop_expression(l, input_path, c, 0)
+    compile_assign_expression(l, input_path, c, 0)
 }
 
 pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
