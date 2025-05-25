@@ -30,7 +30,7 @@ pub const TARGET_NAMES: *const [Target_Name] = &[
 ];
 
 pub unsafe fn name_of_target(target: Target) -> Option<*const c_char> {
-    for i in 0..(*TARGET_NAMES).len() {
+    for i in 0..TARGET_NAMES.len() {
         if target == (*TARGET_NAMES)[i].target {
             return Some((*TARGET_NAMES)[i].name);
         }
@@ -39,7 +39,7 @@ pub unsafe fn name_of_target(target: Target) -> Option<*const c_char> {
 }
 
 pub unsafe fn target_by_name(name: *const c_char) -> Option<Target> {
-    for i in 0..(*TARGET_NAMES).len() {
+    for i in 0..TARGET_NAMES.len() {
         if strcmp(name, (*TARGET_NAMES)[i].name) == 0 {
             return Some((*TARGET_NAMES)[i].target);
         }
