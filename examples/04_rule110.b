@@ -1,8 +1,8 @@
 // -*- mode: simpc -*-
 
-base; word; n;
+word;
 
-display() {
+display(base, n) {
     extrn printf;
     auto it, i;
 
@@ -16,7 +16,7 @@ display() {
     printf("\n");
 }
 
-next() {
+next(base, n) {
     auto it, i, state;
 
     it = base;
@@ -35,19 +35,20 @@ next() {
 
 main() {
     extrn malloc, memset;
+    auto base, n;
 
-    n    = 100;
     word = 8;
+    n    = 100;
     base = malloc(word*n);
     memset(base, 0, word*n);
     *(base + (n - 2)*word) = 1;
 
-    display();
+    display(base, n);
     auto i;
     i = 0;
     while (i < n - 3) {
-        next();
-        display();
+        next(base, n);
+        display(base, n);
         i += 1;
     }
 }
