@@ -349,6 +349,24 @@ pub struct OpWithLocation {
 
 pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
     let mut loc: stb_lex_location = zeroed();
+    // TODO: THIS IS SUPER SLOW!!!
+    // From the documentation string of stb_c_lexer_get_location() in stb_c_lexer.h:
+    //
+    // > this inefficient function returns the line number and character offset of a
+    // > given location in the file as returned by stb_lex_token. Because it's inefficient,
+    // > you should only call it for errors, not for every token.
+    // > For error messages of invalid tokens, you typically want the location of the start
+    // > of the token (which caused the token to be invalid). For bugs involving legit
+    // > tokens, you can report the first or the range.
+    //
+    // Instead of computing stb_lex_location on every push of an opcode store where_firstchar
+    // and input_stream from stb_lexer structure as the location in OpWithLocation (do not
+    // store stb_lex_location directly). Only call stb_c_lexer_get_location() when you about to
+    // report an error (as instructed by the stb_c_lexer.h documentation). This may require to
+    // hack stb_c_lexer_get_location() so it accepts only input_stream instead of the entire
+    // stb_lexer. But that's totally fine, because we are vendoring stb_c_lexer.h. We can modify
+    // it however we want. (We only need to make it explicit that our version of stb_c_lexer.h
+    // differs from the official one).
     stb_c_lexer_get_location(l, (*l).where_firstchar, &mut loc);
 
     da_append(&mut (*c).func_body, OpWithLocation {
