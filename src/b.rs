@@ -261,6 +261,7 @@ pub enum Binop {
     Equal,
     NotEqual,
     GreaterEqual,
+    LessEqual,
     BitOr,
     BitAnd,
     BitShl,
@@ -279,7 +280,7 @@ pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
     &[Binop::Equal, Binop::NotEqual],
-    &[Binop::Less, Binop::GreaterEqual],
+    &[Binop::Less, Binop::GreaterEqual, Binop::LessEqual],
     &[Binop::Plus, Binop::Minus],
     &[Binop::Mult, Binop::Mod],
 ];
@@ -293,6 +294,7 @@ impl Binop {
             token if token == '%' as i64 => Some(Binop::Mod),
             token if token == '<' as i64 => Some(Binop::Less),
             CLEX_greatereq               => Some(Binop::GreaterEqual),
+            CLEX_lesseq                  => Some(Binop::LessEqual),
             token if token == '=' as i64 => Some(Binop::Assign),
             token if token == '|' as i64 => Some(Binop::BitOr),
             token if token == '&' as i64 => Some(Binop::BitAnd),
@@ -335,6 +337,7 @@ pub enum Op {
     Equal          {index: usize, lhs: Arg, rhs: Arg},
     NotEqual       {index: usize, lhs: Arg, rhs: Arg},
     GreaterEqual   {index: usize, lhs: Arg, rhs: Arg},
+    LessEqual      {index: usize, lhs: Arg, rhs: Arg},
     BitOr          {index: usize, lhs: Arg, rhs: Arg},
     BitAnd         {index: usize, lhs: Arg, rhs: Arg},
     BitShl         {index: usize, lhs: Arg, rhs: Arg},
@@ -580,6 +583,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     Binop::GreaterEqual  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                         push_opcode(Op::GreaterEqual{index, lhs, rhs}, input_path, l, c);
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::LessEqual  => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        push_opcode(Op::LessEqual{index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::AssignBitOr => {
@@ -1030,6 +1038,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
     let mut input_path: *const c_char = ptr::null();
+    let mut run_args: Array<*const c_char> = zeroed();
     while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
@@ -1039,12 +1048,15 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         argc = flag_rest_argc();
         argv = flag_rest_argv();
         if argc > 0 {
-            if !input_path.is_null() {
+            if input_path.is_null() {
+                input_path = shift!(argv, argc);
+            } else if *run {
+                da_append(&mut run_args, shift!(argv, argc));
+            } else {
                 // TODO: support compiling several files?
                 fprintf(stderr, c!("ERROR: Serveral input files is not supported yet\n"));
                 return None;
             }
-            input_path = shift!(argv, argc);
         }
     }
 
@@ -1120,7 +1132,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
-                c!("cc"), c!("-o"), effective_output_path, output_obj_path,
+                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1130,9 +1142,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // TODO: pass the extra arguments from command line
-                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
-
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1145,6 +1154,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     &mut cmd,
                     run_path,
                 }
+
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }
+                }
+
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         },
@@ -1190,9 +1207,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // TODO: pass the extra arguments from command line
-                // Probably makes sense after we start accepting command line arguments via main after implementing (2025-05-11 15:45:38)
-
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1205,6 +1219,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     &mut cmd,
                     run_path,
                 }
+
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }
+                }
+
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }

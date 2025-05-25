@@ -133,6 +133,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, rhs);
                 sb_appendf(output, c!(")\n"));
             }
+            Op::LessEqual {index, lhs, rhs} => {
+                sb_appendf(output, c!("    LessEqual(%zu, "), index);
+                dump_arg(output, lhs);
+                sb_appendf(output, c!(", "));
+                dump_arg(output, rhs);
+                sb_appendf(output, c!(")\n"));
+            }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("    Funcall(%zu, \"%s\""), result, name);
                 for i in 0..args.count {

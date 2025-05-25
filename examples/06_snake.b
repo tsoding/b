@@ -333,6 +333,7 @@ handle_user_input() {
   }
 }
 
+// TODO: examples/06_snake.b crashes on gas_aarch64_linux somewhere in draw_screen()
 draw_screen() {
   extrn memset;
   memset(screen, EMPTY, screen_size);
