@@ -287,6 +287,7 @@ impl Binop {
             CLEX_oreq                    => Some(Some(Binop::BitOr)),
             CLEX_andeq                   => Some(Some(Binop::BitAnd)),
             CLEX_pluseq                  => Some(Some(Binop::Plus)),
+            CLEX_minuseq                 => Some(Some(Binop::Minus)),
             CLEX_muleq                   => Some(Some(Binop::Mult)),
             _ => None,
         }
