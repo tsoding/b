@@ -1,8 +1,9 @@
 use core::ffi::*;
+use core::mem::zeroed;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::missingf_loc;
+use crate::missingf;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
@@ -36,8 +37,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
     }
     for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu: ; [%zu:%zu]\n"), i, (*body)[i].location.line_number,(*body)[i].location.line_offset);
-        match (*body)[i].opcode {
+        sb_appendf(output, c!(".op_%zu:\n"), i);
+        let op = (*body)[i];
+        match op.opcode {
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("rax"), output);
@@ -167,7 +169,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             }
             Op::Funcall{result, name, args} => {
                 if args.count > REGISTERS.len() {
-                    missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
+                    missingf!(op.input_stream, op.input_path, op.location, c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];

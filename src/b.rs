@@ -26,42 +26,26 @@ use arena::Arena;
 use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
 
 macro_rules! diagf {
-    ($l:expr, $path:expr, $where:expr, $($args:tt)*) => {{
+    ($input_stream:expr, $path:expr, $where:expr, $($args:tt)*) => {{
         let mut loc: stb_lex_location = zeroed();
-        stb_c_lexer_get_location($l, $where, &mut loc);
+        stb_c_lexer_get_location($input_stream, $where, &mut loc);
         fprintf(stderr, c!("%s:%d:%d: "), $path, loc.line_number, loc.line_offset + 1);
         fprintf(stderr, $($args)*);
     }};
 }
 
+#[macro_export]
 macro_rules! missingf {
-    ($l:expr, $path:expr, $where:expr, $($args:tt)*) => {{
+    ($input_stream:expr, $path:expr, $where:expr, $($args:tt)*) => {{
         let file = file!();
-        let mut loc: stb_lex_location = zeroed();
-        stb_c_lexer_get_location($l, $where, &mut loc);
+        let mut loc = zeroed();
+        crate::stb_c_lexer_get_location($input_stream, $where, &mut loc);
         fprintf(stderr, c!("%s:%d:%d: TODO: "), $path, loc.line_number, loc.line_offset + 1);
         fprintf(stderr, $($args)*);
         fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
         abort();
     }}
 }
-
-// TODO: missingf_loc!() should not be a thing
-//   See TODO(2025-05-25 12:08:38). We should not use stb_lex_location directly. As a result
-//   of solving TODO(2025-05-25 12:08:38) both missingf!() and missingf_loc!() should be merged
-//   into a single thing that operates on pair (where_firstchar, input_stream).
-#[macro_export]
-macro_rules! missingf_loc {
-    ($t:expr, $($args:tt)*) => {{
-        let file = file!();
-        fprintf(stderr, c!("%s:%d:%d: TODO: "), $t.input_path, $t.location.line_number, $t.location.line_offset + 1);
-        fprintf(stderr, $($args)*);
-        fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
-        abort();
-    }}
-}
-
-
 
 unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
     match token {
@@ -125,7 +109,7 @@ pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clex
     }
     da_append(&mut sb, 0);
 
-    diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: expected %s, but got %s\n"), sb.items, display_token_kind_temp((*l).token));
+    diagf!((*l).input_stream, input_path, (*l).where_firstchar, c!("ERROR: expected %s, but got %s\n"), sb.items, display_token_kind_temp((*l).token));
 
     free(sb.items);
     None
@@ -143,7 +127,7 @@ pub unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, 
 pub unsafe fn expect_clex_id(l: *const stb_lexer, input_path: *const c_char, id: *const c_char) -> Option<()> {
     expect_clex(l, input_path, CLEX_id)?;
     if strcmp((*l).string, id) != 0 {
-        diagf!(l, input_path, (*l).where_firstchar, c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
+        diagf!((*l).input_stream, input_path, (*l).where_firstchar, c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
         return None;
     }
     Some(())
@@ -209,8 +193,8 @@ pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *m
     let scope = da_last_mut(vars);
     let existing_var = find_var_near(scope, name);
     if !existing_var.is_null() {
-        diagf!(l, input_path, name_where, c!("ERROR: redefinition of variable `%s`\n"), name);
-        diagf!(l, input_path, (*existing_var).hwere, c!("NOTE: the first declaration is located here\n"));
+        diagf!((*l).input_stream, input_path, name_where, c!("ERROR: redefinition of variable `%s`\n"), name);
+        diagf!((*l).input_stream, input_path, (*existing_var).hwere, c!("NOTE: the first declaration is located here\n"));
         return None;
     }
 
@@ -342,35 +326,16 @@ pub enum Op {
 pub struct OpWithLocation {
     pub opcode: Op,
     pub input_path: *const c_char,
-    pub location: stb_lex_location
+    pub input_stream: *const c_char,
+    pub location: *const c_char,
 }
 
 pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
-    let mut loc: stb_lex_location = zeroed();
-    // TODO(2025-05-25 12:08:38): THIS IS SUPER SLOW!!!
-    // From the documentation string of stb_c_lexer_get_location() in stb_c_lexer.h:
-    //
-    // > this inefficient function returns the line number and character offset of a
-    // > given location in the file as returned by stb_lex_token. Because it's inefficient,
-    // > you should only call it for errors, not for every token.
-    // > For error messages of invalid tokens, you typically want the location of the start
-    // > of the token (which caused the token to be invalid). For bugs involving legit
-    // > tokens, you can report the first or the range.
-    //
-    // Instead of computing stb_lex_location on every push of an opcode store where_firstchar
-    // and input_stream from stb_lexer structure as the location in OpWithLocation (do not
-    // store stb_lex_location directly). Only call stb_c_lexer_get_location() when you about to
-    // report an error (as instructed by the stb_c_lexer.h documentation). This may require to
-    // hack stb_c_lexer_get_location() so it accepts only input_stream instead of the entire
-    // stb_lexer. But that's totally fine, because we are vendoring stb_c_lexer.h. We can modify
-    // it however we want. (We only need to make it explicit that our version of stb_c_lexer.h
-    // differs from the official one).
-    stb_c_lexer_get_location(l, (*l).where_firstchar, &mut loc);
-
     da_append(&mut (*c).func_body, OpWithLocation {
         opcode: op,
         input_path: input_path,
-        location: loc
+        input_stream: (*l).input_stream,
+        location: (*l).where_firstchar,
     });
 }
 
@@ -433,7 +398,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                diagf!(l, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
+                diagf!((*l).input_stream, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
                 return None;
             }
 
@@ -464,7 +429,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
-            missingf!(l, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
+            missingf!((*l).input_stream, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
         }
     };
 
@@ -537,7 +502,7 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
         let (rhs, _) = compile_assign_expression(l, input_path, c, precedence + 1)?;
 
         if !lvalue {
-            diagf!(l, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
+            diagf!((*l).input_stream, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
             return None;
         }
 
@@ -606,7 +571,7 @@ pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mu
 pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, name: *const c_char, name_where: *const c_char) -> Option<Arg> {
     let var_def = find_var_deep(&(*c).vars, name);
     if var_def.is_null() {
-        diagf!(l, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
+        diagf!((*l).input_stream, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
         return None;
     }
 
@@ -637,7 +602,7 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
             Some(Arg::AutoVar(result))
         }
         Storage::Auto{..} => {
-            missingf!(l, input_path, name_where, c!("calling functions from auto variables\n"));
+            missingf!((*l).input_stream, input_path, name_where, c!("calling functions from auto variables\n"));
         }
     }
 }
@@ -810,8 +775,8 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
 
         // TODO: maybe the keywords should be identified on the level of lexing
         if is_keyword((*l).string) {
-            diagf!(l, input_path, name_where, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
-            diagf!(l, input_path, name_where, c!("NOTE: Reserved keywords are: "));
+            diagf!((*l).input_stream, input_path, name_where, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
+            diagf!((*l).input_stream, input_path, name_where, c!("NOTE: Reserved keywords are: "));
             for i in 0..B_KEYWORDS.len() {
                 if i > 0 {
                     fprintf(stderr, c!(", "));

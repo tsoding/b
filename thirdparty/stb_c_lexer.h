@@ -1,6 +1,7 @@
 // Originally taken from https://github.com/nothings/stb/blob/802cd454f25469d3123e678af41364153c132c2a/stb_c_lexer.h
 // Custom changes:
 // - Fix char literal parsing by Wonshtrum - https://github.com/nothings/stb/pull/1653
+// - Update stb_c_lexer_get_location to operate on input_stream instead of stb_lexer
 
 // stb_c_lexer.h - v0.12+ - public domain Sean Barrett 2013
 // lexer for making little C-like languages with recursive-descent parsers
@@ -162,7 +163,7 @@ extern int stb_c_lexer_get_token(stb_lexer *lexer);
 //   - lexer->string is a 0-terminated string for CLEX_dqstring or CLEX_sqstring or CLEX_identifier
 //   - lexer->string_len is the byte length of lexer->string
 
-extern void stb_c_lexer_get_location(const stb_lexer *lexer, const char *where, stb_lex_location *loc);
+extern void stb_c_lexer_get_location(const char *input_stream, const char *where, stb_lex_location *loc);
 // this inefficient function returns the line number and character offset of a
 // given location in the file as returned by stb_lex_token. Because it's inefficient,
 // you should only call it for errors, not for every token.
@@ -284,9 +285,9 @@ void stb_c_lexer_init(stb_lexer *lexer, const char *input_stream, const char *in
 }
 
 // API function
-void stb_c_lexer_get_location(const stb_lexer *lexer, const char *where, stb_lex_location *loc)
+void stb_c_lexer_get_location(const char *input_stream, const char *where, stb_lex_location *loc)
 {
-   char *p = lexer->input_stream;
+   const char *p = input_stream;
    int line_number = 1;
    int char_offset = 0;
    while (*p && p < where) {

@@ -3,7 +3,7 @@ use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, align_bytes};
-use crate::missingf_loc;
+use crate::missingf;
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64) {
     if literal < 0 {
@@ -87,7 +87,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
-        match (*body)[i].opcode {
+        let op = (*body)[i];
+        match op.opcode {
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("x0"), output);
@@ -216,7 +217,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
             Op::Funcall {result, name, args} => {
                 if args.count > REGISTERS.len() {
-                    missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %zu but %zu were provided"), REGISTERS.len(), args.count);
+                    missingf!(op.input_stream, op.input_path, op.location, c!("Too many function call arguments. We support only %zu but %zu were provided"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];
