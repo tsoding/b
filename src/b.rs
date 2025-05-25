@@ -383,13 +383,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             da_append(&mut (*c).func_body, Op::Negate {result: index, arg});
             Some((Arg::AutoVar(index), false))
         }
-        CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
-        CLEX_charlit => {
-            // a workaround to a bug in stb_c_lexer
-            // https://github.com/nothings/stb/issues/1652
-            (*l).parse_point = (*l).parse_point.sub(1);
-            Some((Arg::Literal((*l).int_number), false))
-        }
+        CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
             let name = arena::strdup(&mut (*c).arena, (*l).string);
             let name_where = (*l).where_firstchar;
