@@ -65,99 +65,25 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!(";\n"));
             },
             Op::Binop{binop, index, lhs, rhs} => {
+                sb_appendf(output, c!("vars[%zu] = "), index - 1);
+                generate_arg(lhs, output);
                 match binop {
-                    Binop::BitOr => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" | "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    },
-                    Binop::BitAnd => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" & "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    },
-                    Binop::BitShl => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" << "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    },
-                    Binop::BitShr => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" >> "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    },
-                    Binop::Plus  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" + "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::Minus  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" - "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::Mult  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" * "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::Mod  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" %% "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::Less  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" < "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::Equal  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" === "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::NotEqual  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" !== "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    }
-                    Binop::GreaterEqual  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" >= "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    },
-                    Binop::LessEqual  => {
-                        sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                        generate_arg(lhs, output);
-                        sb_appendf(output, c!(" <= "));
-                        generate_arg(rhs, output);
-                        sb_appendf(output, c!(";\n"));
-                    },
-                }
+                    Binop::BitOr        => sb_appendf(output, c!(" | ")),
+                    Binop::BitAnd       => sb_appendf(output, c!(" & ")),
+                    Binop::BitShl       => sb_appendf(output, c!(" << ")),
+                    Binop::BitShr       => sb_appendf(output, c!(" >> ")),
+                    Binop::Plus         => sb_appendf(output, c!(" + ")),
+                    Binop::Minus        => sb_appendf(output, c!(" - ")),
+                    Binop::Mult         => sb_appendf(output, c!(" * ")),
+                    Binop::Mod          => sb_appendf(output, c!(" %% ")),
+                    Binop::Less         => sb_appendf(output, c!(" < ")),
+                    Binop::Equal        => sb_appendf(output, c!(" === ")),
+                    Binop::NotEqual     => sb_appendf(output, c!(" !== ")),
+                    Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
+                    Binop::LessEqual    => sb_appendf(output, c!(" <= ")),
+                };
+                generate_arg(rhs, output);
+                sb_appendf(output, c!(";\n"));
             }
             Op::Funcall{result, name, args} => {
                 sb_appendf(output, c!("vars[%zu] = %s("), result - 1, name);
