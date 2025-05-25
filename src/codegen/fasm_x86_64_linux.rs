@@ -153,6 +153,14 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("    setge dl\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
             }
+            Op::LessEqual {index, lhs, rhs} => {
+                load_arg_to_reg(lhs, c!("rax"), output);
+                load_arg_to_reg(rhs, c!("rbx"), output);
+                sb_appendf(output, c!("    xor rdx, rdx\n"));
+                sb_appendf(output, c!("    cmp rax, rbx\n"));
+                sb_appendf(output, c!("    setle dl\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+            }
             Op::Funcall{result, name, args} => {
                 if args.count > REGISTERS.len() {
                     missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);

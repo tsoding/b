@@ -261,6 +261,7 @@ pub enum Binop {
     Equal,
     NotEqual,
     GreaterEqual,
+    LessEqual,
     BitOr,
     BitAnd,
     BitShl,
@@ -279,7 +280,7 @@ pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
     &[Binop::Equal, Binop::NotEqual],
-    &[Binop::Less, Binop::GreaterEqual],
+    &[Binop::Less, Binop::GreaterEqual, Binop::LessEqual],
     &[Binop::Plus, Binop::Minus],
     &[Binop::Mult, Binop::Mod],
 ];
@@ -293,6 +294,7 @@ impl Binop {
             token if token == '%' as i64 => Some(Binop::Mod),
             token if token == '<' as i64 => Some(Binop::Less),
             CLEX_greatereq               => Some(Binop::GreaterEqual),
+            CLEX_lesseq                  => Some(Binop::LessEqual),
             token if token == '=' as i64 => Some(Binop::Assign),
             token if token == '|' as i64 => Some(Binop::BitOr),
             token if token == '&' as i64 => Some(Binop::BitAnd),
@@ -335,6 +337,7 @@ pub enum Op {
     Equal          {index: usize, lhs: Arg, rhs: Arg},
     NotEqual       {index: usize, lhs: Arg, rhs: Arg},
     GreaterEqual   {index: usize, lhs: Arg, rhs: Arg},
+    LessEqual      {index: usize, lhs: Arg, rhs: Arg},
     BitOr          {index: usize, lhs: Arg, rhs: Arg},
     BitAnd         {index: usize, lhs: Arg, rhs: Arg},
     BitShl         {index: usize, lhs: Arg, rhs: Arg},
@@ -562,6 +565,11 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                     Binop::GreaterEqual  => {
                         let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                         push_opcode(Op::GreaterEqual{index, lhs, rhs}, input_path, l, c);
+                        lhs = Arg::AutoVar(index);
+                    }
+                    Binop::LessEqual  => {
+                        let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                        push_opcode(Op::LessEqual{index, lhs, rhs}, input_path, l, c);
                         lhs = Arg::AutoVar(index);
                     }
                     Binop::AssignBitOr => {
@@ -1133,7 +1141,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     cmd_append! {
                         &mut cmd,
                         *(run_args).items.add(i),
-                    }                   
+                    }
                 }
 
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
@@ -1198,7 +1206,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     cmd_append! {
                         &mut cmd,
                         *(run_args).items.add(i),
-                    }                   
+                    }
                 }
 
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
