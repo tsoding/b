@@ -2,17 +2,12 @@ nop() {
     return;
 }
 
-a; // TODO: Pass as function parameter once parameters implemented.
-b; // TODO: Pass as function parameter once parameters implemented.
-
-add() {
+add(a, b) {
     return (a + b);
 }
 
 main() {
     extrn printf;
     nop();
-    a = 34;
-    b = 35;
-    printf("%d\n", add());
+    printf("%d\n", add(34, 35));
 }
