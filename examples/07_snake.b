@@ -1,5 +1,5 @@
 // Copyright 2025 Yui <yui300127@gmail.com>
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining
 // a copy of this software and associated documentation files (the
 // "Software"), to deal in the Software without restriction, including
@@ -7,10 +7,10 @@
 // distribute, sublicense, and/or sell copies of the Software, and to
 // permit persons to whom the Software is furnished to do so, subject to
 // the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be
 // included in all copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 // EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
@@ -26,10 +26,10 @@
 // This program uses POSIX specific functions to handle input
 // also ANSI escape code for drawing to the screen
 // so there's no chance to get it to run on html-js target
-// 
+//
 // due to the compiler still being early in development
 // there are alot of "hacks" in the code to get around
-// some limitations, like assuming the memory layout of 
+// some limitations, like assuming the memory layout of
 // C structures, usage of magic constants, usage of
 // memset/memcopy to write specific memory regions that are
 // smaller than the machine word size, replacing structs and
@@ -77,7 +77,7 @@ width;
 height;
 apple_size;
 frame;
-dead; 
+dead;
 rgb;
 
 
@@ -196,10 +196,9 @@ init_globals() {
   facing = RIGHT;
 }
 
-unreachable_message;
-unreachable() {
+unreachable(message) {
   extrn printf, abort;
-  printf("\nUNREACHABLE: %s\n", unreachable_message);
+  printf("\nUNREACHABLE: %s\n", message);
   abort();
 }
 
@@ -210,7 +209,7 @@ render() {
 
   // stb_c_lexer does not support hex or octal escape-
   // sequences in strings, check `stb__clex_parse_char`.
-  
+
   printf("%c[H", 27);
   x=0; while (x < width+2) { x+=1;
     printf("%c[38;5;238m██", 27);
@@ -218,7 +217,7 @@ render() {
   printf("%c[H", 27);
   printf("%c[48;5;238m%c[38;5;232m", 27, 27);
   printf("  Score: %-4d Body length: %-4d Frame time(ms): %d\n", score, body_len, frame_time);
-  
+
 
   // !when for loops
   y=0; while (y < height) {
@@ -263,8 +262,7 @@ render() {
         } else if (facing == LEFT) {
           printf("█▀");
         } else {
-          unreachable_message = "render head direction check";
-          unreachable();
+          unreachable("render head direction check");
         }
       } else if (tile == APPLE) {
         // auto color;
@@ -275,8 +273,7 @@ render() {
         // printf("%c[38;5;%dm██", 27, color);
         printf("%c[38;5;196m██", 27);
       } else {
-        unreachable_message = "render tile type check";
-        unreachable();
+        unreachable("render tile type check");
       }
       x+=1;
     }
@@ -365,7 +362,7 @@ update() {
 
   extrn memmove, memcpy;
   memmove(body+W2, body, (body_len-1)*W2);
-  memcpy(body, head, W2); 
+  memcpy(body, head, W2);
 
   // need -=
   pos = head; pos_get();
@@ -382,8 +379,7 @@ update() {
     if (x == 0) x = width - 1;
     else x = x - 1;
   } else {
-    unreachable_message = "update facing direction check";
-    unreachable();
+    unreachable("update facing direction check");
   }
   pos_set();
 
