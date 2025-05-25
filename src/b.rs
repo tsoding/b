@@ -1114,7 +1114,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
-                c!("cc"), c!("-o"), effective_output_path, output_obj_path,
+                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             for i in 0..(*linker).count {
                 cmd_append!{
