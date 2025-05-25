@@ -45,10 +45,13 @@ macro_rules! missingf {
         abort();
     }}
 }
-// TODO: Migrate missingf_codegen to missingf
-//       Needed right now due to it still requiring the lexer.
+
+// TODO: missingf_loc!() should not be a thing
+//   See TODO(2025-05-25 12:08:38). We should not use stb_lex_location directly. As a result
+//   of solving TODO(2025-05-25 12:08:38) both missingf!() and missingf_loc!() should be merged
+//   into a single thing that operates on pair (where_firstchar, input_stream).
 #[macro_export]
-macro_rules! missingf_codegen {
+macro_rules! missingf_loc {
     ($t:expr, $($args:tt)*) => {{
         let file = file!();
         fprintf(stderr, c!("%s:%d:%d: TODO: "), $t.input_path, $t.location.line_number, $t.location.line_offset + 1);
@@ -349,7 +352,7 @@ pub struct OpWithLocation {
 
 pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
     let mut loc: stb_lex_location = zeroed();
-    // TODO: THIS IS SUPER SLOW!!!
+    // TODO(2025-05-25 12:08:38): THIS IS SUPER SLOW!!!
     // From the documentation string of stb_c_lexer_get_location() in stb_c_lexer.h:
     //
     // > this inefficient function returns the line number and character offset of a

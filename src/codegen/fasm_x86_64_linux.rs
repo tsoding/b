@@ -2,7 +2,7 @@ use core::ffi::*;
 use crate::{Op, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::missingf_codegen;
+use crate::missingf_loc;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
@@ -140,7 +140,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
             Op::Funcall{result, name, args} => {
                 const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8")];
                 if args.count > REGISTERS.len() {
-                    missingf_codegen!((*body)[i], c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
+                    missingf_loc!((*body)[i], c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];
