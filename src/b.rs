@@ -412,7 +412,7 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 
 pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
     stb_c_lexer_get_token(l);
-    match (*l).token {
+    let arg = match (*l).token {
         token if token == '(' as i64 => {
             let result = compile_expression(l, input_path, c)?;
             get_and_expect_clex(l, input_path, ')' as i64)?;
@@ -476,6 +476,26 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         _ => {
             missingf!(l, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
         }
+    };
+
+    let Some((arg, is_lvalue)) = arg else {
+        return None;
+    };
+
+    let saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+
+    if (*l).token == '[' as i64 {
+        let (offset, _) = compile_expression(l, input_path, c)?;
+        get_and_expect_clex(l, input_path, ']' as i64)?;
+
+        let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+        push_opcode(Op::Add {index: result, lhs: arg, rhs: offset}, input_path, l, c);
+
+        Some((Arg::Ref(result), true))
+    } else {
+        (*l).parse_point = saved_point;
+        Some((arg, is_lvalue))
     }
 }
 
