@@ -340,7 +340,6 @@ pub enum Op {
     JmpIfNot       {addr: usize, arg: Arg},
 }
 
-// TODO: Rename to a more sensible name (naming is the hardest)
 #[derive(Clone, Copy)]
 pub struct OpWithLocation {
     pub opcode: Op,
