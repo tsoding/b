@@ -94,7 +94,7 @@ pub unsafe fn generate_function(name: *const c_char, auto_vars_count: usize, bod
             Op::Mod {index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("rax"), output);
                 load_arg_to_reg(rhs, c!("rbx"), output);
-                sb_appendf(output, c!("    xor rdx, rdx\n"));
+                sb_appendf(output, c!("    cqo\n"));
                 sb_appendf(output, c!("    idiv rbx\n"));
                 sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
             }
