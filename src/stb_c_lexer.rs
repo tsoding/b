@@ -79,5 +79,5 @@ extern "C" {
     #[link_name="stb_c_lexer_get_token"]
     pub fn stb_c_lexer_get_token(lexer: *mut stb_lexer) -> c_int;
     #[link_name="stb_c_lexer_get_location"]
-    pub fn stb_c_lexer_get_location(lexer: *const stb_lexer, hwere: *const c_char, loc: *mut stb_lex_location);
+    pub fn stb_c_lexer_get_location(input_stream: *const c_char, hwere: *const c_char, loc: *mut stb_lex_location);
 }
