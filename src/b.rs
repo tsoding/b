@@ -745,6 +745,7 @@ pub unsafe fn usage() {
 #[derive(Clone, Copy)]
 pub struct Func {
     name: *const c_char,
+    name_loc: Loc,
     body: Array<OpWithLocation>,
     params_count: usize,
     auto_vars_count: usize,
@@ -820,6 +821,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
             da_append(&mut (*c).funcs, Func {
                 name,
+                name_loc,
                 body: (*c).func_body,
                 params_count,
                 auto_vars_count: (*c).auto_vars_ator.max,
