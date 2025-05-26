@@ -157,7 +157,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         sb_appendf(output, c!("    msub x2, x2, x1, x0\n"));
                         sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
                     }
-                    Binop::Div => missingf!(op.loc, c!("Division on gas_aarch64_linux")),
+                    Binop::Div => {
+                        load_arg_to_reg(lhs, c!("x0"), output, op.loc);
+                        load_arg_to_reg(rhs, c!("x1"), output, op.loc);
+                        sb_appendf(output, c!("    sdiv x2, x0, x1\n"));
+                        sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
+                    }
                     Binop::Mult => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
