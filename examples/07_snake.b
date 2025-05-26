@@ -21,7 +21,7 @@
 
 // tested using the B compiler made by tsoding
 // https://github.com/tsoding/b
-// (22/05/2025 09:02)
+// (26/05/2025 01:49)
 //
 // This program uses POSIX specific functions to handle input
 // also ANSI escape code for drawing to the screen
@@ -42,26 +42,27 @@
 // constants
 W;
 W2;
+X;
+Y;
 STDIN;
 STDOUT;
 TCSAFLUSH;
 FIONREAD;
 TIOCGWINSZ;
 
-// enum tile
+// enum Tile
 EMPTY;
 BODY;
 HEAD;
 APPLE;
 
-// enum facing
+// enum Direction
 UP;
 RIGHT;
 DOWN;
 LEFT;
 
 // state
-stop;
 screen;
 screen_size;
 input_ch;
@@ -79,71 +80,49 @@ apple_size;
 frame;
 dead;
 rgb;
+just_died;
 
+body_i(i) return (body + i*W2);
+screen_xy(x, y) return (screen + (x + y*width)*W);
 
-// poor man's structs
-pos; pos2; pos3; x; y; pos_eq; offset;
-pos_get() { x = *pos; y = *(pos+W); }
-pos_set() { *pos = x; *(pos+W) = y; }
-pos_offset() { pos += offset*W2; }
-pos2_offset() { pos2 += offset*W2; }
-pos_cmp() {
-  auto x1, y1;
-  pos_get();
-  x1 = x;
-  y1 = y;
-  pos3 = pos;
-  pos = pos2;
-  pos_get();
-  pos = pos3;
-  pos_eq = x==x1 & y==y1;
-}
-
-
-is_colliding_with_apple;
-check_apple_collision() {
-  pos2 = pos;
-  pos = apple; pos_get();
-  auto ox, oy; ox = x; oy = y;
-  is_colliding_with_apple = 0;
-  auto i; i=0; while (i < apple_size) {
-    auto j; j=0; while (j < apple_size) {
-      x = ox + i;
-      y = oy + j;
-      pos_set(); pos_cmp();
-      is_colliding_with_apple |= pos_eq;
-      j += 1;
+is_colliding_with_apple(pos) {
+  auto x, y, dx, dy, is_colliding;
+  is_colliding = 0;
+  dy=0; while (dy < apple_size) {
+    dx=0; while (dx < apple_size) {
+      x = apple[X] + dx;
+      y = apple[Y] + dy;
+      is_colliding |= pos[X]==x & pos[Y]==y;
+      dx += 1;
     }
-    i += 1;
+    dy += 1;
   }
-  x = ox; y = oy; pos_set();
+  return (is_colliding);
 }
 
 randomize_apple() {
   extrn rand;
-  auto again; again = 1;
-  while (again) {
-    x = rand() % (width - (apple_size+2))+1;
-    y = rand() % (height - (apple_size+2))+1;
-    pos = apple; pos_set();
-    pos = head; check_apple_collision();
-    again = is_colliding_with_apple;
+  auto again; again = 1; while (again) {
+    apple[X] = rand() % (width - apple_size - 2) + 1;
+    apple[Y] = rand() % (height - apple_size - 2) + 1;
+    again = is_colliding_with_apple(head);
 
     auto i; i = 0; while (i < body_len) {
-      pos = body; offset = i; pos_offset();
-      check_apple_collision();
-      again |= is_colliding_with_apple;
+      again |= is_colliding_with_apple(body_i(i));
       i += 1;
     }
+
   }
 }
 
 init_globals() {
-  extrn printf, malloc, memset, getchar, read, fflush, usleep, ioctl, exit, srand, time;
+  extrn malloc, memset, ioctl, srand, time;
   srand(time(0));
 
   W = 8;
   W2 = W*2;
+  X = 0;
+  Y = W;
   STDIN = 0;
   STDOUT = 1;
   TCSAFLUSH = 2;
@@ -151,7 +130,7 @@ init_globals() {
   FIONREAD = 21531;
 
   auto ws;
-  ws = malloc(W*2);
+  ws = malloc(16);
   ioctl(STDOUT, TIOCGWINSZ, ws);
 
   height = (*ws & 0xffff)-3;
@@ -159,6 +138,7 @@ init_globals() {
   apple_size = 3;
   dead = 0;
   frame = 0;
+  just_died = 0;
 
 
   EMPTY = 0;
@@ -171,7 +151,6 @@ init_globals() {
   DOWN = 2;
   LEFT = 3;
 
-  stop = 0;
   screen_size = width*height*W;
   screen = malloc(screen_size);
   memset(screen, EMPTY, screen_size);
@@ -182,14 +161,15 @@ init_globals() {
   bytes_remaining = malloc(W);
 
   head = malloc(W2);
-  pos = head; x = width>>1; y = height>>1; pos_set();
+  head[X] = width>>1;
+  head[Y] = height>>1;
 
   body = malloc(screen_size*W2);
-  memset(body, 255, screen_size);
+  memset(body, 255, screen_size); // fill -1
   body_len = 5;
   score = 0;
 
-  apple = malloc(screen_size*W2);
+  apple = malloc(W2);
   randomize_apple();
 
   frame_time = 100;
@@ -203,7 +183,6 @@ unreachable(message) {
 }
 
 render() {
-  // I'd love to use putchar put character literals are not implemented
   extrn printf;
   auto y, x, tile;
 
@@ -223,11 +202,12 @@ render() {
   y=0; while (y < height) {
     printf("%c[38;5;238m██", 27);
     x=0; while (x < width) {
-      tile = *(screen + (x+y*width)*W);
+      tile = *screen_xy(x, y);
       if (tile == EMPTY) {
         printf("%c[48;5;233m  ", 27);
       } else if (tile == BODY) {
-        if (dead) printf("%c[38;5;245m██", 27);
+        if (just_died) printf("%c[38;5;65m██", 27);
+        else if (dead) printf("%c[38;5;245m██", 27);
         else if (rgb) {
           auto r, g, b, f;
           f = frame*35;
@@ -240,7 +220,8 @@ render() {
           printf("%c[38;2;%d;%d;%dm██", 27, r, g, b);
        } else printf("%c[38;5;41m██", 27);
       } else if (tile == HEAD) {
-        if (dead) printf("%c[48;5;245m", 27);
+        if (just_died) printf("%c[48;5;65m", 27);
+        else if (dead) printf("%c[48;5;245m", 27);
         else if (rgb) {
           auto r, g, b, f;
           f = frame*35;
@@ -262,18 +243,12 @@ render() {
         } else if (facing == LEFT) {
           printf("█▀");
         } else {
-          unreachable("render head direction check");
+          unreachable("in render(), autovar `facing` containt unknown Direction variant");
         }
       } else if (tile == APPLE) {
-        // auto color;
-        // color = (frame*2) % 64;
-        // if (color < 6) color = 196 + color;
-        // else if (color < 12) color = 207 - color;
-        // else color = 196;
-        // printf("%c[38;5;%dm██", 27, color);
         printf("%c[38;5;196m██", 27);
       } else {
-        unreachable("render tile type check");
+        unreachable("in render(), autovar `tile` containt unknown Tile variant");
       }
       x+=1;
     }
@@ -290,14 +265,14 @@ render() {
 
 orig_termios;
 enable_raw_mode() {
-  extrn malloc, tcgetattr, tcsetattr, printf, memcpy, memset;
+  extrn malloc, tcgetattr, tcsetattr, printf, memset;
   orig_termios = malloc(64);
   tcgetattr(STDIN, orig_termios);
 
   auto raw;
   raw = malloc(64);
-  *raw = *orig_termios & 0xfffffff5;
-  memcpy(raw+4, orig_termios+4, 4); // HOW TO SET ONLY 32-BITS ??
+  memset(raw, 0, 64);
+  *raw = *orig_termios & 0xfffffffffffffff5;
 
   tcsetattr(STDIN, TCSAFLUSH, raw);
   printf("%c[?25l", 27);
@@ -310,99 +285,101 @@ disable_raw_mode() {
 }
 
 handle_user_input() {
-  extrn read, ioctl;
-  auto f;
-  f = facing;
-  ioctl(STDIN, FIONREAD, bytes_remaining);
-  while (*bytes_remaining != 0) {
-    read(STDIN, input_ch, 1);
-    if (*input_ch == 113) { stop = 1; } // q
-    if (!dead) {
-      if (*input_ch == 119 & f != DOWN)  { facing = UP;    } // w
-      if (*input_ch == 97  & f != RIGHT) { facing = LEFT; } // a
-      if (*input_ch == 115 & f != UP)    { facing = DOWN;  } // s
-      if (*input_ch == 100 & f != LEFT)  { facing = RIGHT;  } // d
-      if (*input_ch == 114) { rgb = !rgb; } // r
-    } else {
-      init_globals();
-    }
+  extrn read, ioctl, usleep;
+  if (just_died) {
+    just_died = 0;
+    usleep(1000000);
     ioctl(STDIN, FIONREAD, bytes_remaining);
+    auto i; i = 0; while (i < *bytes_remaining) { i += 1;
+      read(STDIN, input_ch, 1);
+    }
+  } else {
+    auto f;
+    f = facing;
+    ioctl(STDIN, FIONREAD, bytes_remaining);
+    while (*bytes_remaining != 0) {
+      read(STDIN, input_ch, 1);
+      if (*input_ch == 113) { return (1); } // q -> exit=true
+      else if (!dead) {
+        if (*input_ch == 119 & f != DOWN)  { facing = UP;     } // w
+        if (*input_ch == 97  & f != RIGHT) { facing = LEFT;   } // a
+        if (*input_ch == 115 & f != UP)    { facing = DOWN;   } // s
+        if (*input_ch == 100 & f != LEFT)  { facing = RIGHT;  } // d
+        if (*input_ch == 114) { rgb = !rgb; } // r
+      } else {
+        init_globals();
+      }
+      ioctl(STDIN, FIONREAD, bytes_remaining);
+    }
   }
+  return (0); // exit=false
 }
 
-// TODO: examples/06_snake.b crashes on gas_aarch64_linux somewhere in draw_screen()
 draw_screen() {
   extrn memset;
   memset(screen, EMPTY, screen_size);
-  auto i, j;
-  i = 0;
-  while (i < body_len) {
-    pos = body; offset = i; pos_offset(); pos_get();
-    *(screen + (x+y*width)*W) = BODY;
+
+  auto i; i = 0; while (i < body_len) {
+    auto segment;
+    segment = body_i(i);
+    if(segment[X] != -1 & segment[Y] != -1)
+      *screen_xy(segment[X], segment[Y]) = BODY;
     i += 1;
   }
 
-  pos = head; pos_get();
-  *(screen + (x+y*width)*W) = HEAD;
+  *screen_xy(head[X], head[Y]) = HEAD;
 
-  pos = apple; pos_get();
-  i = 0; while (i < apple_size) {
-    j = 0; while (j < apple_size) {
-      *(screen + ((x+i)+(y+j)*width)*W) = APPLE;
-      j += 1;
+  auto x, y, dx, dy;
+  dy = 0; while (dy < apple_size) {
+    dx = 0; while (dx < apple_size) {
+      x = apple[X] + dx;
+      y = apple[Y] + dy;
+      *screen_xy(x, y) = APPLE;
+      dx += 1;
     }
-    i += 1;
+    dy += 1;
   }
-  *(screen + (x+y*width)*W) = APPLE;
+  *screen_xy(x, y) = APPLE;
   render();
 }
 
 update() {
-  extrn memset;
+  extrn memset, memmove, memcpy;
 
-  extrn memmove, memcpy;
-  memmove(body+W2, body, (body_len-1)*W2);
+  memmove(body_i(1), body, (body_len-1)*W2);
   memcpy(body, head, W2);
 
-  // need -=
-  pos = head; pos_get();
+  // need ternary operator
   if (facing == UP) {
-    if (y == 0) y = height - 1;
-    else y = y - 1;
+    head[Y] = head[Y] - 1;
+    if (head[Y] < 0) head[Y] += height;
   } else if (facing == DOWN){
-    y += 1;
-    y = y % height;
+    head[Y] = (head[Y]+1) % height;
   } else if (facing == RIGHT){
-    x += 1;
-    x = x % width;
+    head[X] = (head[X]+1) % width;
   } else if (facing == LEFT){
-    if (x == 0) x = width - 1;
-    else x = x - 1;
+    head[X] = head[X] - 1;
+    if (head[X] < 0) head[X] += width;
   } else {
-    unreachable("update facing direction check");
+    unreachable("in update(), autovar `facing` containt unknown direction variant");
   }
-  pos_set();
 
-
-  pos = head; check_apple_collision();
-  if (is_colliding_with_apple) {
+  if (is_colliding_with_apple(head)) {
     body_len += 3;
     score += 1;
     randomize_apple();
   }
 
   auto i; i = 0; while (i < body_len) {
-    pos = body; offset = i; pos_offset();
-    pos2 = head; pos_cmp();
-    dead |= pos_eq;
+    auto segment;
+    segment = body_i(i);
+    dead |= head[X]==segment[X] & head[Y]==segment[Y];
     i += 1;
   }
 
   if (dead) {
-    pos = body;
-    pos_get();
-    pos = head;
-    pos_set();
+    memcpy(head, body, W2);
+    just_died = 1;
   }
 
   // !when division
@@ -415,12 +392,10 @@ main() {
   randomize_apple();
   enable_raw_mode();
 
-  // having `break` would be nice
-  // also `true` and `false`
-  while (!stop) {
+  auto exit; exit = 0; while (!exit) {
     draw_screen();
     usleep(frame_time*1000);
-    handle_user_input();
+    exit = handle_user_input();
     if (!dead) update();
     frame += 1;
   }
