@@ -8,6 +8,71 @@
     <pre id="log"></pre>
     <script>
 "use strict";
+class Memory {
+    #globals = {};
+    #stacks = [];
+    #stack_pointer;
+    #heap_base;
+    #memory;
+    #view;
+
+    constructor(initialized_data, globals, stack_size) {
+        for(let i = 0; i < globals.length; i++)
+            this.#globals[globals[i]] = initialized_data.length + i*8;
+
+        this.#stack_pointer = initialized_data.length + globals.length*8;
+        this.#heap_base = this.#stack_pointer + stack_size;
+        this.#memory = new ArrayBuffer(this.#heap_base, { maxByteLength: 2**31-1 });
+        this.#view = new DataView(this.#memory);
+
+        this.view(0, initialized_data.length).set(initialized_data);
+    }
+
+    view(start, length) {
+        return new Uint8Array(
+            this.#memory,
+            Number(start),
+            length ? Number(length) : undefined
+        );
+    }
+
+    slice(start, length) {
+        return this.#memory.slice(
+            Number(start),
+            length ? Number(start)+Number(length) : undefined
+        );
+    }
+
+    alloc(size) {
+        const ptr = this.#memory.byteLength;
+        this.#memory.resize(ptr+Number(size));
+        return BigInt(ptr);
+    }
+
+    fill(start, byte, size) {
+        let bytes = Array(size).fill(Number(byte));
+        this.view(start, size).set(bytes);
+    }
+
+    get(ptr)                { return this.#view.getBigInt64(Number(ptr),        true); }
+    set(ptr, value)         {        this.#view.setBigInt64(Number(ptr), value, true); }
+    get_global(name)        { return this.get(this.#globals[name]                   ); }
+    set_global(name, value) {        this.set(this.#globals[name], value            ); }
+    get_local(index)        { return this.get(this.#stack_pointer - index*8         ); }
+    set_local(index, value) {        this.set(this.#stack_pointer - index*8, value  ); }
+
+    push_stack(auto_vars_count) {
+        this.#stacks.push(this.#stack_pointer);
+        this.#stack_pointer += auto_vars_count*8;
+        if(this.#stack_pointer >= this.#heap_base)
+            throw new Error("Stack overflow");
+    }
+
+    pop_stack() {
+        this.#stack_pointer = this.#stacks.pop();
+    }
+}
+
 // The compile B program
 <<<GENERATED>>>
 
@@ -27,18 +92,19 @@ function __print_string(s) {
 }
 function putchar(code) {
     __print_string(String.fromCharCode(code));
+    return code;
 }
 function strlen(ptr) {
-    return (new Uint8Array(memory, ptr)).indexOf(0);
+    return memory.view(ptr).indexOf(0);
 }
 function isdigit(c) {
-    c -= 48;
-    return 0 <= c && c <= 9;
+    c -= 48n;
+    return 0n <= c && c <= 9n;
 }
 function printf(fmt, ...args) {
     const n = strlen(fmt);
     // TODO: print formatting is not fully implemented
-    const bytes = memory.slice(fmt, fmt+n);
+    const bytes = memory.slice(fmt, n);
     const str = utf8decoder.decode(bytes);
 
     for (let i = 0; i < str.length;) {
@@ -47,7 +113,7 @@ function printf(fmt, ...args) {
             if (i >= str.length) throw new Error("Unfinished formating sequence");
 
             let width = 0;
-            while (isdigit(str.charCodeAt(i)) && i < str.length) {
+            while (isdigit(BigInt(str.charCodeAt(i))) && i < str.length) {
                 width = width*10 + str.charCodeAt(i) - 48;
                 i += 1;
             }
@@ -71,16 +137,16 @@ function printf(fmt, ...args) {
             i += 1;
         }
     }
+
+    // TODO: return number of bytes printed
+    return BigInt(0);
 }
 function malloc(size) {
-    const ptr = memory.byteLength;
-    memory.resize(ptr+size);
-    return ptr;
+    return memory.alloc(size);
 }
 function memset(ptr, byte, size) {
-    let view = new Uint8Array(memory, ptr, size);
-    let bytes = Array(size).fill(byte);
-    view.set(bytes);
+    memory.fill(ptr, byte, size);
+    return ptr;
 }
 main();
 __flush();
