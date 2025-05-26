@@ -100,6 +100,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         dump_arg(output, rhs);
                         sb_appendf(output, c!(")\n"));
                     }
+                    Binop::Div => {
+                        sb_appendf(output, c!("    Div(%zu, "), index);
+                        dump_arg(output, lhs);
+                        sb_appendf(output, c!(", "));
+                        dump_arg(output, rhs);
+                        sb_appendf(output, c!(")\n"));
+                    }
                     Binop::Mult => {
                         sb_appendf(output, c!("    Mult(%zu, "), index);
                         dump_arg(output, lhs);

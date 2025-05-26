@@ -118,6 +118,13 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         sb_appendf(output, c!("    idiv rbx\n"));
                         sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
                     }
+                    Binop::Div => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    cqo\n"));
+                        sb_appendf(output, c!("    idiv rbx\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), index*8);
+                    }
                     Binop::Mult => {
                         load_arg_to_reg(lhs, c!("rax"), output);
                         load_arg_to_reg(rhs, c!("rbx"), output);

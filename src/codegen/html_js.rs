@@ -66,23 +66,28 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
             Op::Binop{binop, index, lhs, rhs} => {
                 sb_appendf(output, c!("vars[%zu] = "), index - 1);
-                generate_arg(lhs, output);
                 match binop {
-                    Binop::BitOr        => sb_appendf(output, c!(" | ")),
-                    Binop::BitAnd       => sb_appendf(output, c!(" & ")),
-                    Binop::BitShl       => sb_appendf(output, c!(" << ")),
-                    Binop::BitShr       => sb_appendf(output, c!(" >> ")),
-                    Binop::Plus         => sb_appendf(output, c!(" + ")),
-                    Binop::Minus        => sb_appendf(output, c!(" - ")),
-                    Binop::Mult         => sb_appendf(output, c!(" * ")),
-                    Binop::Mod          => sb_appendf(output, c!(" %% ")),
-                    Binop::Less         => sb_appendf(output, c!(" < ")),
-                    Binop::Equal        => sb_appendf(output, c!(" === ")),
-                    Binop::NotEqual     => sb_appendf(output, c!(" !== ")),
-                    Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
-                    Binop::LessEqual    => sb_appendf(output, c!(" <= ")),
+                    Binop::BitOr        => { generate_arg(lhs, output); sb_appendf(output, c!(" | "));   generate_arg(rhs, output); }
+                    Binop::BitAnd       => { generate_arg(lhs, output); sb_appendf(output, c!(" & "));   generate_arg(rhs, output); }
+                    Binop::BitShl       => { generate_arg(lhs, output); sb_appendf(output, c!(" << "));  generate_arg(rhs, output); }
+                    Binop::BitShr       => { generate_arg(lhs, output); sb_appendf(output, c!(" >> "));  generate_arg(rhs, output); }
+                    Binop::Plus         => { generate_arg(lhs, output); sb_appendf(output, c!(" + "));   generate_arg(rhs, output); }
+                    Binop::Minus        => { generate_arg(lhs, output); sb_appendf(output, c!(" - "));   generate_arg(rhs, output); }
+                    Binop::Mult         => { generate_arg(lhs, output); sb_appendf(output, c!(" * "));   generate_arg(rhs, output); }
+                    Binop::Mod          => { generate_arg(lhs, output); sb_appendf(output, c!(" %% "));  generate_arg(rhs, output); }
+                    Binop::Div          => {
+                        sb_appendf(output, c!("Math.trunc("));
+                        generate_arg(lhs, output);
+                        sb_appendf(output, c!(" / "));
+                        generate_arg(rhs, output);
+                        sb_appendf(output, c!(")"));
+                    }
+                    Binop::Less         => { generate_arg(lhs, output); sb_appendf(output, c!(" < "));   generate_arg(rhs, output); }
+                    Binop::Equal        => { generate_arg(lhs, output); sb_appendf(output, c!(" === ")); generate_arg(rhs, output); }
+                    Binop::NotEqual     => { generate_arg(lhs, output); sb_appendf(output, c!(" !== ")); generate_arg(rhs, output); }
+                    Binop::GreaterEqual => { generate_arg(lhs, output); sb_appendf(output, c!(" >= "));  generate_arg(rhs, output); }
+                    Binop::LessEqual    => { generate_arg(lhs, output); sb_appendf(output, c!(" <= "));  generate_arg(rhs, output); }
                 };
-                generate_arg(rhs, output);
                 sb_appendf(output, c!(";\n"));
             }
             Op::Funcall{result, name, args} => {

@@ -246,13 +246,13 @@ pub enum Arg {
     DataOffset(usize),
 }
 
-// TODO: add support for binary division expression
 #[derive(Clone, Copy, PartialEq)]
 pub enum Binop {
     Plus,
     Minus,
     Mult,
     Mod,
+    Div,
     Less,
     Equal,
     NotEqual,
@@ -272,7 +272,7 @@ pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::Equal, Binop::NotEqual],
     &[Binop::Less, Binop::GreaterEqual, Binop::LessEqual],
     &[Binop::Plus, Binop::Minus],
-    &[Binop::Mult, Binop::Mod],
+    &[Binop::Mult, Binop::Mod, Binop::Div],
 ];
 
 impl Binop {
@@ -288,6 +288,7 @@ impl Binop {
             CLEX_pluseq                  => Some(Some(Binop::Plus)),
             CLEX_minuseq                 => Some(Some(Binop::Minus)),
             CLEX_muleq                   => Some(Some(Binop::Mult)),
+            CLEX_diveq                   => Some(Some(Binop::Div)),
             _ => None,
         }
     }
@@ -297,6 +298,7 @@ impl Binop {
             token if token == '+' as i64 => Some(Binop::Plus),
             token if token == '-' as i64 => Some(Binop::Minus),
             token if token == '*' as i64 => Some(Binop::Mult),
+            token if token == '/' as i64 => Some(Binop::Div),
             token if token == '%' as i64 => Some(Binop::Mod),
             token if token == '<' as i64 => Some(Binop::Less),
             CLEX_greatereq               => Some(Binop::GreaterEqual),
