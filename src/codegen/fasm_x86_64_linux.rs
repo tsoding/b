@@ -169,7 +169,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             }
             Op::Funcall{result, name, args} => {
                 if args.count > REGISTERS.len() {
-                    missingf!(op.input_stream, op.input_path, op.location, c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
+                    missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];

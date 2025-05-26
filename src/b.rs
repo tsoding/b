@@ -25,22 +25,29 @@ use crust::libc::*;
 use arena::Arena;
 use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
 
+#[derive(Clone, Copy)]
+pub struct Loc {
+    pub input_path:   *const c_char,
+    pub input_start:  *const c_char,
+    pub input_offset: *const c_char,
+}
+
 macro_rules! diagf {
-    ($input_stream:expr, $path:expr, $where:expr, $($args:tt)*) => {{
-        let mut loc: stb_lex_location = zeroed();
-        stb_c_lexer_get_location($input_stream, $where, &mut loc);
-        fprintf(stderr, c!("%s:%d:%d: "), $path, loc.line_number, loc.line_offset + 1);
+    ($loc:expr, $($args:tt)*) => {{
+        let mut stb_loc: stb_lex_location = zeroed();
+        stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
+        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
         fprintf(stderr, $($args)*);
     }};
 }
 
 #[macro_export]
 macro_rules! missingf {
-    ($input_stream:expr, $path:expr, $where:expr, $($args:tt)*) => {{
+    ($loc:expr, $($args:tt)*) => {{
         let file = file!();
-        let mut loc = zeroed();
-        crate::stb_c_lexer_get_location($input_stream, $where, &mut loc);
-        fprintf(stderr, c!("%s:%d:%d: TODO: "), $path, loc.line_number, loc.line_offset + 1);
+        let mut stb_loc = zeroed();
+        crate::stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
+        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
         fprintf(stderr, $($args)*);
         fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
         abort();
@@ -89,6 +96,14 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
     }
 }
 
+pub unsafe fn lexer_loc(l: *const stb_lexer, input_path: *const c_char) -> Loc {
+    Loc {
+        input_path,
+        input_start: (*l).input_stream,
+        input_offset: (*l).where_firstchar,
+    }
+}
+
 pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [i64]) -> Option<()> {
     for i in 0..clexes.len() {
         if (*clexes)[i] == (*l).token {
@@ -109,7 +124,7 @@ pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clex
     }
     da_append(&mut sb, 0);
 
-    diagf!((*l).input_stream, input_path, (*l).where_firstchar, c!("ERROR: expected %s, but got %s\n"), sb.items, display_token_kind_temp((*l).token));
+    diagf!(lexer_loc(l, input_path), c!("ERROR: expected %s, but got %s\n"), sb.items, display_token_kind_temp((*l).token));
 
     free(sb.items);
     None
@@ -127,7 +142,7 @@ pub unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, 
 pub unsafe fn expect_clex_id(l: *const stb_lexer, input_path: *const c_char, id: *const c_char) -> Option<()> {
     expect_clex(l, input_path, CLEX_id)?;
     if strcmp((*l).string, id) != 0 {
-        diagf!((*l).input_stream, input_path, (*l).where_firstchar, c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
+        diagf!(lexer_loc(l, input_path), c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
         return None;
     }
     Some(())
@@ -148,7 +163,7 @@ pub enum Storage {
 #[derive(Clone, Copy)]
 pub struct Var {
     pub name: *const c_char,
-    pub hwere: *const c_char,
+    pub loc: Loc,
     pub storage: Storage,
 }
 
@@ -189,16 +204,16 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
-pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, name: *const c_char, name_where: *const c_char, storage: Storage) -> Option<()> {
+pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
     let scope = da_last_mut(vars);
     let existing_var = find_var_near(scope, name);
     if !existing_var.is_null() {
-        diagf!((*l).input_stream, input_path, name_where, c!("ERROR: redefinition of variable `%s`\n"), name);
-        diagf!((*l).input_stream, input_path, (*existing_var).hwere, c!("NOTE: the first declaration is located here\n"));
+        diagf!(lexer_loc(l, input_path), c!("ERROR: redefinition of variable `%s`\n"), name);
+        diagf!((*existing_var).loc, c!("NOTE: the first declaration is located here\n"));
         return None;
     }
 
-    da_append(scope, Var {name, storage, hwere: name_where});
+    da_append(scope, Var {name, loc, storage});
     Some(())
 }
 
@@ -325,18 +340,11 @@ pub enum Op {
 #[derive(Clone, Copy)]
 pub struct OpWithLocation {
     pub opcode: Op,
-    pub input_path: *const c_char,
-    pub input_stream: *const c_char,
-    pub location: *const c_char,
+    pub loc: Loc,
 }
 
-pub unsafe fn push_opcode(op: Op, input_path: *const c_char, l: *mut stb_lexer, c: *mut Compiler) {
-    da_append(&mut (*c).func_body, OpWithLocation {
-        opcode: op,
-        input_path: input_path,
-        input_stream: (*l).input_stream,
-        location: (*l).where_firstchar,
-    });
+pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
+    da_append(&mut (*c).func_body, OpWithLocation {opcode, loc});
 }
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
@@ -376,29 +384,29 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         token if token == '!' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::UnaryNot{result, arg}, input_path, l, c);
+            push_opcode(Op::UnaryNot{result, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(result), false))
         }
         token if token == '*' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::AutoAssign {index, arg}, input_path, l, c);
+            push_opcode(Op::AutoAssign {index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::Ref(index), true))
         }
         token if token == '-' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Negate {result: index, arg}, input_path, l, c);
+            push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(index), false))
         }
         CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
             let name = arena::strdup(&mut (*c).arena, (*l).string);
-            let name_where = (*l).where_firstchar;
+            let name_loc = lexer_loc(l, input_path);
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                diagf!((*l).input_stream, input_path, name_where, c!("ERROR: could not find name `%s`\n"), name);
+                diagf!(lexer_loc(l, input_path), c!("ERROR: could not find name `%s`\n"), name);
                 return None;
             }
 
@@ -406,7 +414,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             stb_c_lexer_get_token(l);
 
             if (*l).token == '(' as i64 {
-                Some((compile_function_call(l, input_path, c, name, name_where)?, false))
+                Some((compile_function_call(l, input_path, c, name, name_loc)?, false))
             } else {
                 (*l).parse_point = saved_point;
                 match (*var_def).storage {
@@ -429,7 +437,8 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
-            missingf!((*l).input_stream, input_path, (*l).where_firstchar, c!("Unexpected token %s not all expressions are implemented yet\n"), display_token_kind_temp((*l).token));
+            diagf!(lexer_loc(l, input_path), c!("Expected start of a primary expression by got %s\n"), display_token_kind_temp((*l).token));
+            None
         }
     };
 
@@ -443,7 +452,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         get_and_expect_clex(l, input_path, ']' as i64)?;
 
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, input_path, l, c);
+        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
 
         Some((Arg::Ref(result), true))
     } else {
@@ -470,12 +479,7 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
                 let (rhs, _) = compile_binop_expression(l, input_path, c, precedence + 1)?;
 
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                // TODO(2025-05-26 02:39:20): the location of this opcode is pointing at the end of rhs.
-                // But it should point at the location of the binop token.
-                // We should introduce a variant of push_opcode with a custom location
-                //
-                // See also TODO(2025-05-26 02:39:23)
-                push_opcode(Op::Binop {binop, index, lhs, rhs}, input_path, l, c);
+                push_opcode(Op::Binop {binop, index, lhs, rhs}, lexer_loc(l, input_path), c);
                 lhs = Arg::AutoVar(index);
 
                 lvalue = false;
@@ -498,46 +502,41 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
     stb_c_lexer_get_token(l);
 
     while let Some(binop) = Binop::from_assign_token((*l).token) {
-        let binop_where = (*l).where_firstchar;
+        let binop_loc = lexer_loc(l, input_path);
         let (rhs, _) = compile_assign_expression(l, input_path, c, precedence + 1)?;
 
         if !lvalue {
-            diagf!((*l).input_stream, input_path, binop_where, c!("ERROR: cannot assign to rvalue\n"));
+            diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
             return None;
         }
 
-        // TODO(2025-05-26 02:39:23): the locations of all these opcodes in the expression bellow are pointing at the end of rhs.
-        // But they should point at the location of the binop token.
-        // We should introduce a variant of push_opcode with a custom location
-        //
-        // See also TODO(2025-05-26 02:39:20)
         if let Some(binop) = binop {
             match lhs {
                 Arg::Ref(index) => {
                     let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, input_path, l, c);
-                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, input_path, l, c);
+                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, binop_loc, c);
+                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, binop_loc, c);
                 },
                 Arg::External(name) => {
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, input_path, l, c);
-                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, input_path, l, c)
+                    push_opcode(Op::Binop {binop, index, lhs, rhs}, binop_loc, c);
+                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, binop_loc, c)
                 }
                 Arg::AutoVar(index) => {
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, input_path, l, c)
+                    push_opcode(Op::Binop {binop, index, lhs, rhs}, binop_loc, c)
                 }
                 Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
             }
         } else {
             match lhs {
                 Arg::Ref(index) => {
-                    push_opcode(Op::Store {index, arg: rhs}, input_path, l, c);
+                    push_opcode(Op::Store {index, arg: rhs}, binop_loc, c);
                 }
                 Arg::External(name) => {
-                    push_opcode(Op::ExternalAssign {name, arg: rhs}, input_path, l, c);
+                    push_opcode(Op::ExternalAssign {name, arg: rhs}, binop_loc, c);
                 }
                 Arg::AutoVar(index) => {
-                    push_opcode(Op::AutoAssign {index, arg: rhs}, input_path, l, c);
+                    push_opcode(Op::AutoAssign {index, arg: rhs}, binop_loc, c);
                 }
                 Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
             }
@@ -568,10 +567,10 @@ pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mu
     }
 }
 
-pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, name: *const c_char, name_where: *const c_char) -> Option<Arg> {
+pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, name: *const c_char, loc: Loc) -> Option<Arg> {
     let var_def = find_var_deep(&(*c).vars, name);
     if var_def.is_null() {
-        diagf!((*l).input_stream, input_path, name_where, c!("ERROR: could not find function `%s`\n"), name);
+        diagf!(loc, c!("ERROR: could not find function `%s`\n"), name);
         return None;
     }
 
@@ -598,11 +597,11 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     match (*var_def).storage {
         Storage::External{name} => {
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Funcall {result, name, args}, input_path, l, c);
+            push_opcode(Op::Funcall {result, name, args}, lexer_loc(l, input_path), c);
             Some(Arg::AutoVar(result))
         }
         Storage::Auto{..} => {
-            missingf!((*l).input_stream, input_path, name_where, c!("calling functions from auto variables\n"));
+            missingf!(loc, c!("calling functions from auto variables\n"));
         }
     }
 }
@@ -633,7 +632,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             'vars: loop {
                 get_and_expect_clex(l, input_path, CLEX_id)?;
                 let name = arena::strdup(&mut (*c).arena, (*l).string);
-                let name_where = (*l).where_firstchar;
+                let loc = lexer_loc(l, input_path);
                 let storage = if extrn {
                     name_declare_if_not_exists(&mut (*c).extrns, name);
                     Storage::External{name}
@@ -641,7 +640,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     Storage::Auto{index}
                 };
-                declare_var(l, input_path, &mut (*c).vars, name, name_where, storage)?;
+                declare_var(l, input_path, &mut (*c).vars, name, loc, storage)?;
                 stb_c_lexer_get_token(l);
                 expect_clexes(l, input_path, &[',' as c_long, ';' as c_long])?;
                 if (*l).token == ';' as c_long {
@@ -661,7 +660,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             get_and_expect_clex(l, input_path, ')' as c_long)?;
 
             let addr_condition = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, input_path, l, c);
+            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, lexer_loc(l, input_path), c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, input_path, c)?;
@@ -671,7 +670,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
 
             if (*l).token == CLEX_id && strcmp((*l).string, c!("else")) == 0 {
                 let addr_skips_else = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: 0}, input_path, l, c);
+                push_opcode(Op::Jmp{addr: 0}, lexer_loc(l, input_path), c);
                 let addr_else = (*c).func_body.count;
                 compile_statement(l, input_path, c)?;
                 let addr_after_else = (*c).func_body.count;
@@ -692,11 +691,11 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
 
             get_and_expect_clex(l, input_path, ')' as c_long)?;
             let condition_jump = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg}, input_path, l, c);
+            push_opcode(Op::JmpIfNot{addr: 0, arg}, lexer_loc(l, input_path), c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, input_path, c)?;
-            push_opcode(Op::Jmp{addr: begin}, input_path, l, c);
+            push_opcode(Op::Jmp{addr: begin}, lexer_loc(l, input_path), c);
             let end = (*c).func_body.count;
             (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
             Some(())
@@ -704,12 +703,12 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             stb_c_lexer_get_token(l);
             expect_clexes(l, input_path, &[';' as c_long, '(' as c_long])?;
             if (*l).token == ';' as c_long {
-                push_opcode(Op::Return {arg: None}, input_path, l, c);
+                push_opcode(Op::Return {arg: None}, lexer_loc(l, input_path), c);
             } else if (*l).token == '(' as c_long {
                 let (arg, _) = compile_expression(l, input_path, c)?;
                 get_and_expect_clex(l, input_path, ')' as c_long)?;
                 get_and_expect_clex(l, input_path, ';' as c_long)?;
-                push_opcode(Op::Return {arg: Some(arg)}, input_path, l, c);
+                push_opcode(Op::Return {arg: Some(arg)}, lexer_loc(l, input_path), c);
             } else {
                 unreachable!();
             }
@@ -771,12 +770,12 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
         expect_clex(l, input_path, CLEX_id)?;
 
         let name = arena::strdup(&mut (*c).arena, (*l).string);
-        let name_where = (*l).where_firstchar;
+        let name_loc = lexer_loc(l, input_path);
 
         // TODO: maybe the keywords should be identified on the level of lexing
         if is_keyword((*l).string) {
-            diagf!((*l).input_stream, input_path, name_where, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
-            diagf!((*l).input_stream, input_path, name_where, c!("NOTE: Reserved keywords are: "));
+            diagf!(name_loc, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
+            diagf!(name_loc, c!("NOTE: Reserved keywords are: "));
             for i in 0..B_KEYWORDS.len() {
                 if i > 0 {
                     fprintf(stderr, c!(", "));
@@ -799,9 +798,9 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 'params: loop {
                     get_and_expect_clex(l, input_path, CLEX_id)?;
                     let name = arena::strdup(&mut (*c).arena, (*l).string);
-                    let name_where = (*l).where_firstchar;
+                    let name_loc = lexer_loc(l, input_path);
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    declare_var(l, input_path, &mut (*c).vars, name, name_where, Storage::Auto{index})?;
+                    declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
                     stb_c_lexer_get_token(l);
                     expect_clexes(l, input_path, &[',' as c_long, ')' as c_long])?;
@@ -817,7 +816,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             compile_statement(l, input_path, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
-            declare_var(l, input_path, &mut (*c).vars, name, name_where, Storage::External{name});
+            declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
             da_append(&mut (*c).funcs, Func {
                 name,
                 body: (*c).func_body,
@@ -829,7 +828,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
         } else { // Variable definition
             (*l).parse_point = saved_point;
             name_declare_if_not_exists(&mut (*c).globals, name);
-            declare_var(l, input_path, &mut (*c).vars, name, name_where, Storage::External{name})?;
+            declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name})?;
             get_and_expect_clex(l, input_path, ';' as c_long)?;
         }
     }
