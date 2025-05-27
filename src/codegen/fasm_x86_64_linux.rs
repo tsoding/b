@@ -140,6 +140,14 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         sb_appendf(output, c!("    setl dl\n"));
                         sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
                     }
+                    Binop::Greater => {
+                        load_arg_to_reg(lhs, c!("rax"), output);
+                        load_arg_to_reg(rhs, c!("rbx"), output);
+                        sb_appendf(output, c!("    xor rdx, rdx\n"));
+                        sb_appendf(output, c!("    cmp rax, rbx\n"));
+                        sb_appendf(output, c!("    setg dl\n"));
+                        sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
+                    }
                     Binop::Equal => {
                         load_arg_to_reg(lhs, c!("rax"), output);
                         load_arg_to_reg(rhs, c!("rbx"), output);
