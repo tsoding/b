@@ -340,6 +340,7 @@ pub enum Op {
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
+    Select         {result: usize, arg: Arg, if_true: Arg, if_false: Arg},
 }
 
 #[derive(Clone, Copy)]
@@ -558,7 +559,24 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
 }
 
 pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
-    compile_assign_expression(l, input_path, c, 0)
+    let (arg, is_lvalue) = compile_assign_expression(l, input_path, c, 0)?;
+
+    let saved_point = (*l).parse_point;
+    stb_c_lexer_get_token(l);
+
+    if (*l).token == '?' as i64 {
+        let (if_true, _) = compile_expression(l, input_path, c)?;
+        get_and_expect_clex(l, input_path, ':' as i64)?;
+        let (if_false, _) = compile_expression(l, input_path, c)?;
+
+        let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+        push_opcode(Op::Select {result, arg, if_true, if_false}, lexer_loc(l, input_path), c);
+
+        Some((Arg::AutoVar(result), false))
+    } else {
+        (*l).parse_point = saved_point;
+        Some((arg, is_lvalue))
+    }
 }
 
 pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
