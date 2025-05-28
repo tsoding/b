@@ -18,20 +18,11 @@ OBJS=\
 	$(BUILD)/flag.o \
 	$(BUILD)/arena.o
 
-$(BUILD)/b: $(RSS) $(OBJS)
+$(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
 	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
 
-$(BUILD)/nob.o: $(THIRDPARTY)/nob.h | $(BUILD)
-	clang -fPIC -g -x c -DNOB_IMPLEMENTATION -c $(THIRDPARTY)/nob.h -o $(BUILD)/nob.o
-
-$(BUILD)/stb_c_lexer.o: $(THIRDPARTY)/stb_c_lexer.h | $(BUILD)
-	clang -g -x c -DSTB_C_LEXER_IMPLEMENTATION -c $(THIRDPARTY)/stb_c_lexer.h -o $(BUILD)/stb_c_lexer.o
-
-$(BUILD)/flag.o: $(THIRDPARTY)/flag.h | $(BUILD)
-	clang -g -x c -DFLAG_IMPLEMENTATION -c $(THIRDPARTY)/flag.h -o $(BUILD)/flag.o
-
-$(BUILD)/arena.o: $(THIRDPARTY)/arena.h | $(BUILD)
-	clang -g -x c -DARENA_IMPLEMENTATION -c $(THIRDPARTY)/arena.h -o $(BUILD)/arena.o
+$(BUILD)/%.o: $(THIRDPARTY)/%.c | $(BUILD)
+	clang -fPIC -g -c $< -o $@
 
 $(BUILD):
 	mkdir -pv $(BUILD)
@@ -48,5 +39,3 @@ test: $(BUILD)/b
 	$(BUILD)/b -run tests/return.b
 	$(BUILD)/b -run tests/unary_priority.b
 	$(BUILD)/b -run tests/vector.b
-
-# TODO: use nob to build the project
