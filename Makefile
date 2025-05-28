@@ -1,6 +1,8 @@
 BUILD=build
 THIRDPARTY=thirdparty
 SRC=src
+TEST_FLAGS=-o tests/build
+
 RSS=\
 	$(SRC)/arena.rs \
 	$(SRC)/b.rs \
@@ -18,6 +20,10 @@ OBJS=\
 	$(BUILD)/flag.o \
 	$(BUILD)/arena.o
 
+define tests 
+	$(BUILD)/b -run tests/$(1).b -o tests/build/$(1)
+endef
+
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
 	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
 
@@ -29,16 +35,18 @@ $(BUILD):
 
 .PHONY: test
 test: $(BUILD)/b
-	$(BUILD)/b -run tests/assign_ref.b
-	$(BUILD)/b -run tests/compare.b
-	$(BUILD)/b -run tests/divmod.b
-	$(BUILD)/b -run tests/e.b
-	$(BUILD)/b -run tests/hello.b
-	$(BUILD)/b -run tests/inc_dec.b
-	$(BUILD)/b -run tests/literals.b
-	$(BUILD)/b -run tests/minus_2.b
-	$(BUILD)/b -run tests/return.b
-	$(BUILD)/b -run tests/ternary.b
-	$(BUILD)/b -run tests/ternary-side-effect.b
-	$(BUILD)/b -run tests/unary_priority.b
-	$(BUILD)/b -run tests/vector.b
+	mkdir -pv tests/build/
+
+	@$(call tests,assign_ref)
+	@$(call tests,compare)
+	@$(call tests,divmod)
+	@$(call tests,e)
+	@$(call tests,hello)
+	@$(call tests,inc_dec)
+	@$(call tests,literals)
+	@$(call tests,minus_2)
+	@$(call tests,return)
+	@$(call tests,ternary)
+	@$(call tests,ternary-side-effect)
+	@$(call tests,unary_priority) 
+	@$(call tests,vector) 
