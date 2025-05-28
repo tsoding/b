@@ -565,12 +565,26 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
     stb_c_lexer_get_token(l);
 
     if (*l).token == '?' as i64 {
-        let (if_true, _) = compile_expression(l, input_path, c)?;
-        get_and_expect_clex(l, input_path, ':' as i64)?;
-        let (if_false, _) = compile_expression(l, input_path, c)?;
-
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::Select {result, arg, if_true, if_false}, lexer_loc(l, input_path), c);
+
+        let addr_condition = (*c).func_body.count;
+        push_opcode(Op::JmpIfNot{addr: 0, arg}, lexer_loc(l, input_path), c);
+
+        let (if_true, _) = compile_expression(l, input_path, c)?;
+        push_opcode(Op::AutoAssign {index: result, arg: if_true}, lexer_loc(l, input_path), c);
+
+        let addr_skips_true = (*c).func_body.count;
+        push_opcode(Op::Jmp{addr: 0}, lexer_loc(l, input_path), c);
+
+        let addr_false = (*c).func_body.count;
+        get_and_expect_clex(l, input_path, ':' as i64)?;
+
+        let (if_false, _) = compile_expression(l, input_path, c)?;
+        push_opcode(Op::AutoAssign {index: result, arg: if_false}, lexer_loc(l, input_path), c);
+
+        let addr_after_false = (*c).func_body.count;
+        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg};
+        (*(*c).func_body.items.add(addr_skips_true)).opcode = Op::Jmp      {addr: addr_after_false};
 
         Some((Arg::AutoVar(result), false))
     } else {
