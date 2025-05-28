@@ -406,8 +406,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             Some((Arg::AutoVar(index), false))
         }
         token if token == CLEX_plusplus || token == CLEX_minusminus => {
-            let (lhs, is_lvalue) = compile_primary_expression(l, input_path, c)?;
-            let rhs = Arg::Literal(1);
+            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
             let loc = lexer_loc(l, input_path);
 
             let binop = match token {
@@ -428,24 +427,8 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
                 _ => unreachable!(),
             };
 
-            match lhs {
-                Arg::Ref(index) => {
-                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
-                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
-                },
-                Arg::External(name) => {
-                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
-                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
-                }
-                Arg::AutoVar(index) => {
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
-                }
-                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-            }
-
-            Some((lhs, false))
+            compile_binop(arg, Arg::Literal(1), binop, loc, c);
+            Some((arg, false))
         }
         CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
@@ -504,7 +487,6 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 
         Some((Arg::Ref(result), true))
     } else if (*l).token == CLEX_plusplus || (*l).token == CLEX_minusminus {
-        let rhs = Arg::Literal(1);
         let loc = lexer_loc(l, input_path);
 
         let binop = match (*l).token {
@@ -527,28 +509,31 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 
         let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
         push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
-
-        match arg {
-            Arg::Ref(index) => {
-                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop {binop, index: tmp, lhs: arg, rhs}, loc, c);
-                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
-            },
-            Arg::External(name) => {
-                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop {binop, index: tmp, lhs: arg, rhs}, loc, c);
-                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
-            }
-            Arg::AutoVar(index) => {
-                push_opcode(Op::Binop {binop, index, lhs: arg, rhs}, loc, c)
-            }
-            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-        }
-
+        compile_binop(arg, Arg::Literal(1), binop, loc, c);
         Some((Arg::AutoVar(pre), false))
     } else {
         (*l).parse_point = saved_point;
         Some((arg, is_lvalue))
+    }
+}
+
+// TODO: communicate to the caller of this function that is expects `lhs` to ba an lvalue
+pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
+    match lhs {
+        Arg::Ref(index) => {
+            let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+            push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
+        },
+        Arg::External(name) => {
+            let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+            push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
+        }
+        Arg::AutoVar(index) => {
+            push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
+        }
+        Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
     }
 }
 
@@ -602,22 +587,7 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
         }
 
         if let Some(binop) = binop {
-            match lhs {
-                Arg::Ref(index) => {
-                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, binop_loc, c);
-                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, binop_loc, c);
-                },
-                Arg::External(name) => {
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, binop_loc, c);
-                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, binop_loc, c)
-                }
-                Arg::AutoVar(index) => {
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, binop_loc, c)
-                }
-                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-            }
+            compile_binop(lhs, rhs, binop, binop_loc, c);
         } else {
             match lhs {
                 Arg::Ref(index) => {
