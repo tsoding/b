@@ -405,29 +405,28 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(index), false))
         }
-        token if token == CLEX_plusplus || token == CLEX_minusminus => {
-            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+        CLEX_plusplus => {
             let loc = lexer_loc(l, input_path);
+            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
 
-            let binop = match token {
-                CLEX_plusplus => {
-                    if !is_lvalue {
-                        diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-                        return None;
-                    }
-                    Binop::Plus
-                },
-                CLEX_minusminus => {
-                    if !is_lvalue {
-                        diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-                        return None;
-                    }
-                    Binop::Minus
-                },
-                _ => unreachable!(),
-            };
+            if !is_lvalue {
+                diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+                return None;
+            }
 
-            compile_binop(arg, Arg::Literal(1), binop, loc, c);
+            compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
+            Some((arg, false))
+        }
+        CLEX_minusminus => {
+            let loc = lexer_loc(l, input_path);
+            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+
+            if !is_lvalue {
+                diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+                return None;
+            }
+
+            compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
             Some((arg, false))
         }
         CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
@@ -486,30 +485,29 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
 
         Some((Arg::Ref(result), true))
-    } else if (*l).token == CLEX_plusplus || (*l).token == CLEX_minusminus {
+    } else if (*l).token == CLEX_plusplus {
         let loc = lexer_loc(l, input_path);
-
-        let binop = match (*l).token {
-            CLEX_plusplus => {
-                if !is_lvalue {
-                    diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-                    return None;
-                }
-                Binop::Plus
-            },
-            CLEX_minusminus => {
-                if !is_lvalue {
-                    diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-                    return None;
-                }
-                Binop::Minus
-            },
-            _ => unreachable!(),
-        };
+        if !is_lvalue {
+            diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+            return None;
+        }
 
         let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
         push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
-        compile_binop(arg, Arg::Literal(1), binop, loc, c);
+        compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
+
+        Some((Arg::AutoVar(pre), false))
+    } else if (*l).token == CLEX_minusminus {
+        let loc = lexer_loc(l, input_path);
+        if !is_lvalue {
+            diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+            return None;
+        }
+
+        let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
+        push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
+        compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
+
         Some((Arg::AutoVar(pre), false))
     } else {
         (*l).parse_point = saved_point;
