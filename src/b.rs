@@ -515,7 +515,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     }
 }
 
-// TODO: communicate to the caller of this function that is expects `lhs` to ba an lvalue
+// TODO: communicate to the caller of this function that it expects `lhs` to be an lvalue
 pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
     match lhs {
         Arg::Ref(index) => {
