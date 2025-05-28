@@ -405,6 +405,30 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(index), false))
         }
+        CLEX_plusplus => {
+            let loc = lexer_loc(l, input_path);
+            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+
+            if !is_lvalue {
+                diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+                return None;
+            }
+
+            compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
+            Some((arg, false))
+        }
+        CLEX_minusminus => {
+            let loc = lexer_loc(l, input_path);
+            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+
+            if !is_lvalue {
+                diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+                return None;
+            }
+
+            compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
+            Some((arg, false))
+        }
         CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
             let name = arena::strdup(&mut (*c).arena, (*l).string);
@@ -461,9 +485,53 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
 
         Some((Arg::Ref(result), true))
+    } else if (*l).token == CLEX_plusplus {
+        let loc = lexer_loc(l, input_path);
+        if !is_lvalue {
+            diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+            return None;
+        }
+
+        let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
+        push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
+        compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
+
+        Some((Arg::AutoVar(pre), false))
+    } else if (*l).token == CLEX_minusminus {
+        let loc = lexer_loc(l, input_path);
+        if !is_lvalue {
+            diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+            return None;
+        }
+
+        let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
+        push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
+        compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
+
+        Some((Arg::AutoVar(pre), false))
     } else {
         (*l).parse_point = saved_point;
         Some((arg, is_lvalue))
+    }
+}
+
+// TODO: communicate to the caller of this function that it expects `lhs` to be an lvalue
+pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
+    match lhs {
+        Arg::Ref(index) => {
+            let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+            push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
+        },
+        Arg::External(name) => {
+            let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+            push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
+        }
+        Arg::AutoVar(index) => {
+            push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
+        }
+        Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
     }
 }
 
@@ -517,22 +585,7 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
         }
 
         if let Some(binop) = binop {
-            match lhs {
-                Arg::Ref(index) => {
-                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, binop_loc, c);
-                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, binop_loc, c);
-                },
-                Arg::External(name) => {
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, binop_loc, c);
-                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(index)}, binop_loc, c)
-                }
-                Arg::AutoVar(index) => {
-                    push_opcode(Op::Binop {binop, index, lhs, rhs}, binop_loc, c)
-                }
-                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
-            }
+            compile_binop(lhs, rhs, binop, binop_loc, c);
         } else {
             match lhs {
                 Arg::Ref(index) => {
