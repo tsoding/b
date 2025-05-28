@@ -83,6 +83,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         sb_appendf(output, c!(")"));
                     }
                     Binop::Less         => { generate_arg(lhs, output); sb_appendf(output, c!(" < "));   generate_arg(rhs, output); }
+                    Binop::Greater      => { generate_arg(lhs, output); sb_appendf(output, c!(" > "));   generate_arg(rhs, output); }
                     Binop::Equal        => { generate_arg(lhs, output); sb_appendf(output, c!(" === ")); generate_arg(rhs, output); }
                     Binop::NotEqual     => { generate_arg(lhs, output); sb_appendf(output, c!(" !== ")); generate_arg(rhs, output); }
                     Binop::GreaterEqual => { generate_arg(lhs, output); sb_appendf(output, c!(" >= "));  generate_arg(rhs, output); }

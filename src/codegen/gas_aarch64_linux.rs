@@ -176,6 +176,13 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         sb_appendf(output, c!("    cset x0, lt\n"));
                         sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
                     }
+                    Binop::Greater => {
+                        load_arg_to_reg(lhs, c!("x0"), output, op.loc);
+                        load_arg_to_reg(rhs, c!("x1"), output, op.loc);
+                        sb_appendf(output, c!("    cmp x0, x1\n"));
+                        sb_appendf(output, c!("    cset x0, gt\n"));
+                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                    }
                     Binop::Equal => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
