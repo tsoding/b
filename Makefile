@@ -1,7 +1,6 @@
 BUILD=build
 THIRDPARTY=thirdparty
 SRC=src
-TEST_FLAGS=-o tests/build
 
 RSS=\
 	$(SRC)/arena.rs \
