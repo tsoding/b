@@ -29,8 +29,8 @@ $(BUILD):
 
 .PHONY: test
 test: $(BUILD)/b
-	$(BUILD)/b -run tests/assign_ref.b
 	$(BUILD)/b -run tests/compare.b
+	$(BUILD)/b -run tests/deref_assign.b
 	$(BUILD)/b -run tests/divmod.b
 	$(BUILD)/b -run tests/e.b
 	$(BUILD)/b -run tests/hello.b

@@ -240,7 +240,7 @@ unsafe fn is_keyword(name: *const c_char) -> bool {
 #[derive(Clone, Copy)]
 pub enum Arg {
     AutoVar(usize),
-    Ref(usize),
+    Deref(usize),
     External(*const c_char),
     Literal(i64),
     DataOffset(usize),
@@ -396,7 +396,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::AutoAssign {index, arg}, lexer_loc(l, input_path), c);
-            Some((Arg::Ref(index), true))
+            Some((Arg::Deref(index), true))
         }
         token if token == '-' as i64 => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
@@ -483,7 +483,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
         push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
 
-        Some((Arg::Ref(result), true))
+        Some((Arg::Deref(result), true))
     } else if (*l).token == CLEX_plusplus {
         let loc = lexer_loc(l, input_path);
         if !is_lvalue {
@@ -517,7 +517,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 // TODO: communicate to the caller of this function that it expects `lhs` to be an lvalue
 pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
     match lhs {
-        Arg::Ref(index) => {
+        Arg::Deref(index) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
             push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
@@ -587,7 +587,7 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
             compile_binop(lhs, rhs, binop, binop_loc, c);
         } else {
             match lhs {
-                Arg::Ref(index) => {
+                Arg::Deref(index) => {
                     push_opcode(Op::Store {index, arg: rhs}, binop_loc, c);
                 }
                 Arg::External(name) => {

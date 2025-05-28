@@ -7,7 +7,7 @@ use crate::{missingf, Loc};
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
-        Arg::Ref(index) => {
+        Arg::Deref(index) => {
             sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8);
             sb_appendf(output, c!("    mov %s, [%s]\n"), reg, reg)
         }
