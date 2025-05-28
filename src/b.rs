@@ -405,6 +405,48 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(index), false))
         }
+        token if token == CLEX_plusplus || token == CLEX_minusminus => {
+            let (lhs, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+            let rhs = Arg::Literal(1);
+            let loc = lexer_loc(l, input_path);
+
+            let binop = match token {
+                CLEX_plusplus => {
+                    if !is_lvalue {
+                        diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+                        return None;
+                    }
+                    Binop::Plus
+                },
+                CLEX_minusminus => {
+                    if !is_lvalue {
+                        diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+                        return None;
+                    }
+                    Binop::Minus
+                },
+                _ => unreachable!(),
+            };
+
+            match lhs {
+                Arg::Ref(index) => {
+                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+                    push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
+                },
+                Arg::External(name) => {
+                    let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+                    push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
+                }
+                Arg::AutoVar(index) => {
+                    push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
+                }
+                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+            }
+
+            Some((lhs, false))
+        }
         CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
             let name = arena::strdup(&mut (*c).arena, (*l).string);
