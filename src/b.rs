@@ -503,6 +503,49 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
 
         Some((Arg::Ref(result), true))
+    } else if (*l).token == CLEX_plusplus || (*l).token == CLEX_minusminus {
+        let rhs = Arg::Literal(1);
+        let loc = lexer_loc(l, input_path);
+
+        let binop = match (*l).token {
+            CLEX_plusplus => {
+                if !is_lvalue {
+                    diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+                    return None;
+                }
+                Binop::Plus
+            },
+            CLEX_minusminus => {
+                if !is_lvalue {
+                    diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+                    return None;
+                }
+                Binop::Minus
+            },
+            _ => unreachable!(),
+        };
+
+        let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
+        push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
+
+        match arg {
+            Arg::Ref(index) => {
+                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                push_opcode(Op::Binop {binop, index: tmp, lhs: arg, rhs}, loc, c);
+                push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
+            },
+            Arg::External(name) => {
+                let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
+                push_opcode(Op::Binop {binop, index: tmp, lhs: arg, rhs}, loc, c);
+                push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
+            }
+            Arg::AutoVar(index) => {
+                push_opcode(Op::Binop {binop, index, lhs: arg, rhs}, loc, c)
+            }
+            Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+        }
+
+        Some((Arg::AutoVar(pre), false))
     } else {
         (*l).parse_point = saved_point;
         Some((arg, is_lvalue))

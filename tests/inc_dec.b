@@ -4,5 +4,8 @@ main() {
 	x = 3;
 	printf("x: %d\n", x);
 	printf("++x: %d\n", ++x);
+	printf("x++: %d\n", x++);
+	printf("x: %d\n", x);
+	printf("x--: %d\n", x--);
 	printf("--x: %d\n", --x);
 }
