@@ -37,5 +37,6 @@ test: $(BUILD)/b
 	$(BUILD)/b -run tests/literals.b
 	$(BUILD)/b -run tests/minus_2.b
 	$(BUILD)/b -run tests/return.b
+	$(BUILD)/b -run tests/ternary.b
 	$(BUILD)/b -run tests/unary_priority.b
 	$(BUILD)/b -run tests/vector.b
