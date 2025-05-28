@@ -88,15 +88,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             Op::Jmp{addr} => {
                 sb_appendf(output, c!("    jmp %zu:\n"), addr);
             }
-            Op::Select{result, arg, if_true, if_false} => {
-                sb_appendf(output, c!("    auto[%zu] = select("), result);
-                dump_arg(output, arg);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, if_true);
-                sb_appendf(output, c!(", "));
-                dump_arg(output, if_false);
-                sb_appendf(output, c!(")\n"));
-            }
         }
     }
 }
