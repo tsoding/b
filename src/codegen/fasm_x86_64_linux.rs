@@ -206,15 +206,6 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             Op::Jmp{addr} => {
                 sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
             },
-            Op::Select{result, arg, if_true, if_false} => {
-                load_arg_to_reg(arg, c!("rax"), output);
-                load_arg_to_reg(if_true, c!("rbx"), output);
-                load_arg_to_reg(if_false, c!("rcx"), output);
-                sb_appendf(output, c!("    test rax, rax\n"));
-                sb_appendf(output, c!("    mov rax, rbx\n"));
-                sb_appendf(output, c!("    cmove rax, rcx\n"));
-                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
-            },
         }
     }
     sb_appendf(output, c!(".op_%zu:\n"), body.len());

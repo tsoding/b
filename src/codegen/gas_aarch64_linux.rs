@@ -247,14 +247,6 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 sb_appendf(output, c!("    cmp x0, 0\n"));
                 sb_appendf(output, c!("    beq %s.op_%zu\n"), name, addr);
             },
-            Op::Select{result, arg, if_true, if_false} => {
-                load_arg_to_reg(arg, c!("x0"), output, op.loc);
-                load_arg_to_reg(if_true, c!("x1"), output, op.loc);
-                load_arg_to_reg(if_false, c!("x2"), output, op.loc);
-                sb_appendf(output, c!("    cmp x0, 0\n"));
-                sb_appendf(output, c!("    csel x0, x2, x1, eq\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
-            },
         }
     }
     sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());

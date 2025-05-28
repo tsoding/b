@@ -340,7 +340,6 @@ pub enum Op {
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
-    Select         {result: usize, arg: Arg, if_true: Arg, if_false: Arg},
 }
 
 #[derive(Clone, Copy)]
