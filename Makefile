@@ -1,10 +1,25 @@
 BUILD=build
 THIRDPARTY=thirdparty
 SRC=src
-EXAMPLES=examples
+RSS=\
+	$(SRC)/arena.rs \
+	$(SRC)/b.rs \
+	$(SRC)/crust.rs \
+	$(SRC)/flag.rs \
+	$(SRC)/nob.rs \
+	$(SRC)/stb_c_lexer.rs \
+	$(SRC)/codegen/fasm_x86_64_linux.rs \
+	$(SRC)/codegen/gas_aarch64_linux.rs \
+	$(SRC)/codegen/ir.rs \
+	$(SRC)/codegen/mod.rs
+OBJS=\
+	$(BUILD)/nob.o \
+	$(BUILD)/stb_c_lexer.o \
+	$(BUILD)/flag.o \
+	$(BUILD)/arena.o
 
-$(BUILD)/b: $(SRC)/arena.rs $(SRC)/b.rs $(SRC)/crust.rs $(SRC)/flag.rs $(SRC)/nob.rs $(SRC)/stb_c_lexer.rs $(SRC)/codegen/fasm_x86_64_linux.rs $(SRC)/codegen/gas_aarch64_linux.rs $(SRC)/codegen/ir.rs $(SRC)/codegen/mod.rs $(BUILD)/nob.o $(BUILD)/stb_c_lexer.o $(BUILD)/flag.o $(BUILD)/arena.o
-	rustc --edition 2021 -g -C opt-level=z -C link-args="$(BUILD)/nob.o $(BUILD)/stb_c_lexer.o $(BUILD)/flag.o $(BUILD)/arena.o -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
+$(BUILD)/b: $(RSS) $(OBJS)
+	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
 
 $(BUILD)/nob.o: $(THIRDPARTY)/nob.h | $(BUILD)
 	clang -fPIC -g -x c -DNOB_IMPLEMENTATION -c $(THIRDPARTY)/nob.h -o $(BUILD)/nob.o
