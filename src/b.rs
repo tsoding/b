@@ -1052,28 +1052,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
-        Target::Html_Js => {
-            codegen::html_js::generate_program(&mut output, &c);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.html"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
-            if *run {
-                cmd_append! {
-                    &mut cmd,
-                    c!("xdg-open"),
-                    effective_output_path,
-                }
-                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            }
-        }
         Target::IR => {
             codegen::ir::generate_program(&mut output, &c);
 
