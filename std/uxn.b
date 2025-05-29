@@ -1,4 +1,7 @@
-putstr(string) {
+// Standard Library for the Uxn target
+
+// TODO: printf for uxn is not fully implemented
+printf(string) {
     extrn char, uxn_deo;
     auto i, c;
     i = 0;
@@ -8,13 +11,4 @@ putstr(string) {
         i += 1;
         c = char(string, i);
     }
-}
-
-main() {
-    extrn lchar;
-    auto string;
-    string = "Hello world\n";
-    putstr(string);
-    lchar(string, 6, 'B'); /* mutable data section */
-    putstr(string);
 }

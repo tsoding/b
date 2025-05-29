@@ -117,7 +117,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     write_op(output, UxnOp::BRK);
 
     generate_funcs(output, da_slice((*c).funcs), &mut assembler);
-    generate_extrns(output, da_slice((*c).extrns), &mut assembler);
+    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), &mut assembler);
     generate_data_section(output, da_slice((*c).data), &mut assembler);
     generate_globals(output, da_slice((*c).globals), &mut assembler);
 
@@ -545,10 +545,17 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
     write_op(output, UxnOp::STA2);
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], assembler: *mut Assembler) {
-    for i in 0..(*extrns).len() {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], assembler: *mut Assembler) {
+    'skip_function: for i in 0..(*extrns).len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
+        for j in 0..funcs.len() {
+            let func = (*funcs)[j];
+            if strcmp(func.name, name) == 0 {
+                continue 'skip_function
+            }
+        }
+        // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it
         if strcmp(name, c!("char")) == 0 {
             // ch = char(string, i);
             // returns the ith character in a string pointed to by string, 0 based
