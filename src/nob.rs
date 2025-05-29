@@ -32,6 +32,10 @@ pub unsafe fn da_append<T>(xs: *mut Array<T>, item: T) {
             (*xs).capacity *= 2;
         }
         (*xs).items = libc::realloc_items((*xs).items, (*xs).capacity);
+
+        // ZERO INITILIZE NEWLY ALLOCATED MEMORY
+        let size = size_of::<T>() * ((*xs).capacity - (*xs).count);
+        libc::memset((*xs).items.add((*xs).count) as _ , 0, size);
     }
     *((*xs).items.add((*xs).count)) = item;
     (*xs).count += 1;

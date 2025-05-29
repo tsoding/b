@@ -27,6 +27,7 @@ pub mod libc {
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn printf(fmt: *const c_char, ...) -> c_int;
         pub fn fprintf(stream: *mut FILE, fmt: *const c_char, ...) -> c_int;
+        pub fn memset(dest: *mut c_void, byte: c_int, size: usize) -> c_int;
     }
 
     // count is the amount of items, not bytes
