@@ -17,9 +17,9 @@ pub mod libc {
     pub type FILE = c_void;
 
     extern "C" {
-        pub static stdin: *mut FILE;
-        pub static stdout: *mut FILE;
-        pub static stderr: *mut FILE;
+        pub fn get_stdin() -> *mut FILE;
+        pub fn get_stdout() -> *mut FILE;
+        pub fn get_stderr() -> *mut FILE;
         pub fn strcmp(s1: *const c_char, s2: *const c_char) -> c_int;
         pub fn strchr(s: *const c_char, c: c_int) -> *const c_char;
         pub fn strlen(s: *const c_char) -> usize;
@@ -27,6 +27,7 @@ pub mod libc {
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn printf(fmt: *const c_char, ...) -> c_int;
         pub fn fprintf(stream: *mut FILE, fmt: *const c_char, ...) -> c_int;
+        pub fn memset(dest: *mut c_void, byte: c_int, size: usize) -> c_int;
     }
 
     // count is the amount of items, not bytes
@@ -52,13 +53,13 @@ pub unsafe fn panic_handler(info: &PanicInfo) -> ! {
     // TODO: What's the best way to implement the panic handler within the Crust spirit
     //   PanicInfo must be passed by reference.
     if let Some(location) = info.location() {
-        fprintf(stderr, c!("%.*s:%d: "), location.file().len(), location.file().as_ptr(), location.line());
+        fprintf(get_stderr(), c!("%.*s:%d: "), location.file().len(), location.file().as_ptr(), location.line());
     }
-    fprintf(stderr, c!("panicked"));
+    fprintf(get_stderr(), c!("panicked"));
     if let Some(message) = info.message().as_str() {
-        fprintf(stderr, c!(": %.*s"), message.len(), message.as_ptr());
+        fprintf(get_stderr(), c!(": %.*s"), message.len(), message.as_ptr());
     }
-    fprintf(stderr, c!("\n"));
+    fprintf(get_stderr(), c!("\n"));
     abort()
 }
 
@@ -69,3 +70,6 @@ pub unsafe extern "C" fn crust_entry_point(argc: i32, argv: *mut*mut c_char) -> 
         None => 1,
     }
 }
+
+#[no_mangle]
+fn rust_eh_personality() {}
