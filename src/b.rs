@@ -827,7 +827,7 @@ pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Opti
 }
 
 pub unsafe fn usage() {
-    fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
+    fprintf(stderr, c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
     fprintf(stderr, c!("OPTIONS:\n"));
     flag_print_options(stderr);
 }
@@ -945,9 +945,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
-    let mut input_path: *const c_char = ptr::null();
-    let mut run_args: Array<*const c_char> = zeroed();
-    while argc > 0 {
+    let mut input_paths: Array<*mut c_char> = zeroed();
+    let mut run_args: Array<*mut c_char> = zeroed();
+    'args: while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
             flag_print_error(stderr);
@@ -956,14 +956,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         argc = flag_rest_argc();
         argv = flag_rest_argv();
         if argc > 0 {
-            if input_path.is_null() {
-                input_path = shift!(argv, argc);
-            } else if *run {
-                da_append(&mut run_args, shift!(argv, argc));
+            if strcmp(*argv, c!("--")) == 0 {
+                da_append_many(&mut run_args, slice::from_raw_parts_mut(argv.add(1), (argc - 1) as usize));
+                break 'args;
             } else {
-                // TODO: support compiling several files?
-                fprintf(stderr, c!("ERROR: Serveral input files is not supported yet\n"));
-                return None;
+                da_append(&mut input_paths, shift!(argv, argc));
             }
         }
     }
@@ -981,7 +978,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    if input_path.is_null() {
+    if input_paths.count == 0 {
         usage();
         fprintf(stderr, c!("ERROR: no input is provided\n"));
         return None;
@@ -993,30 +990,38 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None;
     };
 
-    let mut cmd: Cmd = zeroed();
-
-    let mut input: String_Builder = zeroed();
-    if !read_entire_file(input_path, &mut input) { return None; }
-
-    let mut l: stb_lexer = zeroed();
-    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
-    stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
-
     let mut c: Compiler = zeroed();
-    compile_program(&mut l, input_path, &mut c)?;
+
+    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
+    for i in 0..input_paths.count {
+        let input_path = *input_paths.items.add(i);
+
+        // TODO: leaking memory on each file read.
+        // This is needed to not invalidate input_start in struct Loc. If stb_c_lexer.h just allowed us
+        // to have calculate stb_lex_location-s on the fly without calling to the slow stb_c_lexer_get_location
+        // we would not need to maintain input_start in the Loc-s and we could simply reset the input String_Builder
+        // on each iteration.
+        let mut input: String_Builder = zeroed();
+        if !read_entire_file(input_path, &mut input) { return None; }
+
+        let mut l: stb_lexer = zeroed();
+        stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
+
+        compile_program(&mut l, input_path, &mut c)?;
+    }
 
     let mut output: String_Builder = zeroed();
-
+    let mut cmd: Cmd = zeroed();
     match target {
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64_linux::generate_program(&mut output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
                     effective_output_path = base_path;
                 } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), input_path);
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
                 }
             } else {
                 effective_output_path = *output_path;
@@ -1078,10 +1083,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path;
             if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
                     effective_output_path = base_path;
                 } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), input_path);
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
                 }
             } else {
                 effective_output_path = *output_path;
@@ -1143,6 +1148,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path;
             if (*output_path).is_null() {
+                let input_path = *input_paths.items;
                 let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
                 effective_output_path = temp_sprintf(c!("%s.rom"), base_path);
             } else {
@@ -1164,6 +1170,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path;
             if (*output_path).is_null() {
+                let input_path = *input_paths.items;
                 let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
                 effective_output_path = temp_sprintf(c!("%s.ir"), base_path);
             } else {
