@@ -1,6 +1,14 @@
 BUILD=build
 THIRDPARTY=thirdparty
 SRC=src
+
+CC=clang
+LINKFLAGS=-lc -lgcc
+
+# CC=x86_64-w64-mingw32-cc
+# RUSTFLAGS=--target x86_64-pc-windows-gnu
+# LINKFLAGS=-lmsvcrt -lkernel32
+
 RSS=\
 	$(SRC)/arena.rs \
 	$(SRC)/b.rs \
@@ -16,13 +24,14 @@ OBJS=\
 	$(BUILD)/nob.o \
 	$(BUILD)/stb_c_lexer.o \
 	$(BUILD)/flag.o \
+	$(BUILD)/stdio.o \
 	$(BUILD)/arena.o
 
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
-	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
+	rustc $(RUSTFLAGS) --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) $(LINKFLAGS)" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
 
 $(BUILD)/%.o: $(THIRDPARTY)/%.c | $(BUILD)
-	clang -fPIC -g -c $< -o $@
+	$(CC) -fPIC -g -c $< -o $@
 
 $(BUILD):
 	mkdir -pv $(BUILD)
