@@ -28,7 +28,7 @@ $ ./build/b -run ./examples/01_hello_world.b
 
 ### Uxn
 
-The compiler support [Uxn](https://100r.co/site/uxn.html) target. Make sure you have `uxnemu` in your `$PATH` if you want to use `-run` flag.
+The compiler supports [Uxn](https://100r.co/site/uxn.html) target. Make sure you have `uxnemu` in your `$PATH` if you want to use `-run` flag.
 
 ```console
 $ ./build/b -t uxn -run ./examples/01_hello_world.b ./std/uxn.b
