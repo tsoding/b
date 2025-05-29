@@ -104,7 +104,7 @@ pub unsafe fn lexer_loc(l: *const stb_lexer, input_path: *const c_char) -> Loc {
     }
 }
 
-pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [i64]) -> Option<()> {
+pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [c_long]) -> Option<()> {
     for i in 0..clexes.len() {
         if (*clexes)[i] == (*l).token {
             return Some(());
@@ -130,7 +130,7 @@ pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clex
     None
 }
 
-pub unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: i64) -> Option<()> {
+pub unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: c_long) -> Option<()> {
     expect_clexes(l, input_path, &[clex])
 }
 
@@ -282,37 +282,37 @@ impl Binop {
     // It's kinda confusing but I don't know how to make it "prettier"
     pub fn from_assign_token(token: c_long) -> Option<Option<Self>> {
         match token {
-            token if token == '=' as i64 => Some(None),
-            CLEX_shleq                   => Some(Some(Binop::BitShl)),
-            CLEX_shreq                   => Some(Some(Binop::BitShr)),
-            CLEX_modeq                   => Some(Some(Binop::Mod)),
-            CLEX_oreq                    => Some(Some(Binop::BitOr)),
-            CLEX_andeq                   => Some(Some(Binop::BitAnd)),
-            CLEX_pluseq                  => Some(Some(Binop::Plus)),
-            CLEX_minuseq                 => Some(Some(Binop::Minus)),
-            CLEX_muleq                   => Some(Some(Binop::Mult)),
-            CLEX_diveq                   => Some(Some(Binop::Div)),
+            token if token == '=' as c_long => Some(None),
+            CLEX_shleq                      => Some(Some(Binop::BitShl)),
+            CLEX_shreq                      => Some(Some(Binop::BitShr)),
+            CLEX_modeq                      => Some(Some(Binop::Mod)),
+            CLEX_oreq                       => Some(Some(Binop::BitOr)),
+            CLEX_andeq                      => Some(Some(Binop::BitAnd)),
+            CLEX_pluseq                     => Some(Some(Binop::Plus)),
+            CLEX_minuseq                    => Some(Some(Binop::Minus)),
+            CLEX_muleq                      => Some(Some(Binop::Mult)),
+            CLEX_diveq                      => Some(Some(Binop::Div)),
             _ => None,
         }
     }
 
     pub fn from_token(token: c_long) -> Option<Self> {
         match token {
-            token if token == '+' as i64 => Some(Binop::Plus),
-            token if token == '-' as i64 => Some(Binop::Minus),
-            token if token == '*' as i64 => Some(Binop::Mult),
-            token if token == '/' as i64 => Some(Binop::Div),
-            token if token == '%' as i64 => Some(Binop::Mod),
-            token if token == '<' as i64 => Some(Binop::Less),
-            token if token == '>' as i64 => Some(Binop::Greater),
-            CLEX_greatereq               => Some(Binop::GreaterEqual),
-            CLEX_lesseq                  => Some(Binop::LessEqual),
-            token if token == '|' as i64 => Some(Binop::BitOr),
-            token if token == '&' as i64 => Some(Binop::BitAnd),
-            CLEX_shl                     => Some(Binop::BitShl),
-            CLEX_shr                     => Some(Binop::BitShr),
-            CLEX_eq                      => Some(Binop::Equal),
-            CLEX_noteq                   => Some(Binop::NotEqual),
+            token if token == '+' as c_long => Some(Binop::Plus),
+            token if token == '-' as c_long => Some(Binop::Minus),
+            token if token == '*' as c_long => Some(Binop::Mult),
+            token if token == '/' as c_long => Some(Binop::Div),
+            token if token == '%' as c_long => Some(Binop::Mod),
+            token if token == '<' as c_long => Some(Binop::Less),
+            token if token == '>' as c_long => Some(Binop::Greater),
+            CLEX_greatereq                  => Some(Binop::GreaterEqual),
+            CLEX_lesseq                     => Some(Binop::LessEqual),
+            token if token == '|' as c_long => Some(Binop::BitOr),
+            token if token == '&' as c_long => Some(Binop::BitAnd),
+            CLEX_shl                        => Some(Binop::BitShl),
+            CLEX_shr                        => Some(Binop::BitShr),
+            CLEX_eq                         => Some(Binop::Equal),
+            CLEX_noteq                      => Some(Binop::NotEqual),
             _ => None,
         }
     }
@@ -383,24 +383,24 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
     stb_c_lexer_get_token(l);
     let arg = match (*l).token {
-        token if token == '(' as i64 => {
+        token if token == '(' as c_long => {
             let result = compile_expression(l, input_path, c)?;
-            get_and_expect_clex(l, input_path, ')' as i64)?;
+            get_and_expect_clex(l, input_path, ')' as c_long)?;
             Some(result)
         }
-        token if token == '!' as i64 => {
+        token if token == '!' as c_long => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::UnaryNot{result, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(result), false))
         }
-        token if token == '*' as i64 => {
+        token if token == '*' as c_long => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::AutoAssign {index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::Ref(index), true))
         }
-        token if token == '-' as i64 => {
+        token if token == '-' as c_long => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
@@ -444,7 +444,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let saved_point = (*l).parse_point;
             stb_c_lexer_get_token(l);
 
-            if (*l).token == '(' as i64 {
+            if (*l).token == '(' as c_long {
                 Some((compile_function_call(l, input_path, c, name, name_loc)?, false))
             } else {
                 (*l).parse_point = saved_point;
@@ -478,9 +478,9 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     let saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
 
-    if (*l).token == '[' as i64 {
+    if (*l).token == '[' as c_long {
         let (offset, _) = compile_expression(l, input_path, c)?;
-        get_and_expect_clex(l, input_path, ']' as i64)?;
+        get_and_expect_clex(l, input_path, ']' as c_long)?;
 
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
         push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
@@ -618,7 +618,7 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
     let saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
 
-    if (*l).token == '?' as i64 {
+    if (*l).token == '?' as c_long {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
         let addr_condition = (*c).func_body.count;
@@ -631,7 +631,7 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
         push_opcode(Op::Jmp{addr: 0}, lexer_loc(l, input_path), c);
 
         let addr_false = (*c).func_body.count;
-        get_and_expect_clex(l, input_path, ':' as i64)?;
+        get_and_expect_clex(l, input_path, ':' as c_long)?;
 
         let (if_false, _) = compile_expression(l, input_path, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, lexer_loc(l, input_path), c);

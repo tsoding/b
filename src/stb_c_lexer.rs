@@ -1,5 +1,5 @@
 #![allow(non_upper_case_globals)]
-use core::ffi::{c_char, c_long, c_double, c_int};
+use core::ffi::{c_char, c_long, c_longlong, c_double, c_int};
 
 #[macro_export]
 macro_rules! non_soy_enum {
@@ -61,7 +61,7 @@ pub struct stb_lexer {
     // lexer token variables
     pub token: c_long,
     pub real_number: c_double,
-    pub int_number: c_long,
+    pub int_number: c_longlong,
     pub string: *mut c_char,
     pub string_len: c_int,
 }
