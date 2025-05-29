@@ -7,7 +7,9 @@
   <img src="./logo/logo_strawberry.png" width=400>
 </p>
 
-<sub>Logo by Strawberry 🍓</sub>
+<p align=right>
+  <sub>Logo by Strawberry 🍓</sub>
+</p>
 
 Compiler for the B Programming Language implemented in [Crust](https://github.com/tsoding/crust)
 
