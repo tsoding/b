@@ -2,6 +2,7 @@
 // Custom changes:
 // - Fix char literal parsing by Wonshtrum - https://github.com/nothings/stb/pull/1653
 // - Update stb_c_lexer_get_location to operate on input_stream instead of stb_lexer
+// - Update `int_number` field of the `stb_lexer` struct to be `long long` instead of `long`
 
 // stb_c_lexer.h - v0.12+ - public domain Sean Barrett 2013
 // lexer for making little C-like languages with recursive-descent parsers
@@ -131,7 +132,7 @@ typedef struct
    // lexer token variables
    long token;
    double real_number;
-   long   int_number;
+   long long int_number;
    char *string;
    int string_len;
 } stb_lexer;
@@ -227,7 +228,7 @@ typedef double     stb__clex_int;
 #define intfield   real_number
 #define STB__clex_int_as_double
 #else
-typedef long       stb__clex_int;
+typedef long long  stb__clex_int;
 #define intfield   int_number
 #endif
 
@@ -709,7 +710,7 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
 
                   #ifdef STB__clex_hex_ints
                   #ifdef STB__CLEX_use_stdlib
-                  lexer->int_number = strtol((char *) p, (char **) &q, 16);
+                  lexer->int_number = strtoll((char *) p, (char **) &q, 16);
                   #else
                   {
                      stb__clex_int n=0;
@@ -763,7 +764,7 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
          if (p[0] == '0') {
             char *q = p;
             #ifdef STB__CLEX_use_stdlib
-            lexer->int_number = strtol((char *) p, (char **) &q, 8);
+            lexer->int_number = strtoll((char *) p, (char **) &q, 8);
             #else
             stb__clex_int n=0;
             while (q != lexer->eof) {
@@ -785,7 +786,7 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
          {
             char *q = p;
             #ifdef STB__CLEX_use_stdlib
-            lexer->int_number = strtol((char *) p, (char **) &q, 10);
+            lexer->int_number = strtoll((char *) p, (char **) &q, 10);
             #else
             stb__clex_int n=0;
             while (q != lexer->eof) {
@@ -842,7 +843,7 @@ static void print_token(stb_lexer *lexer)
       #if defined(STB__clex_int_as_double) && !defined(STB__CLEX_use_stdlib)
       case CLEX_intlit    : printf("#%g", lexer->real_number); break;
       #else
-      case CLEX_intlit    : printf("#%ld", lexer->int_number); break;
+      case CLEX_intlit    : printf("#%lld", lexer->int_number); break;
       #endif
       case CLEX_floatlit  : printf("%g", lexer->real_number); break;
       default:
