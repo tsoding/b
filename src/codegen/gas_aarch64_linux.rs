@@ -50,6 +50,13 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
         },
+        Arg::RefAutoVar(index) => {
+            sb_appendf(output, c!("    add %s, sp, %zu\n"), reg, (index + 1)*8);
+        }
+        Arg::RefExternal(name) => {
+            sb_appendf(output, c!("    adrp %s, %s\n"), reg, name);
+            sb_appendf(output, c!("    add  %s, %s, :lo12:%s\n"), reg, reg, name);
+        }
         Arg::AutoVar(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
         }
