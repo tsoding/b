@@ -11,6 +11,7 @@ RSS=\
 	$(SRC)/stb_c_lexer.rs \
 	$(SRC)/codegen/fasm_x86_64_linux.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
+	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs
 OBJS=\
@@ -39,6 +40,7 @@ test: $(BUILD)/b
 	@$(call tests,assign_ref)
 	@$(call tests,compare)
 	@$(call tests,divmod)
+	@$(call tests,forward-declare)
 	@$(call tests,e)
 	@$(call tests,hello)
 	@$(call tests,inc_dec)

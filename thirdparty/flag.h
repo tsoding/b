@@ -1,3 +1,7 @@
+// Originaly taken from https://github.com/tsoding/flag.h/blob/237601b0662039b7513cd18efd317fe644c60687/flag.h
+// Custom changes:
+// - Do not push back the "--" in flag_parse() (TODO: think how to contribute this change back to the upstream without breaking backward compatibility)
+
 // flag.h -- v1.1.0 -- command-line flag parsing
 //
 //   Inspired by Go's flag module: https://pkg.go.dev/flag
@@ -210,17 +214,10 @@ bool flag_parse(int argc, char **argv)
     while (argc > 0) {
         char *flag = flag_shift_args(&argc, &argv);
 
-        if (*flag != '-') {
+        if (*flag != '-' || strcmp(flag, "--") == 0) {
             // NOTE: pushing flag back into args
             c->rest_argc = argc + 1;
             c->rest_argv = argv - 1;
-            return true;
-        }
-
-        if (strcmp(flag, "--") == 0) {
-            // NOTE: but if it's the terminator we don't need to push it back
-            c->rest_argc = argc;
-            c->rest_argv = argv;
             return true;
         }
 
