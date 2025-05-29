@@ -1150,7 +1150,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
             if *run {
-                todo!();
+                cmd_append! {
+                    &mut cmd,
+                    c!("uxnemu"), effective_output_path,
+                }
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
         Target::IR => {
