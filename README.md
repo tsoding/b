@@ -4,8 +4,10 @@
 > Compiler is not fully implemented yet.
 
 <p align=center>
-  <img src="./logo/logo.png" width=400>
+  <img src="./logo/logo_strawberry.png" width=400>
 </p>
+
+<sub>Logo by Strawberry 🍓</sub>
 
 Compiler for the B Programming Language implemented in [Crust](https://github.com/tsoding/crust)
 
