@@ -75,7 +75,7 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
         CLEX_minuseq    => c!("-="),
         CLEX_muleq      => c!("*="),
         CLEX_diveq      => c!("/="),
-        CLEX_modeq      => c!("%%="),
+        CLEX_modeq      => c!("%="),
         CLEX_shleq      => c!("<<="),
         CLEX_shreq      => c!(">>="),
         CLEX_eqarrow    => c!("=>"),
@@ -284,6 +284,8 @@ impl Binop {
         match token {
             token if token == '=' as i64 => Some(None),
             CLEX_shleq                   => Some(Some(Binop::BitShl)),
+            CLEX_shreq                   => Some(Some(Binop::BitShr)),
+            CLEX_modeq                   => Some(Some(Binop::Mod)),
             CLEX_oreq                    => Some(Some(Binop::BitOr)),
             CLEX_andeq                   => Some(Some(Binop::BitAnd)),
             CLEX_pluseq                  => Some(Some(Binop::Plus)),
