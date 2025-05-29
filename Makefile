@@ -34,6 +34,7 @@ test: $(BUILD)/b
 	$(BUILD)/b -run tests/compare.b
 	$(BUILD)/b -run tests/divmod.b
 	$(BUILD)/b -run tests/e.b
+	$(BUILD)/b -run tests/forward-declare.b
 	$(BUILD)/b -run tests/hello.b
 	$(BUILD)/b -run tests/inc_dec.b
 	$(BUILD)/b -run tests/literals.b
