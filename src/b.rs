@@ -27,16 +27,14 @@ use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
 
 #[derive(Clone, Copy)]
 pub struct Loc {
-    pub input_path:   *const c_char,
-    pub input_start:  *const c_char,
-    pub input_offset: *const c_char,
+    pub input_path: *const c_char,
+    pub line_number: c_int,
+    pub line_offset: c_int,
 }
 
 macro_rules! diagf {
     ($loc:expr, $($args:tt)*) => {{
-        let mut stb_loc: stb_lex_location = zeroed();
-        stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
-        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
+        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, $loc.line_number, $loc.line_offset);
         fprintf(stderr, $($args)*);
     }};
 }
@@ -45,9 +43,7 @@ macro_rules! diagf {
 macro_rules! missingf {
     ($loc:expr, $($args:tt)*) => {{
         let file = file!();
-        let mut stb_loc = zeroed();
-        crate::stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
-        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
+        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, $loc.line_number, $loc.line_offset);
         fprintf(stderr, $($args)*);
         fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
         abort();
@@ -99,8 +95,8 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
 pub unsafe fn lexer_loc(l: *const stb_lexer, input_path: *const c_char) -> Loc {
     Loc {
         input_path,
-        input_start: (*l).input_stream,
-        input_offset: (*l).where_firstchar,
+        line_number: (*l).parse_point.line_number,
+        line_offset: (*l).parse_point.head.offset_from((*l).parse_point.line_start) as c_int,
     }
 }
 

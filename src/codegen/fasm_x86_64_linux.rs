@@ -1,5 +1,4 @@
 use core::ffi::*;
-use core::mem::zeroed;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
