@@ -48,8 +48,8 @@ $(BUILD):
 .PHONY: test
 test: $(TESTS)
 
-$(BUILD)/tests/%: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -run -o $@ $<
+$(BUILD)/tests/%: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -run -o $@ $< ./std/test.b
 
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests
