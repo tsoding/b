@@ -224,9 +224,16 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
-    for i in 0..extrns.len() {
-        sb_appendf(output, c!("extrn '%s' as _%s\n"), (*extrns)[i], (*extrns)[i]);
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func]) {
+    'skip_function: for i in 0..extrns.len() {
+        let name = (*extrns)[i];
+        for j in 0..funcs.len() {
+            let func = (*funcs)[j];
+            if strcmp(func.name, name) == 0 {
+                continue 'skip_function
+            }
+        }
+        sb_appendf(output, c!("extrn '%s' as _%s\n"), name, name);
     }
 }
 
@@ -255,7 +262,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     sb_appendf(output, c!("format ELF64\n"));
     generate_funcs(output, da_slice((*c).funcs));
-    generate_extrns(output, da_slice((*c).extrns));
+    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
 }

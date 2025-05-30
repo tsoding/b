@@ -10,6 +10,7 @@ RSS=\
 	$(SRC)/stb_c_lexer.rs \
 	$(SRC)/codegen/fasm_x86_64_linux.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
+	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs
 OBJS=\
@@ -33,6 +34,7 @@ test: $(BUILD)/b
 	$(BUILD)/b -run tests/deref_assign.b
 	$(BUILD)/b -run tests/divmod.b
 	$(BUILD)/b -run tests/e.b
+	$(BUILD)/b -run tests/forward-declare.b
 	$(BUILD)/b -run tests/hello.b
 	$(BUILD)/b -run tests/inc_dec.b
 	$(BUILD)/b -run tests/literals.b

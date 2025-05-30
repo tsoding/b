@@ -75,7 +75,7 @@ unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
         CLEX_minuseq    => c!("-="),
         CLEX_muleq      => c!("*="),
         CLEX_diveq      => c!("/="),
-        CLEX_modeq      => c!("%%="),
+        CLEX_modeq      => c!("%="),
         CLEX_shleq      => c!("<<="),
         CLEX_shreq      => c!(">>="),
         CLEX_eqarrow    => c!("=>"),
@@ -104,7 +104,7 @@ pub unsafe fn lexer_loc(l: *const stb_lexer, input_path: *const c_char) -> Loc {
     }
 }
 
-pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [i64]) -> Option<()> {
+pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [c_long]) -> Option<()> {
     for i in 0..clexes.len() {
         if (*clexes)[i] == (*l).token {
             return Some(());
@@ -130,7 +130,7 @@ pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clex
     None
 }
 
-pub unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: i64) -> Option<()> {
+pub unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: c_long) -> Option<()> {
     expect_clexes(l, input_path, &[clex])
 }
 
@@ -284,35 +284,37 @@ impl Binop {
     // It's kinda confusing but I don't know how to make it "prettier"
     pub fn from_assign_token(token: c_long) -> Option<Option<Self>> {
         match token {
-            token if token == '=' as i64 => Some(None),
-            CLEX_shleq                   => Some(Some(Binop::BitShl)),
-            CLEX_oreq                    => Some(Some(Binop::BitOr)),
-            CLEX_andeq                   => Some(Some(Binop::BitAnd)),
-            CLEX_pluseq                  => Some(Some(Binop::Plus)),
-            CLEX_minuseq                 => Some(Some(Binop::Minus)),
-            CLEX_muleq                   => Some(Some(Binop::Mult)),
-            CLEX_diveq                   => Some(Some(Binop::Div)),
+            token if token == '=' as c_long => Some(None),
+            CLEX_shleq                      => Some(Some(Binop::BitShl)),
+            CLEX_shreq                      => Some(Some(Binop::BitShr)),
+            CLEX_modeq                      => Some(Some(Binop::Mod)),
+            CLEX_oreq                       => Some(Some(Binop::BitOr)),
+            CLEX_andeq                      => Some(Some(Binop::BitAnd)),
+            CLEX_pluseq                     => Some(Some(Binop::Plus)),
+            CLEX_minuseq                    => Some(Some(Binop::Minus)),
+            CLEX_muleq                      => Some(Some(Binop::Mult)),
+            CLEX_diveq                      => Some(Some(Binop::Div)),
             _ => None,
         }
     }
 
     pub fn from_token(token: c_long) -> Option<Self> {
         match token {
-            token if token == '+' as i64 => Some(Binop::Plus),
-            token if token == '-' as i64 => Some(Binop::Minus),
-            token if token == '*' as i64 => Some(Binop::Mult),
-            token if token == '/' as i64 => Some(Binop::Div),
-            token if token == '%' as i64 => Some(Binop::Mod),
-            token if token == '<' as i64 => Some(Binop::Less),
-            token if token == '>' as i64 => Some(Binop::Greater),
-            CLEX_greatereq               => Some(Binop::GreaterEqual),
-            CLEX_lesseq                  => Some(Binop::LessEqual),
-            token if token == '|' as i64 => Some(Binop::BitOr),
-            token if token == '&' as i64 => Some(Binop::BitAnd),
-            CLEX_shl                     => Some(Binop::BitShl),
-            CLEX_shr                     => Some(Binop::BitShr),
-            CLEX_eq                      => Some(Binop::Equal),
-            CLEX_noteq                   => Some(Binop::NotEqual),
+            token if token == '+' as c_long => Some(Binop::Plus),
+            token if token == '-' as c_long => Some(Binop::Minus),
+            token if token == '*' as c_long => Some(Binop::Mult),
+            token if token == '/' as c_long => Some(Binop::Div),
+            token if token == '%' as c_long => Some(Binop::Mod),
+            token if token == '<' as c_long => Some(Binop::Less),
+            token if token == '>' as c_long => Some(Binop::Greater),
+            CLEX_greatereq                  => Some(Binop::GreaterEqual),
+            CLEX_lesseq                     => Some(Binop::LessEqual),
+            token if token == '|' as c_long => Some(Binop::BitOr),
+            token if token == '&' as c_long => Some(Binop::BitAnd),
+            CLEX_shl                        => Some(Binop::BitShl),
+            CLEX_shr                        => Some(Binop::BitShr),
+            CLEX_eq                         => Some(Binop::Equal),
+            CLEX_noteq                      => Some(Binop::NotEqual),
             _ => None,
         }
     }
@@ -383,24 +385,24 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
     stb_c_lexer_get_token(l);
     let arg = match (*l).token {
-        token if token == '(' as i64 => {
+        token if token == '(' as c_long => {
             let result = compile_expression(l, input_path, c)?;
-            get_and_expect_clex(l, input_path, ')' as i64)?;
+            get_and_expect_clex(l, input_path, ')' as c_long)?;
             Some(result)
         }
-        token if token == '!' as i64 => {
+        token if token == '!' as c_long => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::UnaryNot{result, arg}, lexer_loc(l, input_path), c);
             Some((Arg::AutoVar(result), false))
         }
-        token if token == '*' as i64 => {
+        token if token == '*' as c_long => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::AutoAssign {index, arg}, lexer_loc(l, input_path), c);
             Some((Arg::Deref(index), true))
         }
-        token if token == '-' as i64 => {
+        token if token == '-' as c_long => {
             let (arg, _) = compile_primary_expression(l, input_path, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
@@ -463,7 +465,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             let saved_point = (*l).parse_point;
             stb_c_lexer_get_token(l);
 
-            if (*l).token == '(' as i64 {
+            if (*l).token == '(' as c_long {
                 Some((compile_function_call(l, input_path, c, name, name_loc)?, false))
             } else {
                 (*l).parse_point = saved_point;
@@ -497,9 +499,9 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     let saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
 
-    if (*l).token == '[' as i64 {
+    if (*l).token == '[' as c_long {
         let (offset, _) = compile_expression(l, input_path, c)?;
-        get_and_expect_clex(l, input_path, ']' as i64)?;
+        get_and_expect_clex(l, input_path, ']' as c_long)?;
 
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
         push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
@@ -637,7 +639,7 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
     let saved_point = (*l).parse_point;
     stb_c_lexer_get_token(l);
 
-    if (*l).token == '?' as i64 {
+    if (*l).token == '?' as c_long {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
         let addr_condition = (*c).func_body.count;
@@ -650,7 +652,7 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
         push_opcode(Op::Jmp{addr: 0}, lexer_loc(l, input_path), c);
 
         let addr_false = (*c).func_body.count;
-        get_and_expect_clex(l, input_path, ':' as i64)?;
+        get_and_expect_clex(l, input_path, ':' as c_long)?;
 
         let (if_false, _) = compile_expression(l, input_path, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, lexer_loc(l, input_path), c);
@@ -846,7 +848,7 @@ pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Opti
 }
 
 pub unsafe fn usage() {
-    fprintf(stderr, c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
+    fprintf(stderr, c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
     fprintf(stderr, c!("OPTIONS:\n"));
     flag_print_options(stderr);
 }
@@ -964,9 +966,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
-    let mut input_path: *const c_char = ptr::null();
-    let mut run_args: Array<*const c_char> = zeroed();
-    while argc > 0 {
+    let mut input_paths: Array<*mut c_char> = zeroed();
+    let mut run_args: Array<*mut c_char> = zeroed();
+    'args: while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
             flag_print_error(stderr);
@@ -975,14 +977,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         argc = flag_rest_argc();
         argv = flag_rest_argv();
         if argc > 0 {
-            if input_path.is_null() {
-                input_path = shift!(argv, argc);
-            } else if *run {
-                da_append(&mut run_args, shift!(argv, argc));
+            if strcmp(*argv, c!("--")) == 0 {
+                da_append_many(&mut run_args, slice::from_raw_parts_mut(argv.add(1), (argc - 1) as usize));
+                break 'args;
             } else {
-                // TODO: support compiling several files?
-                fprintf(stderr, c!("ERROR: Serveral input files is not supported yet\n"));
-                return None;
+                da_append(&mut input_paths, shift!(argv, argc));
             }
         }
     }
@@ -1000,7 +999,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    if input_path.is_null() {
+    if input_paths.count == 0 {
         usage();
         fprintf(stderr, c!("ERROR: no input is provided\n"));
         return None;
@@ -1012,30 +1011,38 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None;
     };
 
-    let mut cmd: Cmd = zeroed();
-
-    let mut input: String_Builder = zeroed();
-    if !read_entire_file(input_path, &mut input) { return None; }
-
-    let mut l: stb_lexer = zeroed();
-    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
-    stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
-
     let mut c: Compiler = zeroed();
-    compile_program(&mut l, input_path, &mut c)?;
+
+    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
+    for i in 0..input_paths.count {
+        let input_path = *input_paths.items.add(i);
+
+        // TODO: Leaking memory on each file read.
+        // This is needed to not invalidate input_start in struct Loc. If stb_c_lexer.h just allowed us
+        // to calculate stb_lex_location-s on the fly without calling to the slow stb_c_lexer_get_location()
+        // we would not need to maintain input_start in the Loc-s and we could simply reset the input String_Builder
+        // on each iteration.
+        let mut input: String_Builder = zeroed();
+        if !read_entire_file(input_path, &mut input) { return None; }
+
+        let mut l: stb_lexer = zeroed();
+        stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
+
+        compile_program(&mut l, input_path, &mut c)?;
+    }
 
     let mut output: String_Builder = zeroed();
-
+    let mut cmd: Cmd = zeroed();
     match target {
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64_linux::generate_program(&mut output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
                     effective_output_path = base_path;
                 } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), input_path);
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
                 }
             } else {
                 effective_output_path = *output_path;
@@ -1097,10 +1104,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path;
             if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(input_path, c!(".b")) {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
                     effective_output_path = base_path;
                 } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), input_path);
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
                 }
             } else {
                 effective_output_path = *output_path;
@@ -1157,11 +1164,34 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
+        Target::Uxn => {
+            codegen::uxn::generate_program(&mut output, &c);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let input_path = *input_paths.items;
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.rom"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), effective_output_path);
+            if *run {
+                cmd_append! {
+                    &mut cmd,
+                    c!("uxnemu"), effective_output_path,
+                }
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            }
+        }
         Target::IR => {
             codegen::ir::generate_program(&mut output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {
+                let input_path = *input_paths.items;
                 let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
                 effective_output_path = temp_sprintf(c!("%s.ir"), base_path);
             } else {
