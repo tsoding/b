@@ -987,17 +987,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     };
 
     let mut c: Compiler = zeroed();
-
+    let mut input: String_Builder = zeroed();
     let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
 
-        // TODO: Leaking memory on each file read.
-        // This is needed to not invalidate input_start in struct Loc. If stb_c_lexer.h just allowed us
-        // to calculate stb_lex_location-s on the fly without calling to the slow stb_c_lexer_get_location()
-        // we would not need to maintain input_start in the Loc-s and we could simply reset the input String_Builder
-        // on each iteration.
-        let mut input: String_Builder = zeroed();
+        input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
 
         let mut l: stb_lexer = zeroed();
