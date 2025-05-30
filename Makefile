@@ -8,7 +8,7 @@ RSS=\
 	$(SRC)/flag.rs \
 	$(SRC)/nob.rs \
 	$(SRC)/stb_c_lexer.rs \
-	$(SRC)/codegen/fasm_x86_64_linux.rs \
+	$(SRC)/codegen/fasm_x86_64.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \

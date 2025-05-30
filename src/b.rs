@@ -932,12 +932,21 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
-    if cfg!(target_arch = "aarch64") {
-        default_target = Target::Gas_AArch64_Linux;
+    if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+        default_target = Some(Target::Gas_AArch64_Linux);
+    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
+        default_target = Some(Target::Fasm_x86_64_Linux);
+    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
+        default_target = Some(Target::Fasm_x86_64_Windows);
     } else {
-        default_target = Target::Fasm_x86_64_Linux;
+        default_target = None;
     }
-    let default_target_name = name_of_target(default_target).expect("default target name not found");
+
+    let default_target_name = if let Some(default_target) = default_target {
+        name_of_target(default_target).expect("default target name not found")
+    } else {
+        c!("None")
+    };
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
@@ -986,7 +995,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let Some(target) = target_by_name(*target_name) else {
         usage();
-        fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
+        if strcmp(*target_name, c!("None")) == 0 {
+            fprintf(stderr, c!("ERROR: unable to guess default target, please use the `-t` flag\n"));
+        } else {
+            fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
+        }
         return None;
     };
 
@@ -1031,9 +1044,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !cfg!(target_arch = "aarch64") {
+            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
                 return None;
             }
 
@@ -1079,7 +1092,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Fasm_x86_64_Linux => {
-            codegen::fasm_x86_64_linux::generate_program(&mut output, &c);
+            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::fasm_x86_64::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1096,9 +1109,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !cfg!(target_arch = "x86_64") {
+            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
+                fprintf(stderr, c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
                 return None;
             }
 
@@ -1131,6 +1144,76 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 cmd_append! {
                     &mut cmd,
                     run_path,
+                }
+
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }
+                }
+
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            }
+        }
+        Target::Fasm_x86_64_Windows => {
+            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::fasm_x86_64::Os::Windows);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), output_asm_path);
+
+            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
+                c!("cc")
+            } else {
+                c!("x86_64-w64-mingw32-cc")
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
+            cmd_append! {
+                &mut cmd,
+                c!("fasm"), output_asm_path, output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                if !cfg!(target_os = "windows") {
+                    cmd_append! {
+                        &mut cmd,
+                        c!("wine"),
+                    }
+                }
+
+                cmd_append! {
+                    &mut cmd,
+                    effective_output_path,
                 }
 
                 for i in 0..run_args.count {

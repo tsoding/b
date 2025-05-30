@@ -5,6 +5,12 @@ use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
 
+#[derive(Clone, Copy)]
+pub enum Os {
+    Linux,
+    Windows,
+}
+
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
         Arg::Ref(index) => {
@@ -18,8 +24,11 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
-    let stack_size = align_bytes(auto_vars_count*8, 16);
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
+    let stack_size = match os {
+        Os::Linux   => align_bytes(auto_vars_count*8, 16),
+        Os::Windows => align_bytes(auto_vars_count*8, 16) + 32, // +32 bytes for "shadow space" (took 2 hours to figure out)
+    };
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
     sb_appendf(output, c!("    push rbp\n"));
@@ -28,12 +37,15 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         sb_appendf(output, c!("    sub rsp, %zu\n"), stack_size);
     }
     assert!(auto_vars_count >= params_count);
-    const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")];
-    if params_count > REGISTERS.len() {
-        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
+    let registers: *const[*const c_char] = match os {
+        Os::Linux   => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
+        Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")],
+    };
+    if params_count > registers.len() {
+        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), registers.len(), params_count);
     }
     for i in 0..params_count {
-        let reg = (*REGISTERS)[i];
+        let reg = (*registers)[i];
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
     }
     for i in 0..body.len() {
@@ -183,11 +195,11 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 }
             }
             Op::Funcall{result, name, args} => {
-                if args.count > REGISTERS.len() {
-                    missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
+                if args.count > registers.len() {
+                    missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), registers.len(), args.count);
                 }
                 for i in 0..args.count {
-                    let reg = (*REGISTERS)[i];
+                    let reg = (*registers)[i];
                     load_arg_to_reg(*args.items.add(i), reg, output);
                 }
                 sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
@@ -215,10 +227,10 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     sb_appendf(output, c!("    ret\n"));
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
     sb_appendf(output, c!("section \".text\" executable\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
     }
 }
 
@@ -257,9 +269,12 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    sb_appendf(output, c!("format ELF64\n"));
-    generate_funcs(output, da_slice((*c).funcs));
+pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, os: Os) {
+    match os {
+        Os::Linux   => sb_appendf(output, c!("format ELF64\n")),
+        Os::Windows => sb_appendf(output, c!("format MS64 COFF\n")),
+    };
+    generate_funcs(output, da_slice((*c).funcs), os);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
