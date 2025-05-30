@@ -7,7 +7,7 @@ use crate::{missingf, Loc};
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64, loc: Loc) {
     if literal < 0 {
-        missingf!(loc, c!("Loading negative numbers is not supported yet"));
+        missingf!(loc, c!("Loading negative numbers is not supported yet\n"));
     }
 
     let mut literal = literal as u64;
@@ -46,10 +46,17 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    add  %s, %s, :lo12:%s\n"), reg, reg, name);
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
         }
-        Arg::Ref(index) => {
+        Arg::Deref(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
         },
+        Arg::RefAutoVar(index) => {
+            sb_appendf(output, c!("    add %s, sp, %zu\n"), reg, (index + 1)*8);
+        }
+        Arg::RefExternal(name) => {
+            sb_appendf(output, c!("    adrp %s, %s\n"), reg, name);
+            sb_appendf(output, c!("    add  %s, %s, :lo12:%s\n"), reg, reg, name);
+        }
         Arg::AutoVar(index) => {
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
         }
@@ -60,7 +67,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
             sb_appendf(output, c!("    add  %s, %s, :lo12:.dat\n"), reg, reg);
             if offset >= 4095 {
-                missingf!(loc, c!("Data offsets bigger than 4095 are not supported yet"));
+                missingf!(loc, c!("Data offsets bigger than 4095 are not supported yet\n"));
             } else if offset > 0 {
                 sb_appendf(output, c!("    add %s, %s, %zu\n"), reg, reg, offset);
             }
@@ -77,9 +84,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     assert!(auto_vars_count >= params_count);
     // TODO: add the rest of the registers.
     // The first 8 args go to x0-x7
-    const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
+    const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
     if params_count > REGISTERS.len() {
-        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided"), REGISTERS.len(), params_count);
+        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
     }
     for i in 0..params_count {
         let reg = (*REGISTERS)[i];
@@ -230,7 +237,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             },
             Op::Funcall {result, name, args} => {
                 if args.count > REGISTERS.len() {
-                    missingf!(op.loc, c!("Too many function call arguments. We support only %zu but %zu were provided"), REGISTERS.len(), args.count);
+                    missingf!(op.loc, c!("Too many function call arguments. We support only %zu but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
                 for i in 0..args.count {
                     let reg = (*REGISTERS)[i];

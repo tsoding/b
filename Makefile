@@ -20,18 +20,19 @@ OBJS=\
 	$(BUILD)/flag.o \
 	$(BUILD)/arena.o
 TESTS=\
-	$(BUILD)/tests/assign_ref \
 	$(BUILD)/tests/compare \
-	$(BUILD)/tests/forward-declare \
+	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
 	$(BUILD)/tests/e \
+	$(BUILD)/tests/forward-declare \
 	$(BUILD)/tests/hello \
 	$(BUILD)/tests/inc_dec \
 	$(BUILD)/tests/literals \
 	$(BUILD)/tests/minus_2 \
+	$(BUILD)/tests/ref \
 	$(BUILD)/tests/return \
-	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/ternary-side-effect \
+	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector
 
