@@ -30,8 +30,8 @@ $(BUILD):
 
 .PHONY: test
 test: $(BUILD)/b
-	$(BUILD)/b -run tests/assign_ref.b
 	$(BUILD)/b -run tests/compare.b
+	$(BUILD)/b -run tests/deref_assign.b
 	$(BUILD)/b -run tests/divmod.b
 	$(BUILD)/b -run tests/e.b
 	$(BUILD)/b -run tests/forward-declare.b
@@ -39,6 +39,7 @@ test: $(BUILD)/b
 	$(BUILD)/b -run tests/inc_dec.b
 	$(BUILD)/b -run tests/literals.b
 	$(BUILD)/b -run tests/minus_2.b
+	$(BUILD)/b -run tests/ref.b
 	$(BUILD)/b -run tests/return.b
 	$(BUILD)/b -run tests/ternary.b
 	$(BUILD)/b -run tests/ternary-side-effect.b

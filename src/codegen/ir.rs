@@ -5,7 +5,9 @@ use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
         Arg::External(name)     => sb_appendf(output, c!("%s"), name),
-        Arg::Ref(index)         => sb_appendf(output, c!("ref[%zu]"), index),
+        Arg::Deref(index)       => sb_appendf(output, c!("deref[%zu]"), index),
+        Arg::RefAutoVar(index)  => sb_appendf(output, c!("ref auto[%zu]"), index),
+        Arg::RefExternal(name)  => sb_appendf(output, c!("ref %s"), name),
         Arg::Literal(value)     => sb_appendf(output, c!("%ld"), value),
         Arg::AutoVar(index)     => sb_appendf(output, c!("auto[%zu]"), index),
         Arg::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
@@ -25,7 +27,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("\n"));
             },
             Op::Store{index, arg} => {
-                sb_appendf(output, c!("    store ref[%zu], "), index);
+                sb_appendf(output, c!("    store deref[%zu], "), index);
                 dump_arg(output, arg);
                 sb_appendf(output, c!("\n"));
             }
