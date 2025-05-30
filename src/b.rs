@@ -902,6 +902,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
         let saved_point = (*l).parse_point;
         stb_c_lexer_get_token(l);
         if (*l).token == '(' as c_long { // Function definition
+            declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
@@ -929,7 +930,6 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             compile_statement(l, input_path, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
-            declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
             da_append(&mut (*c).funcs, Func {
                 name,
                 name_loc,
