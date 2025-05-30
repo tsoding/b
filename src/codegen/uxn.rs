@@ -396,7 +396,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             }
         }
     }
-    link_label(assembler, *op_labels.items.add((*body).len()), (*output).count);
+    link_label(assembler, *op_labels.items.add(body.len()), (*output).count);
 
     free(op_labels.items);
 
@@ -510,7 +510,7 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut As
             // be able to call any expression. But fixing that requires making changes to b.rs
             // and all existing codegen, which I don't feel like doing right now.
             let mut is_function = false;
-            for i in 0..(*funcs).len() {
+            for i in 0..funcs.len() {
                 if strcmp((*funcs)[i].name, name) == 0 {
                     is_function = true;
                     break;
@@ -546,7 +546,7 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
 }
 
 pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], assembler: *mut Assembler) {
-    'skip_function: for i in 0..(*extrns).len() {
+    'skip_function: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
