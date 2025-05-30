@@ -84,7 +84,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     assert!(auto_vars_count >= params_count);
     // TODO: add the rest of the registers.
     // The first 8 args go to x0-x7
-    const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4")];
+    const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
     if params_count > REGISTERS.len() {
         missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
     }
