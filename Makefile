@@ -19,10 +19,21 @@ OBJS=\
 	$(BUILD)/stb_c_lexer.o \
 	$(BUILD)/flag.o \
 	$(BUILD)/arena.o
-
-define tests 
-	$(BUILD)/b -run tests/$(1).b -o tests/build/$(1)
-endef
+TESTS=\
+	$(BUILD)/tests/assign_ref \
+	$(BUILD)/tests/compare \
+	$(BUILD)/tests/forward-declare \
+	$(BUILD)/tests/divmod \
+	$(BUILD)/tests/e \
+	$(BUILD)/tests/hello \
+	$(BUILD)/tests/inc_dec \
+	$(BUILD)/tests/literals \
+	$(BUILD)/tests/minus_2 \
+	$(BUILD)/tests/return \
+	$(BUILD)/tests/ternary \
+	$(BUILD)/tests/ternary-side-effect \
+	$(BUILD)/tests/unary_priority \
+	$(BUILD)/tests/vector
 
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
 	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
@@ -34,20 +45,13 @@ $(BUILD):
 	mkdir -pv $(BUILD)
 
 .PHONY: test
-test: $(BUILD)/b
-	mkdir -pv tests/build/
+test: $(TESTS)
 
-	@$(call tests,assign_ref)
-	@$(call tests,compare)
-	@$(call tests,forward-declare)
-	@$(call tests,divmod)
-	@$(call tests,e)
-	@$(call tests,hello)
-	@$(call tests,inc_dec)
-	@$(call tests,literals)
-	@$(call tests,minus_2)
-	@$(call tests,return)
-	@$(call tests,ternary)
-	@$(call tests,ternary-side-effect)
-	@$(call tests,unary_priority) 
-	@$(call tests,vector) 
+$(BUILD)/tests/%: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -run -o $@ $<
+
+$(BUILD)/tests:
+	mkdir -pv $(BUILD)/tests
+
+# https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
+FORCE:
