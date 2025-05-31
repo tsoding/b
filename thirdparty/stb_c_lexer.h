@@ -7,6 +7,7 @@
 // - Make STB_C_LEXER_SELF_TEST print locations from parse_point
 // - Remove STB_C_LEX_ISWHITE completely. Its code was not even compilable, which indicates that nobody was using it anyway.
 // - Make STB_C_LEXER_SELF_TEST optional file path via args
+// - Consider any string literals with newlines as a CLEX_parse_error
 
 // stb_c_lexer.h - v0.12+ - public domain Sean Barrett 2013
 // lexer for making little C-like languages with recursive-descent parsers
@@ -459,6 +460,8 @@ static int stb__clex_parse_string(stb_lexer *lexer, char *p, int type)
          if (n < 0)
             return stb__clex_token(lexer, CLEX_parse_error, start, q);
          p = q;
+      } else if (*p == '\r' || *p == '\n') {
+         return stb__clex_token(lexer, CLEX_parse_error, start, p);
       } else {
          // @OPTIMIZE: could speed this up by looping-while-not-backslash
          n = (unsigned char) *p++;
