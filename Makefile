@@ -1,6 +1,7 @@
 BUILD=build
 THIRDPARTY=thirdparty
 SRC=src
+
 RSS=\
 	$(SRC)/arena.rs \
 	$(SRC)/b.rs \
@@ -18,6 +19,24 @@ OBJS=\
 	$(BUILD)/stb_c_lexer.o \
 	$(BUILD)/flag.o \
 	$(BUILD)/arena.o
+TESTS=\
+	$(BUILD)/tests/compare \
+	$(BUILD)/tests/deref_assign \
+	$(BUILD)/tests/divmod \
+	$(BUILD)/tests/e \
+	$(BUILD)/tests/forward-declare \
+	$(BUILD)/tests/hello \
+	$(BUILD)/tests/inc_dec \
+	$(BUILD)/tests/literals \
+	$(BUILD)/tests/minus_2 \
+	$(BUILD)/tests/recursion \
+	$(BUILD)/tests/ref \
+	$(BUILD)/tests/return \
+	$(BUILD)/tests/ternary-side-effect \
+	$(BUILD)/tests/ternary \
+	$(BUILD)/tests/unary_priority \
+	$(BUILD)/tests/vector
+
 
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
 	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
@@ -29,20 +48,13 @@ $(BUILD):
 	mkdir -pv $(BUILD)
 
 .PHONY: test
-test: $(BUILD)/b
-	$(BUILD)/b -run tests/compare.b
-	$(BUILD)/b -run tests/deref_assign.b
-	$(BUILD)/b -run tests/divmod.b
-	$(BUILD)/b -run tests/e.b
-	$(BUILD)/b -run tests/forward-declare.b
-	$(BUILD)/b -run tests/hello.b
-	$(BUILD)/b -run tests/inc_dec.b
-	$(BUILD)/b -run tests/literals.b
-	$(BUILD)/b -run tests/minus_2.b
-	$(BUILD)/b -run tests/recursion.b
-	$(BUILD)/b -run tests/ref.b
-	$(BUILD)/b -run tests/return.b
-	$(BUILD)/b -run tests/ternary.b
-	$(BUILD)/b -run tests/ternary-side-effect.b
-	$(BUILD)/b -run tests/unary_priority.b
-	$(BUILD)/b -run tests/vector.b
+test: $(TESTS)
+
+$(BUILD)/tests/%: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -run -o $@ $< ./std/test.b
+
+$(BUILD)/tests:
+	mkdir -pv $(BUILD)/tests
+
+# https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
+FORCE:

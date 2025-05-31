@@ -126,11 +126,11 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], assembler: &mut Assembler) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, assembler, funcs);
+        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, assembler);
     }
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, assembler: *mut Assembler, funcs: *const [Func]) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, assembler: *mut Assembler) {
     link_label(assembler, get_or_create_label_by_name(assembler, name), (*output).count);
 
     const MAX_ARGS: usize = (256 - FIRST_ARG as usize) / 2;
@@ -177,7 +177,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         let op = (*body)[i];
         match op.opcode {
             Op::UnaryNot {result, arg} => {
-                load_arg(arg, op.loc, output, assembler, funcs);
+                load_arg(arg, output, assembler);
                 // if arg == 0 then 1 else 0
                 write_op(output, UxnOp::LIT2);
                 write_short(output, 0);
@@ -191,47 +191,47 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             }
             Op::Negate {result, arg} => {
                 write_lit2(output, 0);
-                load_arg(arg, op.loc, output, assembler, funcs);
+                load_arg(arg, output, assembler);
                 write_op(output, UxnOp::SUB2);
                 store_auto(output, result);
             }
             Op::Binop {binop: Binop::Plus, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::ADD2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Minus, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::SUB2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Mult, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::MUL2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Mod, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::DIV2k);
                 write_op(output, UxnOp::MUL2);
                 write_op(output, UxnOp::SUB2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Div, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::DIV2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::LessEqual, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(rhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
                 write_op(output, UxnOp::GTH2);
@@ -242,10 +242,10 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Less, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(rhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
                 write_op(output, UxnOp::LTH2);
@@ -254,10 +254,10 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Greater, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(rhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
                 write_op(output, UxnOp::GTH2);
@@ -266,26 +266,26 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::Equal, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::EQU2);
                 write_lit(output, 0);
                 write_op(output, UxnOp::SWP);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::NotEqual, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::NEQ2);
                 write_lit(output, 0);
                 write_op(output, UxnOp::SWP);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::GreaterEqual, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(rhs, output, assembler);
                 write_lit2(output, 0x8000);
                 write_op(output, UxnOp::EOR2);
                 write_op(output, UxnOp::LTH2);
@@ -296,20 +296,20 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::BitOr, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::ORA2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::BitAnd, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::AND2);
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::BitShl, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::NIP);
                 write_lit(output, 0x0f);
                 write_op(output, UxnOp::AND);
@@ -319,8 +319,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::BitShr, index, lhs, rhs} => {
-                load_arg(lhs, op.loc, output, assembler, funcs);
-                load_arg(rhs, op.loc, output, assembler, funcs);
+                load_arg(lhs, output, assembler);
+                load_arg(rhs, output, assembler);
                 write_op(output, UxnOp::NIP);
                 write_lit(output, 0x0f);
                 write_op(output, UxnOp::AND);
@@ -328,21 +328,21 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, index);
             }
             Op::AutoAssign {index, arg} => {
-                load_arg(arg, op.loc, output, assembler, funcs);
+                load_arg(arg, output, assembler);
                 store_auto(output, index);
             }
             Op::ExternalAssign {name, arg} => {
-                load_arg(arg, op.loc, output, assembler, funcs);
+                load_arg(arg, output, assembler);
                 write_op(output, UxnOp::LIT2);
                 write_label_abs(output, get_or_create_label_by_name(assembler, name), assembler);
                 write_op(output, UxnOp::STA2);
             }
             Op::Store {index, arg} => {
-                load_arg(arg, op.loc, output, assembler, funcs);
+                load_arg(arg, output, assembler);
                 write_lit_ldz2(output, BP);
-                write_op(output, UxnOp::LDA2);
                 write_lit2(output, (index * 2) as u16);
                 write_op(output, UxnOp::SUB2);
+                write_op(output, UxnOp::LDA2);
                 write_op(output, UxnOp::STA2);
             }
             Op::Funcall {result, name, args} => {
@@ -350,7 +350,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), MAX_ARGS, args.count);
                 }
                 for i in 0..args.count {
-                    load_arg(*args.items.add(i), op.loc, output, assembler, funcs);
+                    load_arg(*args.items.add(i), output, assembler);
                     write_lit_stz2(output, FIRST_ARG + (i as u8) * 2)
                 }
                 write_op(output, UxnOp::JSI);
@@ -363,7 +363,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_label_rel(output, *op_labels.items.add(addr), assembler);
             }
             Op::JmpIfNot {addr, arg} => {
-                load_arg(arg, op.loc, output, assembler, funcs);
+                load_arg(arg, output, assembler);
                 write_lit2(output, 0);
                 write_op(output, UxnOp::EQU2);
                 write_op(output, UxnOp::JCI);
@@ -372,7 +372,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             Op::Return {arg} => {
                 // Put return value in the FIRST_ARG
                 if let Some(arg) = arg {
-                    load_arg(arg, op.loc, output, assembler, funcs);
+                    load_arg(arg, output, assembler);
                 } else {
                     write_lit2(output, 0);
                 }
@@ -396,7 +396,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             }
         }
     }
-    link_label(assembler, *op_labels.items.add((*body).len()), (*output).count);
+    link_label(assembler, *op_labels.items.add(body.len()), (*output).count);
 
     free(op_labels.items);
 
@@ -489,7 +489,7 @@ pub unsafe fn write_infinite_loop(output: *mut String_Builder) {
     write_short(output, 0xfffd);
 }
 
-pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assembler: *mut Assembler, funcs: *const [Func]) {
+pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut Assembler) {
     match arg {
         Arg::Deref(index) => {
             write_lit_ldz2(output, BP);
@@ -502,23 +502,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assemble
             let label = get_or_create_label_by_name(assembler, name);
             write_op(output, UxnOp::LIT2);
             write_label_abs(output, label, assembler);
-            // TODO: it's really a hack due to how currently both funcs and global vars
-            // are the same thing. Without that hack, when you reference a function
-            // in an expression, you get the first byte of its machine code,
-            // which probably isn't what you want. And uxn really likes its function pointers.
-            // It seems like in B a function's name should evaluate to its address, and you should
-            // be able to call any expression. But fixing that requires making changes to b.rs
-            // and all existing codegen, which I don't feel like doing right now.
-            let mut is_function = false;
-            for i in 0..(*funcs).len() {
-                if strcmp((*funcs)[i].name, name) == 0 {
-                    is_function = true;
-                    break;
-                }
-            }
-            if !is_function {
-                write_op(output, UxnOp::LDA2);
-            }
+            write_op(output, UxnOp::LDA2);
         }
         Arg::AutoVar(index) => {
             write_lit_ldz2(output, BP);
@@ -535,8 +519,16 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assemble
             write_lit2(output, offset as u16);
             write_op(output, UxnOp::ADD2);
         }
-        Arg::RefAutoVar(_) => missingf!(loc, c!("Taking a reference to an auto var on Uxn is not implemented yet\n")),
-        Arg::RefExternal(_) => missingf!(loc, c!("Taking a reference to an external on Uxn is not implemented yet\n")),
+        Arg::RefAutoVar(index) => {
+            write_lit_ldz2(output, BP);
+            write_lit2(output, (index * 2) as u16);
+            write_op(output, UxnOp::SUB2);
+        }
+        Arg::RefExternal(name) => {
+            let label = get_or_create_label_by_name(assembler, name);
+            write_op(output, UxnOp::LIT2);
+            write_label_abs(output, label, assembler);
+        }
     }
 }
 
@@ -548,7 +540,7 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
 }
 
 pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], assembler: *mut Assembler) {
-    'skip_function: for i in 0..(*extrns).len() {
+    'skip_function: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
