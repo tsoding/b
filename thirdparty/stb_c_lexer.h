@@ -474,6 +474,19 @@ static int stb__clex_parse_string(stb_lexer *lexer, char *p, int type)
    return stb__clex_token(lexer, type, start, p);
 }
 
+static char *stb__clex_step(stb_lexer *lexer, char *p)
+{
+    if (*p == '\n' || *p == '\r') {
+        p += (p[0]+p[1] == '\r'+'\n' ? 2 : 1); // skip newline
+        lexer->parse_point.line_number += 1;
+        lexer->parse_point.line_start = p;
+    } else {
+        ++p;
+    }
+
+    return p;
+}
+
 int stb_c_lexer_get_token(stb_lexer *lexer)
 {
    char *p = lexer->parse_point.head;
@@ -481,13 +494,7 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
    // skip whitespace and comments
    for (;;) {
       while (p != lexer->eof && stb__clex_iswhite(*p)) {
-         if (*p == '\n' || *p == '\r') {
-            p += (p[0]+p[1] == '\r'+'\n' ? 2 : 1); // skip newline
-            lexer->parse_point.line_number += 1;
-            lexer->parse_point.line_start = p;
-         } else {
-            ++p;
-         }
+         p = stb__clex_step(lexer, p);
       }
 
       STB_C_LEX_CPP_COMMENTS(
@@ -503,13 +510,7 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
             char *start = p;
             p += 2;
             while (p != lexer->eof && (p[0] != '*' || p[1] != '/')) {
-               if (*p == '\n' || *p == '\r') {
-                  p += (p[0]+p[1] == '\r'+'\n' ? 2 : 1); // skip newline
-                  lexer->parse_point.line_number += 1;
-                  lexer->parse_point.line_start = p;
-               } else {
-                  ++p;
-               }
+               p = stb__clex_step(lexer, p);
             }
             if (p == lexer->eof)
                return stb__clex_token(lexer, CLEX_parse_error, start, p-1);
