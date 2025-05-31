@@ -476,14 +476,13 @@ static int stb__clex_parse_string(stb_lexer *lexer, char *p, int type)
 
 static char *stb__clex_step(stb_lexer *lexer, char *p)
 {
-    if (*p == '\n' || *p == '\r') {
-        p += (p[0]+p[1] == '\r'+'\n' ? 2 : 1); // skip newline
+    // assert(p < lexer->eof);
+    char x = *p++;
+    if (x == '\n' || x == '\r') {
+        if (p < lexer->eof && x + *p == '\r'+'\n') p++;
         lexer->parse_point.line_number += 1;
         lexer->parse_point.line_start = p;
-    } else {
-        ++p;
     }
-
     return p;
 }
 
