@@ -217,6 +217,35 @@ pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *m
     Some(())
 }
 
+#[derive(Clone, Copy)]
+pub struct Label {
+    name: *const c_char,
+    loc: Loc,
+    addr: usize,
+}
+
+pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *const Label {
+    for i in 0..(*labels).count {
+        let label = (*labels).items.add(i);
+        if strcmp((*label).name, name) == 0 {
+            return label
+        }
+    }
+    ptr::null()
+}
+
+pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
+    let existing_label = find_label(labels, name);
+    if !existing_label.is_null() {
+        diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
+        diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
+        return None;
+    }
+
+    da_append(labels, Label {name, loc, addr});
+    Some(())
+}
+
 const B_KEYWORDS: *const [*const c_char] = &[
     c!("auto"),
     c!("extrn"),
@@ -825,7 +854,29 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
                 unreachable!();
             }
             Some(())
+        } else if (*l).token == CLEX_id && strcmp((*l).string, c!("goto")) == 0 {
+            get_and_expect_clex(l, input_path, CLEX_id)?;
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let loc = lexer_loc(l, input_path);
+            let addr = (*c).func_body.count;
+            da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
+            get_and_expect_clex(l, input_path, ';' as c_long)?;
+            push_opcode(Op::Jmp {addr: 0}, lexer_loc(l, input_path), c);
+            Some(())
         } else {
+            if (*l).token == CLEX_id {
+                let mark = arena::snapshot(&mut (*c).arena);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name_loc = lexer_loc(l, input_path);
+                let addr = (*c).func_body.count;
+                stb_c_lexer_get_token(l);
+                if (*l).token == ':' as c_long {
+                    define_label(&mut (*c).func_labels, name, name_loc, addr)?;
+                    return Some(());
+                } else {
+                    arena::rewind(&mut (*c).arena, mark);
+                }
+            }
             (*l).parse_point = saved_point;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             compile_expression(l, input_path, c)?;
@@ -868,6 +919,8 @@ pub struct Compiler {
     pub auto_vars_ator: AutoVarsAtor,
     pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
+    pub func_labels: Array<Label>,
+    pub func_labels_used: Array<Label>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<*const c_char>,
@@ -929,6 +982,16 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             compile_statement(l, input_path, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
+            for i in 0..(*c).func_labels_used.count {
+                let used_label = *(*c).func_labels_used.items.add(i);
+                let existing_label = find_label(&(*c).func_labels, used_label.name);
+                if existing_label.is_null() {
+                    diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
+                    return None;
+                }
+                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
+            }
+
             declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
             da_append(&mut (*c).funcs, Func {
                 name,
@@ -938,6 +1001,8 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 auto_vars_count: (*c).auto_vars_ator.max,
             });
             (*c).func_body = zeroed();
+            (*c).func_labels = zeroed();
+            (*c).func_labels_used = zeroed();
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
