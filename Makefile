@@ -25,6 +25,7 @@ TESTS=\
 	$(BUILD)/tests/divmod \
 	$(BUILD)/tests/e \
 	$(BUILD)/tests/forward-declare \
+	$(BUILD)/tests/goto \
 	$(BUILD)/tests/hello \
 	$(BUILD)/tests/inc_dec \
 	$(BUILD)/tests/literals \
