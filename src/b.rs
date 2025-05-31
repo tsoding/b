@@ -96,7 +96,7 @@ pub unsafe fn lexer_loc(l: *const stb_lexer, input_path: *const c_char) -> Loc {
     Loc {
         input_path,
         line_number: (*l).parse_point.line_number,
-        line_offset: (*l).parse_point.head.offset_from((*l).parse_point.line_start) as c_int,
+        line_offset: (*l).where_firstchar.offset_from((*l).parse_point.line_start) as c_int + 1,
     }
 }
 
