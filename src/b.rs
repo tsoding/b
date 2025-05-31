@@ -1199,12 +1199,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     Some(())
 }
 
-// TODO(2025-05-18 07:06:26): B lexing is different from the C one.
-//   Hack stb_c_lexer.h into stb_b_lexer.h
-//   On the other hand, frankly speaking B lexing sucks.
-//   C lexing is much better. So an executive decision on the trade off between
-//   convenience and historical accuracy is required here.
-
 // TODO: Continue compilation for as long as possible
 //   even if you encounter semantical errors like unknown variables, functions, etc.
 //   If we couldn't find some names just report the error, generate some bogus IR, and

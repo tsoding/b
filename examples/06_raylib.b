@@ -21,7 +21,7 @@ main() {
     c              = 0;               // Current color
     cn             = 6;               // Amount of colors
     cs             = malloc(word*cn); // Color Table
-    *cs            = 0xFF1818FF;      // B originally does not support hex literals actually. See TODO(2025-05-18 07:06:26).
+    *cs            = 0xFF1818FF;      // B originally does not support hex literals actually.
     *(cs + word)   = 0xFF18FF18;
     *(cs + word*2) = 0xFFFF1818;
     *(cs + word*3) = 0xFFFFFF18;
