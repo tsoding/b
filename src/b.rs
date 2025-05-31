@@ -991,6 +991,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 }
                 (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
             }
+            // TODO: free memory allocated for label names
 
             declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
             da_append(&mut (*c).funcs, Func {
