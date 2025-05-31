@@ -6,6 +6,7 @@
 // - Remove stb_c_lexer_get_location and make stb_lexer.parse_point keep track of newlines
 // - Make STB_C_LEXER_SELF_TEST print locations from parse_point
 // - Remove STB_C_LEX_ISWHITE completely. Its code was not even compilable, which indicates that nobody was using it anyway.
+// - Make STB_C_LEXER_SELF_TEST optional file path via args
 
 // stb_c_lexer.h - v0.12+ - public domain Sean Barrett 2013
 // lexer for making little C-like languages with recursive-descent parsers
@@ -855,7 +856,10 @@ void dummy(void)
 
 int main(int argc, char **argv)
 {
-   FILE *f = fopen(__FILE__,"rb");
+   const char *path = __FILE__;
+   if (argc > 1) path = argv[1];
+
+   FILE *f = fopen(path,"rb");
    char *text = (char *) malloc(1 << 20);
    int len = f ? (int) fread(text, 1, 1<<20, f) : -1;
    stb_lexer lex;
@@ -873,7 +877,7 @@ int main(int argc, char **argv)
          printf("\n<<<PARSE ERROR>>>\n");
          break;
       }
-      printf("%s:%d: ", __FILE__, lex.parse_point.line_number);
+      printf("%s:%d:%ld: ", path, lex.parse_point.line_number, lex.where_firstchar - lex.parse_point.line_start + 1);
       print_token(&lex);
       printf("\n");
    }
