@@ -340,9 +340,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             Op::Store {index, arg} => {
                 load_arg(arg, output, assembler);
                 write_lit_ldz2(output, BP);
-                write_op(output, UxnOp::LDA2);
                 write_lit2(output, (index * 2) as u16);
                 write_op(output, UxnOp::SUB2);
+                write_op(output, UxnOp::LDA2);
                 write_op(output, UxnOp::STA2);
             }
             Op::Funcall {result, name, args} => {
