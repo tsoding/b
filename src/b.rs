@@ -13,6 +13,7 @@ pub mod flag;
 pub mod crust;
 pub mod arena;
 pub mod codegen;
+pub mod lexer;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -24,13 +25,7 @@ use flag::*;
 use crust::libc::*;
 use arena::Arena;
 use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
-
-#[derive(Clone, Copy)]
-pub struct Loc {
-    pub input_path: *const c_char,
-    pub line_number: c_int,
-    pub line_offset: c_int,
-}
+use lexer::*;
 
 macro_rules! diagf {
     ($loc:expr, $($args:tt)*) => {{
