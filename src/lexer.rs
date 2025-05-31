@@ -1,4 +1,5 @@
 use core::ffi::*;
+use core::mem::zeroed;
 use crate::arena::*;
 use crate::crust::libc::*;
 
@@ -9,10 +10,99 @@ pub struct Loc {
     pub line_offset: c_int,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Token {
+    EOF,
+    ID,
+    String,
+    CharLit,
+    IntLit,
     OCurly,
     CCurly,
+    OParen,
+    CParen,
+    OBracket,
+    CBracket,
+    Not,
+    Mul,
+    Div,
+    Mod,
+    And,
+    Plus,
+    PlusPlus,
+    Minus,
+    MinusMinus,
+    Less,
+    LessEq,
+    Greater,
+    GreaterEq,
+    Or,
+    Eq,
+    EqEq,
+    NotEq,
+    Shl,
+    ShlEq,
+    Shr,
+    ShrEq,
+    ModEq,
+    OrEq,
+    AndEq,
+    PlusEq,
+    MinusEq,
+    MulEq,
+    DivEq,
+    Question,
+    Colon,
+    SemiColon,
+    Comma,
+}
+
+pub unsafe fn display_token(token: Token) -> *const c_char {
+    match token {
+        Token::EOF        => c!("end of file"),
+        Token::ID         => c!("identifier"),
+        Token::String     => c!("string"),
+        Token::CharLit    => c!("character"),
+        Token::IntLit     => c!("integer literal"),
+        Token::OCurly     => c!("{"),
+        Token::CCurly     => c!("}"),
+        Token::OParen     => c!("("),
+        Token::CParen     => c!(")"),
+        Token::OBracket   => c!("["),
+        Token::CBracket   => c!("]"),
+        Token::Not        => c!("!"),
+        Token::Mul        => c!("*"),
+        Token::Div        => c!("/"),
+        Token::Mod        => c!("%"),
+        Token::And        => c!("&"),
+        Token::Plus       => c!("+"),
+        Token::PlusPlus   => c!("++"),
+        Token::Minus      => c!("-"),
+        Token::MinusMinus => c!("--"),
+        Token::Less       => c!("<"),
+        Token::LessEq     => c!("<="),
+        Token::Greater    => c!(">"),
+        Token::GreaterEq  => c!(">="),
+        Token::Or         => c!("|"),
+        Token::NotEq      => c!("!="),
+        Token::Eq         => c!("="),
+        Token::EqEq       => c!("=="),
+        Token::Shl        => c!("<<"),
+        Token::ShlEq      => c!("<<="),
+        Token::Shr        => c!(">>"),
+        Token::ShrEq      => c!(">>="),
+        Token::ModEq      => c!("%="),
+        Token::OrEq       => c!("|="),
+        Token::AndEq      => c!("&="),
+        Token::PlusEq     => c!("+="),
+        Token::MinusEq    => c!("-="),
+        Token::MulEq      => c!("*="),
+        Token::DivEq      => c!("/="),
+        Token::Question   => c!("?"),
+        Token::Colon      => c!(":"),
+        Token::SemiColon  => c!(";"),
+        Token::Comma      => c!(","),
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -32,8 +122,19 @@ pub struct Lexer {
     pub string_storage: Arena,
     pub token: Token,
     pub string: *const c_char,
-    pub number: c_long,
+    pub int_number: c_long,
     pub loc: Loc,
+}
+
+pub unsafe fn new(input_path: *mut c_char, input_stream: *mut c_char, eof: *mut c_char) -> Lexer {
+    let mut l: Lexer = zeroed();
+    l.input_path              = input_path;
+    l.input_stream            = input_stream;
+    l.eof                     = eof;
+    l.parse_point.current     = input_stream;
+    l.parse_point.line_start  = input_stream;
+    l.parse_point.line_number = 1;
+    l
 }
 
 pub unsafe fn skip_char(l: *mut Lexer) -> Option<c_char> {
@@ -78,6 +179,8 @@ pub unsafe fn skip_whitespaces(l: *mut Lexer) {
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("{"), Token::OCurly),
     (c!("}"), Token::CCurly),
+    (c!("++"), Token::PlusPlus),
+    (c!("--"), Token::MinusMinus),
 ];
 
 pub unsafe fn skip_prefix(l: *mut Lexer, mut prefix: *const c_char) -> bool {
@@ -104,6 +207,8 @@ pub unsafe fn get_token(l: *mut Lexer) -> bool {
     skip_whitespaces(l);
 
     if is_eof(l) {
+        (*l).token = Token::EOF;
+        (*l).loc = loc(l);
         return false;
     }
 
