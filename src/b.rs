@@ -478,7 +478,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         }
         CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
         CLEX_id => {
-            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let name = arena::strdup(&mut (*c).arena_names, (*l).string);
             let name_loc = lexer_loc(l, input_path);
 
             let var_def = find_var_deep(&mut (*c).vars, name);
@@ -768,7 +768,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             let extrn = strcmp((*l).string, c!("extrn")) == 0;
             'vars: loop {
                 get_and_expect_clex(l, input_path, CLEX_id)?;
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                 let loc = lexer_loc(l, input_path);
                 let storage = if extrn {
                     name_declare_if_not_exists(&mut (*c).extrns, name);
@@ -852,7 +852,7 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             Some(())
         } else if (*l).token == CLEX_id && strcmp((*l).string, c!("goto")) == 0 {
             get_and_expect_clex(l, input_path, CLEX_id)?;
-            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
             let loc = lexer_loc(l, input_path);
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
@@ -861,16 +861,13 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             Some(())
         } else {
             if (*l).token == CLEX_id {
-                let mark = arena::snapshot(&mut (*c).arena);
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = lexer_loc(l, input_path);
                 let addr = (*c).func_body.count;
                 stb_c_lexer_get_token(l);
                 if (*l).token == ':' as c_long {
                     define_label(&mut (*c).func_labels, name, name_loc, addr)?;
                     return Some(());
-                } else {
-                    arena::rewind(&mut (*c).arena, mark);
                 }
             }
             (*l).parse_point = saved_point;
@@ -920,7 +917,8 @@ pub struct Compiler {
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<*const c_char>,
-    pub arena: Arena,
+    pub arena_names: Arena,
+    pub arena_labels: Arena,
 }
 
 pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
@@ -931,7 +929,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
 
         expect_clex(l, input_path, CLEX_id)?;
 
-        let name = arena::strdup(&mut (*c).arena, (*l).string);
+        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
         let name_loc = lexer_loc(l, input_path);
 
         // TODO: maybe the keywords should be identified on the level of lexing
@@ -960,7 +958,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 (*l).parse_point = saved_point;
                 'params: loop {
                     get_and_expect_clex(l, input_path, CLEX_id)?;
-                    let name = arena::strdup(&mut (*c).arena, (*l).string);
+                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                     let name_loc = lexer_loc(l, input_path);
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
@@ -988,7 +986,7 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 }
                 (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
             }
-            // TODO: free memory allocated for label names
+            arena::reset(&mut (*c).arena_labels);
 
             da_append(&mut (*c).funcs, Func {
                 name,

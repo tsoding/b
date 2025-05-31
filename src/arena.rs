@@ -15,6 +15,8 @@ pub struct Arena_Mark {
 }
 
 extern "C" {
+    #[link_name = "arena_reset"]
+    pub fn reset(a: *mut Arena) -> c_void;
     #[link_name = "arena_strdup"]
     pub fn strdup(a: *mut Arena, cstr: *const c_char) -> *mut c_char;
     #[link_name = "arena_snapshot"]
