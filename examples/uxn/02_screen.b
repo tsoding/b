@@ -64,5 +64,5 @@ main() {
     uxn_deo2(0x08, 0xff0); /* System/r */
     uxn_deo2(0x0a, 0xf00); /* System/g */
     uxn_deo2(0x0c, 0xf00); /* System/b */
-    uxn_deo2(0x20, on_screen); /* Screen/vector */
+    uxn_deo2(0x20, &on_screen); /* Screen/vector */
 }
