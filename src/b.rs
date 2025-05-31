@@ -1002,8 +1002,8 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 auto_vars_count: (*c).auto_vars_ator.max,
             });
             (*c).func_body = zeroed();
-            (*c).func_labels = zeroed();
-            (*c).func_labels_used = zeroed();
+            (*c).func_labels.count = 0;
+            (*c).func_labels_used.count = 0;
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
