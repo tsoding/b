@@ -30,12 +30,14 @@ TESTS=\
 	$(BUILD)/tests/inc_dec \
 	$(BUILD)/tests/literals \
 	$(BUILD)/tests/minus_2 \
+	$(BUILD)/tests/recursion \
 	$(BUILD)/tests/ref \
 	$(BUILD)/tests/return \
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector
+
 
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
 	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b

@@ -50,7 +50,7 @@ pub struct stb_lexer {
     // lexer variables
     pub input_stream   : *mut c_char,
     pub eof            : *mut c_char,
-    pub parse_point    : *mut c_char,
+    pub parse_point    : stb_parse_point,
     pub string_storage : *mut c_char,
     pub string_storage_len: c_int,
 
@@ -68,9 +68,10 @@ pub struct stb_lexer {
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct stb_lex_location {
+pub struct stb_parse_point {
+    pub head: *mut c_char,
+    pub line_start: *mut c_char,
     pub line_number: c_int,
-    pub line_offset: c_int,
 }
 
 extern "C" {
@@ -78,6 +79,4 @@ extern "C" {
     pub fn stb_c_lexer_init(lexer: *mut stb_lexer, input_stream: *const c_char, input_stream_end: *const c_char, string_store: *mut c_char, store_length: c_int);
     #[link_name="stb_c_lexer_get_token"]
     pub fn stb_c_lexer_get_token(lexer: *mut stb_lexer) -> c_int;
-    #[link_name="stb_c_lexer_get_location"]
-    pub fn stb_c_lexer_get_location(input_stream: *const c_char, hwere: *const c_char, loc: *mut stb_lex_location);
 }
