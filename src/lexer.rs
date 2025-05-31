@@ -13,6 +13,7 @@ pub struct Loc {
 #[derive(Clone, Copy, PartialEq)]
 pub enum Token {
     EOF,
+    ParseError,
     ID,
     String,
     CharLit,
@@ -60,6 +61,7 @@ pub enum Token {
 pub unsafe fn display_token(token: Token) -> *const c_char {
     match token {
         Token::EOF        => c!("end of file"),
+        Token::ParseError => c!("parse error"),
         Token::ID         => c!("identifier"),
         Token::String     => c!("string"),
         Token::CharLit    => c!("character"),
@@ -199,28 +201,28 @@ pub unsafe fn skip_prefix(l: *mut Lexer, mut prefix: *const c_char) -> bool {
     true
 }
 
-pub unsafe fn loc(_l: *mut Lexer) -> Loc {
-    todo!()
-}
-
 pub unsafe fn get_token(l: *mut Lexer) -> bool {
     skip_whitespaces(l);
 
+    (*l).loc = Loc {
+        input_path:  (*l).input_path,
+        line_number: (*l).parse_point.line_number as i32,
+        line_offset: (*l).parse_point.current.offset_from((*l).parse_point.line_start) as i32,
+    };
+
     if is_eof(l) {
         (*l).token = Token::EOF;
-        (*l).loc = loc(l);
         return false;
     }
 
     for i in 0..PUNCTS.len() {
         let (prefix, token) = (*PUNCTS)[i];
-        let loc = loc(l);
         if skip_prefix(l, prefix) {
             (*l).token = token;
-            (*l).loc = loc;
             return true
         }
     }
 
-    todo!()
+    (*l).token = Token::ParseError;
+    false
 }
