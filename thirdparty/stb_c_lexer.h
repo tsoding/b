@@ -5,6 +5,7 @@
 // - Update `int_number` field of the `stb_lexer` struct to be `long long` instead of `long`
 // - Remove stb_c_lexer_get_location and make stb_lexer.parse_point keep track of newlines
 // - Make STB_C_LEXER_SELF_TEST print locations from parse_point
+// - Remove STB_C_LEX_ISWHITE completely. Its code was not even compilable, which indicates that nobody was using it anyway.
 
 // stb_c_lexer.h - v0.12+ - public domain Sean Barrett 2013
 // lexer for making little C-like languages with recursive-descent parsers
@@ -107,8 +108,6 @@
 
 #define STB_C_LEX_DISCARD_PREPROCESSOR    Y   // discard C-preprocessor directives (e.g. after prepocess
                                               // still have #line, #pragma, etc)
-
-//#define STB_C_LEX_ISWHITE(str)    ... // return length in bytes of whitespace characters if first char is whitespace
 
 #define STB_C_LEXER_DEFINITIONS         // This line prevents the header file from replacing your definitions
 // --END--
@@ -480,16 +479,6 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
 
    // skip whitespace and comments
    for (;;) {
-      #ifdef STB_C_LEX_ISWHITE
-      while (p != lexer->stream_end) {
-         int n;
-         n = STB_C_LEX_ISWHITE(p);
-         if (n == 0) break;
-         if (lexer->eof && lexer->eof - lexer->parse_point < n)
-            return stb__clex_token(tok, CLEX_parse_error, p,lexer->eof-1);
-         p += n;
-      }
-      #else
       while (p != lexer->eof && stb__clex_iswhite(*p)) {
          if (*p == '\n' || *p == '\r') {
             p += (p[0]+p[1] == '\r'+'\n' ? 2 : 1); // skip newline
@@ -499,7 +488,6 @@ int stb_c_lexer_get_token(stb_lexer *lexer)
             ++p;
          }
       }
-      #endif
 
       STB_C_LEX_CPP_COMMENTS(
          if (p != lexer->eof && p[0] == '/' && p[1] == '/') {
