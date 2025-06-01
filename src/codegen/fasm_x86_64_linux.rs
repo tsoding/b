@@ -224,20 +224,20 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
 }
 
 pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char]) {
-    'skip_function: for i in 0..extrns.len() {
+    'skip: for i in 0..extrns.len() {
         let name = (*extrns)[i];
 
         for j in 0..funcs.len() {
             let func = (*funcs)[j];
             if strcmp(func.name, name) == 0 {
-                continue 'skip_function
+                continue 'skip
             }
         }
 
         for j in 0..globals.len() {
             let global = (*globals)[j];
             if strcmp(global, name) == 0 {
-                continue 'skip_function
+                continue 'skip
             }
         }
 
