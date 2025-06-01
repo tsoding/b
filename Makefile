@@ -7,6 +7,7 @@ RSS=\
 	$(SRC)/b.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
+	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
 	$(SRC)/stb_c_lexer.rs \
 	$(SRC)/codegen/fasm_x86_64_linux.rs \
