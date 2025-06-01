@@ -1,15 +1,20 @@
 main() {
-    extrn foo, bar;
+    extrn foo, bar, foo_msg, bar_msg;
+    foo_msg = "Foo\n";
+    bar_msg = "Bar\n";
     foo();
     bar();
 }
 
+foo_msg;
+bar_msg;
+
 foo() {
     extrn printf;
-    printf("Foo\n");
+    printf(foo_msg);
 }
 
 bar() {
     extrn printf;
-    printf("Bar\n");
+    printf(bar_msg);
 }
