@@ -26,24 +26,6 @@ use arena::Arena;
 use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
 use lexer::{Lexer, Loc, Token};
 
-macro_rules! diagf {
-    ($loc:expr, $($args:tt)*) => {{
-        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, $loc.line_number, $loc.line_offset);
-        fprintf(stderr, $($args)*);
-    }};
-}
-
-#[macro_export]
-macro_rules! missingf {
-    ($loc:expr, $($args:tt)*) => {{
-        let file = file!();
-        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, $loc.line_number, $loc.line_offset);
-        fprintf(stderr, $($args)*);
-        fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
-        abort();
-    }}
-}
-
 pub unsafe fn expect_clexes(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
     for i in 0..clexes.len() {
         if (*clexes)[i] == (*l).token {

@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::arena::*;
+use crate::nob::*;
 use crate::crust::libc::*;
 
 #[derive(Clone, Copy)]
@@ -10,10 +10,29 @@ pub struct Loc {
     pub line_offset: c_int,
 }
 
+#[macro_export]
+macro_rules! diagf {
+    ($loc:expr, $($args:tt)*) => {{
+        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, $loc.line_number, $loc.line_offset);
+        fprintf(stderr, $($args)*);
+    }};
+}
+
+#[macro_export]
+macro_rules! missingf {
+    ($loc:expr, $($args:tt)*) => {{
+        let file = file!();
+        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, $loc.line_number, $loc.line_offset);
+        fprintf(stderr, $($args)*);
+        fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
+        abort();
+    }}
+}
+
 #[derive(Clone, Copy, PartialEq)]
 pub enum Token {
     EOF,
-    ParseError,
+    Unknown,
     ID,
     String,
     CharLit,
@@ -61,7 +80,7 @@ pub enum Token {
 pub unsafe fn display_token(token: Token) -> *const c_char {
     match token {
         Token::EOF        => c!("end of file"),
-        Token::ParseError => c!("parse error"),
+        Token::Unknown    => c!("unknown token"),
         Token::ID         => c!("identifier"),
         Token::String     => c!("string"),
         Token::CharLit    => c!("character"),
@@ -121,7 +140,7 @@ pub struct Lexer {
     pub eof: *mut c_char,
     pub parse_point: Parse_Point,
 
-    pub string_storage: Arena,
+    pub string_storage: String_Builder,
     pub token: Token,
     pub string: *const c_char,
     pub int_number: c_long,
@@ -178,11 +197,21 @@ pub unsafe fn skip_whitespaces(l: *mut Lexer) {
     while let Some(_) = skip_char_if(l, |x| isspace(x as i32) != 0) {}
 }
 
+// TODO: Some punctuations are not historically accurate. =+ instead of +=, etc.
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("{"), Token::OCurly),
     (c!("}"), Token::CCurly),
+    (c!("("), Token::OParen),
+    (c!(")"), Token::CParen),
+    (c!(";"), Token::SemiColon),
+    (c!(","), Token::Comma),
     (c!("++"), Token::PlusPlus),
     (c!("--"), Token::MinusMinus),
+    (c!("=="), Token::EqEq),
+    (c!("="), Token::Eq),
+    (c!("!="), Token::NotEq),
+    (c!(">="), Token::GreaterEq),
+    (c!(">"), Token::Greater),
 ];
 
 pub unsafe fn skip_prefix(l: *mut Lexer, mut prefix: *const c_char) -> bool {
@@ -201,13 +230,36 @@ pub unsafe fn skip_prefix(l: *mut Lexer, mut prefix: *const c_char) -> bool {
     true
 }
 
+pub unsafe fn is_identifier(x: c_char) -> bool {
+    isalnum(x as c_int) != 0 || x == '_' as c_char
+}
+
+pub unsafe fn is_identifier_start(x: c_char) -> bool {
+    isalpha(x as c_int) != 0 || x == '_' as c_char
+}
+
+pub unsafe fn skip_line(l: *mut Lexer) {
+    while let Some(_) = skip_char_if(l, |x| x != '\n' as c_char) {}
+    skip_char(l);
+}
+
 pub unsafe fn get_token(l: *mut Lexer) -> bool {
     skip_whitespaces(l);
+
+    // TODO: C++ style comments are not particularly accurate
+    loop {
+        if skip_prefix(l, c!("//")) {
+            skip_line(l);
+            skip_whitespaces(l);
+        } else {
+            break;
+        }
+    }
 
     (*l).loc = Loc {
         input_path:  (*l).input_path,
         line_number: (*l).parse_point.line_number as i32,
-        line_offset: (*l).parse_point.current.offset_from((*l).parse_point.line_start) as i32,
+        line_offset: (*l).parse_point.current.offset_from((*l).parse_point.line_start) as i32 + 1,
     };
 
     if is_eof(l) {
@@ -223,6 +275,47 @@ pub unsafe fn get_token(l: *mut Lexer) -> bool {
         }
     }
 
-    (*l).token = Token::ParseError;
+    if is_identifier_start(*(*l).parse_point.current) {
+        (*l).token = Token::ID;
+        (*l).string_storage.count = 0;
+        while let Some(x) = skip_char_if(l, is_identifier) {
+            da_append(&mut (*l).string_storage, x);
+        }
+        da_append(&mut (*l).string_storage, 0);
+        (*l).string = (*l).string_storage.items;
+        return true;
+    }
+
+    if isdigit(*(*l).parse_point.current as c_int) != 0 {
+        (*l).token = Token::IntLit;
+        (*l).int_number = 0;
+        while let Some(x) = skip_char_if(l, |x| isdigit(x as c_int) != 0) {
+            (*l).int_number *= 10;
+            // TODO: check for overflows?
+            (*l).int_number += x as c_long - '0' as c_long;
+        }
+        return true;
+    }
+
+    if *(*l).parse_point.current == '"' as c_char {
+        skip_char(l);
+        (*l).token = Token::String;
+        (*l).string_storage.count = 0;
+        while let Some(x) = skip_char(l) {
+            match x {
+                // TODO: string escaping is not historically accurate. The escape symbol should be * instead of \
+                x if x == '\\' as c_char => todo!("escaping in strings literals"),
+                x if x == '"'  as c_char => break,
+                _ => da_append(&mut (*l).string_storage, x),
+            }
+        }
+        return true;
+    }
+
+    printf(c!("------------------------------\n"));
+    printf(c!("%c\n"), *(*l).parse_point.current as c_int);
+    printf(c!("------------------------------\n"));
+
+    (*l).token = Token::Unknown;
     false
 }

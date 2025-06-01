@@ -28,6 +28,9 @@ pub mod libc {
         pub fn printf(fmt: *const c_char, ...) -> c_int;
         pub fn fprintf(stream: *mut FILE, fmt: *const c_char, ...) -> c_int;
         pub fn isspace(c: c_int) -> c_int;
+        pub fn isalpha(c: c_int) -> c_int;
+        pub fn isalnum(c: c_int) -> c_int;
+        pub fn isdigit(c: c_int) -> c_int;
     }
 
     // count is the amount of items, not bytes
