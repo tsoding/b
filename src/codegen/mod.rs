@@ -6,31 +6,41 @@ pub mod fasm_x86_64_linux;
 pub mod ir;
 pub mod uxn;
 
+macro_rules! define_targets {
+    ($($variant:ident => $name:expr),* $(,)?) => {
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        /// Represents the various targets supported by the code generator.
+        /// Each variant corresponds to a specific target platform or architecture.
+        pub enum Target {
+            $($variant),*
+        }
+        
+        #[derive(Clone, Copy)]
+        pub struct Target_Name {
+            pub name: *const c_char,
+            pub target: Target,
+        }
+        
+        pub const TARGET_NAMES: &[Target_Name] = &[
+            $(
+                Target_Name {
+                    name: c!($name),
+                    target: Target::$variant,
+                }
+            ),*
+            ];
+        };
+    }
+    
 // TODO: add wasm target
 //   Don't touch this TODO! @rexim wants to stream it!
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Target {
-    Fasm_x86_64_Linux,
-    Gas_AArch64_Linux,
-    Uxn,
-    IR,
+define_targets! {
+    Fasm_x86_64_Linux => "fasm-x86_64-linux",
+    Gas_AArch64_Linux => "gas-aarch64-linux",
+    Uxn               => "uxn",
+    IR                => "ir",
 }
-
-#[derive(Clone, Copy)]
-pub struct Target_Name {
-    pub name: *const c_char,
-    pub target: Target,
-}
-
-// TODO: How do we make this place fail compiling when you add a new target above?
-//   Maybe we can introduce some sort of macro that generates all of this from a single list of targets
-pub const TARGET_NAMES: *const [Target_Name] = &[
-    Target_Name { name: c!("fasm-x86_64-linux"), target: Target::Fasm_x86_64_Linux },
-    Target_Name { name: c!("gas-aarch64-linux"), target: Target::Gas_AArch64_Linux },
-    Target_Name { name: c!("uxn"),               target: Target::Uxn               },
-    Target_Name { name: c!("ir"),                target: Target::IR                },
-];
-
+    
 pub unsafe fn name_of_target(target: Target) -> Option<*const c_char> {
     for i in 0..TARGET_NAMES.len() {
         if target == (*TARGET_NAMES)[i].target {
