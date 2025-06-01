@@ -6,7 +6,6 @@
 
 #[macro_use]
 pub mod nob;
-pub mod stb_c_lexer;
 #[macro_use]
 pub mod flag;
 #[macro_use]

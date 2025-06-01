@@ -9,7 +9,6 @@ RSS=\
 	$(SRC)/flag.rs \
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
-	$(SRC)/stb_c_lexer.rs \
 	$(SRC)/codegen/fasm_x86_64_linux.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
 	$(SRC)/codegen/uxn.rs \
@@ -17,7 +16,6 @@ RSS=\
 	$(SRC)/codegen/mod.rs
 OBJS=\
 	$(BUILD)/nob.o \
-	$(BUILD)/stb_c_lexer.o \
 	$(BUILD)/flag.o \
 	$(BUILD)/arena.o
 TESTS=\
