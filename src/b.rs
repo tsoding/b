@@ -194,7 +194,7 @@ pub enum Arg {
     RefAutoVar(usize),
     RefExternal(*const c_char),
     External(*const c_char),
-    Literal(i64),
+    Literal(u64),
     DataOffset(usize),
 }
 

@@ -185,7 +185,7 @@ pub struct Lexer {
     pub string_storage: String_Builder,
     pub token: Token,
     pub string: *const c_char,
-    pub int_number: c_long,
+    pub int_number: u64,
     pub loc: Loc,
 }
 
@@ -372,15 +372,15 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
             // TODO: check for overflows?
             if isdigit(x as c_int) != 0 {
                 (*l).int_number *= 16;
-                (*l).int_number += x as c_long - '0' as c_long;
+                (*l).int_number += x as u64 - '0' as u64;
                 skip_char(l);
             } else if 'a' as c_char <= x && x <= 'f' as c_char {
                 (*l).int_number *= 16;
-                (*l).int_number += x as c_long - 'a' as c_long + 10;
+                (*l).int_number += x as u64 - 'a' as u64 + 10;
                 skip_char(l);
             } else if 'A' as c_char <= x && x <= 'F' as c_char {
                 (*l).int_number *= 16;
-                (*l).int_number += x as c_long - 'A' as c_long + 10;
+                (*l).int_number += x as u64 - 'A' as u64 + 10;
                 skip_char(l);
             } else {
                 break
@@ -396,7 +396,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
             // TODO: check for overflows?
             if isdigit(x as c_int) != 0 {
                 (*l).int_number *= 10;
-                (*l).int_number += x as c_long - '0' as c_long;
+                (*l).int_number += x as u64 - '0' as u64;
                 skip_char(l);
             } else {
                 break
@@ -446,7 +446,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         (*l).int_number = 0;
         for i in 0..(*l).string_storage.count {
             (*l).int_number *= 0xFF;
-            (*l).int_number += *(*l).string_storage.items.add(i) as c_long;
+            (*l).int_number += *(*l).string_storage.items.add(i) as u64;
         }
 
         return Some(());
