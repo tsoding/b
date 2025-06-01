@@ -159,8 +159,11 @@ pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("!="), Token::NotEq),
     (c!("!"), Token::Not),
     (c!("<<="), Token::ShlEq),
+    (c!("<<"), Token::Shl),
     (c!("<="), Token::LessEq),
     (c!("<"), Token::Less),
+    (c!(">>="), Token::ShrEq),
+    (c!(">>"), Token::Shr),
     (c!(">="), Token::GreaterEq),
     (c!(">"), Token::Greater),
 ];
@@ -358,13 +361,37 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         return Some(())
     }
 
+    // TODO: B originally does not support hex literals actually.
+    if skip_prefix(l, c!("0x")) {
+        (*l).token = Token::IntLit;
+        (*l).int_number = 0;
+        while let Some(x) = peek_char(l) {
+            // TODO: check for overflows?
+            if isdigit(x as c_int) != 0 {
+                (*l).int_number *= 16;
+                (*l).int_number += x as c_long - '0' as c_long;
+                skip_char(l);
+            } else if 'a' as c_char <= x && x <= 'f' as c_char {
+                (*l).int_number *= 16;
+                (*l).int_number += x as c_long - 'a' as c_long + 10;
+                skip_char(l);
+            } else if 'A' as c_char <= x && x <= 'F' as c_char {
+                (*l).int_number *= 16;
+                (*l).int_number += x as c_long - 'A' as c_long + 10;
+                skip_char(l);
+            } else {
+                break
+            }
+        }
+        return Some(());
+    }
 
     if isdigit(x as c_int) != 0 {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
         while let Some(x) = peek_char(l) {
+            // TODO: check for overflows?
             if isdigit(x as c_int) != 0 {
-                // TODO: check for overflows?
                 (*l).int_number *= 10;
                 (*l).int_number += x as c_long - '0' as c_long;
                 skip_char(l);
