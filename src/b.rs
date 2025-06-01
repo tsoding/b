@@ -57,7 +57,7 @@ pub unsafe fn expect_clex(l: *mut Lexer, clex: Token) -> Option<()> {
 }
 
 pub unsafe fn get_and_expect_clex(l: *mut Lexer, clex: Token) -> Option<()> {
-    lexer::get_token(l);
+    lexer::get_token(l)?;
     expect_clex(l, clex)
 }
 
@@ -71,7 +71,7 @@ pub unsafe fn expect_clex_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
 }
 
 pub unsafe fn get_and_expect_clex_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
-    lexer::get_token(l);
+    lexer::get_token(l)?;
     expect_clex_id(l, id)
 }
 
@@ -334,7 +334,7 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 }
 
 pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
-    lexer::get_token(l);
+    lexer::get_token(l)?;
     let arg = match (*l).token {
         Token::OParen => {
             let result = compile_expression(l, c)?;
@@ -414,7 +414,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             }
 
             let saved_point = (*l).parse_point;
-            lexer::get_token(l);
+            lexer::get_token(l)?;
 
             if (*l).token == Token::OParen {
                 Some((compile_function_call(l, c, name, name_loc)?, false))
@@ -448,7 +448,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
     let (arg, is_lvalue) = arg?;
 
     let saved_point = (*l).parse_point;
-    lexer::get_token(l);
+    lexer::get_token(l)?;
 
     if (*l).token == Token::OBracket {
         let (offset, _) = compile_expression(l, c)?;
@@ -516,7 +516,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
     let (mut lhs, mut lvalue) = compile_binop_expression(l, c, precedence + 1)?;
 
     let mut saved_point = (*l).parse_point;
-    lexer::get_token(l);
+    lexer::get_token(l)?;
 
     if let Some(binop) = Binop::from_token((*l).token) {
         if binop.precedence() == precedence {
@@ -532,7 +532,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
                 lvalue = false;
 
                 saved_point = (*l).parse_point;
-                lexer::get_token(l);
+                lexer::get_token(l)?;
             }
         }
     }
@@ -546,7 +546,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
     let (lhs, mut lvalue) = compile_binop_expression(l, c, 0)?;
 
     let mut saved_point = (*l).parse_point;
-    lexer::get_token(l);
+    lexer::get_token(l)?;
 
     while let Some(binop) = Binop::from_assign_token((*l).token) {
         let binop_loc = (*l).loc;
@@ -577,7 +577,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
         lvalue = false;
 
         saved_point = (*l).parse_point;
-        lexer::get_token(l);
+        lexer::get_token(l)?;
     }
 
     (*l).parse_point = saved_point;
@@ -588,7 +588,7 @@ pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg
     let (arg, is_lvalue) = compile_assign_expression(l, c, 0)?;
 
     let saved_point = (*l).parse_point;
-    lexer::get_token(l);
+    lexer::get_token(l)?;
 
     if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
@@ -622,7 +622,7 @@ pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg
 pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     loop {
         let saved_point = (*l).parse_point;
-        lexer::get_token(l);
+        lexer::get_token(l)?;
         if (*l).token == Token::CCurly { return Some(()); }
         (*l).parse_point = saved_point;
 
@@ -639,13 +639,13 @@ pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *cons
 
     let mut args: Array<Arg> = zeroed();
     let saved_point = (*l).parse_point;
-    lexer::get_token(l);
+    lexer::get_token(l)?;
     if (*l).token != Token::CParen {
         (*l).parse_point = saved_point;
         loop {
             let (expr, _) = compile_expression(l, c)?;
             da_append(&mut args, expr);
-            lexer::get_token(l);
+            lexer::get_token(l)?;
             expect_clexes(l, &[Token::CParen, Token::Comma])?;
             match (*l).token {
                 Token::CParen => break,
@@ -678,7 +678,7 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
 
 pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
-    lexer::get_token(l);
+    lexer::get_token(l)?;
 
     if (*l).token == Token::OCurly {
         scope_push(&mut (*c).vars);
@@ -702,7 +702,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     Storage::Auto{index}
                 };
                 declare_var(l, &mut (*c).vars, name, loc, storage)?;
-                lexer::get_token(l);
+                lexer::get_token(l)?;
                 expect_clexes(l, &[Token::Comma, Token::SemiColon])?;
                 if (*l).token == Token::SemiColon {
                     break 'vars;
@@ -727,7 +727,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             compile_statement(l, c)?;
 
             let saved_point = (*l).parse_point;
-            lexer::get_token(l);
+            lexer::get_token(l)?;
 
             if (*l).token == Token::ID && strcmp((*l).string, c!("else")) == 0 {
                 let addr_skips_else = (*c).func_body.count;
@@ -761,7 +761,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
             Some(())
         } else if (*l).token == Token::ID && strcmp((*l).string, c!("return")) == 0 {
-            lexer::get_token(l);
+            lexer::get_token(l)?;
             expect_clexes(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
                 push_opcode(Op::Return {arg: None}, (*l).loc, c);
@@ -788,7 +788,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = (*l).loc;
                 let addr = (*c).func_body.count;
-                lexer::get_token(l);
+                lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
                     define_label(&mut (*c).func_labels, name, name_loc, addr)?;
                     return Some(());
@@ -848,7 +848,7 @@ pub struct Compiler {
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     scope_push(&mut (*c).vars);          // begin global scope
     'def: loop {
-        lexer::get_token(l);
+        lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
 
         expect_clex(l, Token::ID)?;
@@ -871,13 +871,13 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
 
         let saved_point = (*l).parse_point;
-        lexer::get_token(l);
+        lexer::get_token(l)?;
         if (*l).token == Token::OParen { // Function definition
             declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name});
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
-            lexer::get_token(l);
+            lexer::get_token(l)?;
             if (*l).token != Token::CParen {
                 (*l).parse_point = saved_point;
                 'params: loop {
@@ -887,7 +887,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
-                    lexer::get_token(l);
+                    lexer::get_token(l)?;
                     expect_clexes(l, &[Token::Comma, Token::CParen])?;
                     if (*l).token == Token::CParen {
                         break 'params;
