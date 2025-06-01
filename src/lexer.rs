@@ -416,7 +416,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         (*l).int_number = 0;
         for i in 0..(*l).string_storage.count {
             (*l).int_number *= 0xFF;
-            (*l).int_number += *(*l).string_storage.items.add(i) as c_long - '0' as c_long;
+            (*l).int_number += *(*l).string_storage.items.add(i) as c_long;
         }
 
         return Some(());
