@@ -320,14 +320,17 @@ pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<
 pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
     skip_whitespaces(l);
 
-    // TODO: C++ style comments are not particularly accurate
-    loop {
-        if skip_prefix(l, c!("//")) {
-            skip_line(l);
-            skip_whitespaces(l);
-        } else {
-            break;
+    // TODO: C++ style comments are not particularly historically accurate
+    while skip_prefix(l, c!("//")) {
+        skip_line(l);
+        skip_whitespaces(l);
+    }
+
+    while skip_prefix(l, c!("/*")) {
+        while !is_eof(l) && !skip_prefix(l, c!("*/")) {
+            skip_char(l);
         }
+        skip_whitespaces(l);
     }
 
     (*l).loc = loc(l);
