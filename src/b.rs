@@ -702,13 +702,11 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 };
                 declare_var(l, &mut (*c).vars, name, loc, storage)?;
                 lexer::get_token(l)?;
-                expect_clexes(l, &[Token::Comma, Token::SemiColon])?;
-                if (*l).token == Token::SemiColon {
-                    break 'vars;
-                } else if (*l).token == Token::Comma {
-                    continue 'vars;
-                } else {
-                    unreachable!()
+                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
+                match (*l).token {
+                    Token::SemiColon => break 'vars,
+                    Token::Comma => continue 'vars,
+                    _ => unreachable!(),
                 }
             }
 
@@ -887,13 +885,11 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
                     lexer::get_token(l)?;
-                    expect_clexes(l, &[Token::Comma, Token::CParen])?;
-                    if (*l).token == Token::CParen {
-                        break 'params;
-                    } else if (*l).token == Token::Comma {
-                        continue 'params;
-                    } else {
-                        unreachable!()
+                    expect_clexes(l, &[Token::CParen, Token::Comma])?;
+                    match (*l).token {
+                        Token::CParen => break 'params,
+                        Token::Comma => continue 'params,
+                        _ => unreachable!(),
                     }
                 }
             }
