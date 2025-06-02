@@ -702,7 +702,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 };
                 declare_var(l, &mut (*c).vars, name, loc, storage)?;
                 lexer::get_token(l)?;
-                expect_clexes(l, &[Token::Comma, Token::SemiColon])?;
+                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
                 match (*l).token {
                     Token::SemiColon => break 'vars,
                     Token::Comma => continue 'vars,
