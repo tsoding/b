@@ -17,9 +17,12 @@ pub mod libc {
     pub type FILE = c_void;
 
     extern "C" {
-        pub fn get_stdin() -> *mut FILE;
-        pub fn get_stdout() -> *mut FILE;
-        pub fn get_stderr() -> *mut FILE;
+        #[link_name = "get_stdin"]
+        pub fn stdin() -> *mut FILE;
+        #[link_name = "get_stdout"]
+        pub fn stdout() -> *mut FILE;
+        #[link_name = "get_stderr"]
+        pub fn stderr() -> *mut FILE;
         pub fn strcmp(s1: *const c_char, s2: *const c_char) -> c_int;
         pub fn strchr(s: *const c_char, c: c_int) -> *const c_char;
         pub fn strlen(s: *const c_char) -> usize;
@@ -53,13 +56,13 @@ pub unsafe fn panic_handler(info: &PanicInfo) -> ! {
     // TODO: What's the best way to implement the panic handler within the Crust spirit
     //   PanicInfo must be passed by reference.
     if let Some(location) = info.location() {
-        fprintf(get_stderr(), c!("%.*s:%d: "), location.file().len(), location.file().as_ptr(), location.line());
+        fprintf(stderr(), c!("%.*s:%d: "), location.file().len(), location.file().as_ptr(), location.line());
     }
-    fprintf(get_stderr(), c!("panicked"));
+    fprintf(stderr(), c!("panicked"));
     if let Some(message) = info.message().as_str() {
-        fprintf(get_stderr(), c!(": %.*s"), message.len(), message.as_ptr());
+        fprintf(stderr(), c!(": %.*s"), message.len(), message.as_ptr());
     }
-    fprintf(get_stderr(), c!("\n"));
+    fprintf(stderr(), c!("\n"));
     abort()
 }
 

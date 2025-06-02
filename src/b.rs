@@ -36,8 +36,8 @@ macro_rules! diagf {
     ($loc:expr, $($args:tt)*) => {{
         let mut stb_loc: stb_lex_location = zeroed();
         stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
-        fprintf(get_stderr(), c!("%s:%d:%d: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
-        fprintf(get_stderr(), $($args)*);
+        fprintf(stderr(), c!("%s:%d:%d: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
+        fprintf(stderr(), $($args)*);
     }};
 }
 
@@ -47,9 +47,9 @@ macro_rules! missingf {
         let file = file!();
         let mut stb_loc = zeroed();
         crate::stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
-        fprintf(get_stderr(), c!("%s:%d:%d: TODO: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
-        fprintf(get_stderr(), $($args)*);
-        fprintf(get_stderr(), c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
+        fprintf(stderr(), c!("%s:%d:%d: TODO: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
+        fprintf(stderr(), $($args)*);
+        fprintf(stderr(), c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
         abort();
     }}
 }
@@ -827,9 +827,9 @@ pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Opti
 }
 
 pub unsafe fn usage() {
-    fprintf(get_stderr(), c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
-    fprintf(get_stderr(), c!("OPTIONS:\n"));
-    flag_print_options(get_stderr());
+    fprintf(stderr(), c!("Usage: %s [OPTIONS] <input.b>\n"), flag_program_name());
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    flag_print_options(stderr());
 }
 
 #[derive(Clone, Copy)]
@@ -870,11 +870,11 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             diagf!(name_loc, c!("NOTE: Reserved keywords are: "));
             for i in 0..B_KEYWORDS.len() {
                 if i > 0 {
-                    fprintf(get_stderr(), c!(", "));
+                    fprintf(stderr(), c!(", "));
                 }
-                fprintf(get_stderr(), c!("`%s`"), (*B_KEYWORDS)[i]);
+                fprintf(stderr(), c!("`%s`"), (*B_KEYWORDS)[i]);
             }
-            fprintf(get_stderr(), c!("\n"));
+            fprintf(stderr(), c!("\n"));
             return None;
         }
 
@@ -950,7 +950,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
-            flag_print_error(get_stderr());
+            flag_print_error(stderr());
             return None;
         }
         argc = flag_rest_argc();
@@ -962,7 +962,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 da_append(&mut run_args, shift!(argv, argc));
             } else {
                 // TODO: support compiling several files?
-                fprintf(get_stderr(), c!("ERROR: Serveral input files is not supported yet\n"));
+                fprintf(stderr(), c!("ERROR: Serveral input files is not supported yet\n"));
                 return None;
             }
         }
@@ -974,22 +974,22 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     if strcmp(*target_name, c!("list")) == 0 {
-        fprintf(get_stderr(), c!("Compilation targets:\n"));
+        fprintf(stderr(), c!("Compilation targets:\n"));
         for i in 0..TARGET_NAMES.len() {
-            fprintf(get_stderr(), c!("    %s\n"), (*TARGET_NAMES)[i].name);
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[i].name);
         }
         return Some(());
     }
 
     if input_path.is_null() {
         usage();
-        fprintf(get_stderr(), c!("ERROR: no input is provided\n"));
+        fprintf(stderr(), c!("ERROR: no input is provided\n"));
         return None;
     }
 
     let Some(target) = target_by_name(*target_name) else {
         usage();
-        fprintf(get_stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
+        fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
     };
 
@@ -1028,7 +1028,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cfg!(target_arch = "aarch64") {
                 // TODO: think how to approach cross-compilation
-                fprintf(get_stderr(), c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
                 return None;
             }
 
@@ -1093,7 +1093,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cfg!(target_arch = "x86_64") {
                 // TODO: think how to approach cross-compilation
-                fprintf(get_stderr(), c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
                 return None;
             }
 
