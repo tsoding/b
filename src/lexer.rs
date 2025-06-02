@@ -223,13 +223,6 @@ pub unsafe fn skip_char(l: *mut Lexer) {
     }
 }
 
-pub unsafe fn skip_chars(l: *mut Lexer, mut n: usize) {
-    while n > 0 && !is_eof(l) {
-        skip_char(l);
-        n -= 1;
-    }
-}
-
 pub unsafe fn skip_whitespaces(l: *mut Lexer) {
     while let Some(x) = peek_char(l) {
         if isspace(x as i32) != 0 {
