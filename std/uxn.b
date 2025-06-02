@@ -1,8 +1,17 @@
-// Standard Library for the Uxn target
+/* Standard Library for the Uxn target */
 
 putchar(c) {
     extrn uxn_deo;
     uxn_deo(0x18, c); /* 0x18 - Console/write */
+}
+
+abort() {
+    /* TODO: is there a better way to implement abort() for Uxn?
+     *   Maybe some sort of halting Opcode or some Device IO?
+     */
+    extrn printf;
+    printf("Aborted\n");
+    while(1) {}
 }
 
 /* loosely based on the original code by Ken Thompson */
