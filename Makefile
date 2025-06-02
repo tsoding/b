@@ -28,7 +28,7 @@ OBJS=\
 	$(BUILD)/arena.o
 
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
-	rustc $(RUSTFLAGS) --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) $(LINKFLAGS)" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
+	rustc $(RUSTFLAGS) --edition 2021 -g -C opt-level=0 -C link-args="$(OBJS) $(LINKFLAGS)" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
 
 $(BUILD)/%.o: $(THIRDPARTY)/%.c | $(BUILD)
 	$(CC) -fPIC -g -c $< -o $@

@@ -72,4 +72,6 @@ pub unsafe extern "C" fn crust_entry_point(argc: i32, argv: *mut*mut c_char) -> 
 }
 
 #[no_mangle]
-fn rust_eh_personality() {}
+pub unsafe fn rust_eh_personality() {
+    // TODO: Research more what this is used for. Maybe we could put something useful in here.
+}

@@ -21,7 +21,16 @@ pub unsafe fn da_last_mut<T>(xs: *mut Array<T>) -> *mut T {
 }
 
 pub unsafe fn da_slice<T>(xs: Array<T>) -> *mut [T] {
-    slice::from_raw_parts_mut(xs.items, xs.count)
+    if xs.items.is_null() {
+        // Caught by the debug mode unsafe precondition runtime check (I think it automatically enables when you do -C opt-level=0):
+        // > panicked: unsafe precondition(s) violated: slice::from_raw_parts_mut requires the pointer to be aligned and non-null,
+        // > and the total size of the slice not to exceed `isize::MAX`
+        // The docs for slice::from_raw_parts_mut confirm:
+        // > `data` must be non-null, valid for both reads and writes for `len * size_of::<T>()` many bytes, and it must be properly aligned.
+        &mut []
+    } else {
+        slice::from_raw_parts_mut(xs.items, xs.count)
+    }
 }
 
 pub unsafe fn da_append<T>(xs: *mut Array<T>, item: T) {
