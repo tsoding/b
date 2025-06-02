@@ -434,6 +434,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         }
         skip_char(l);
         da_append(&mut (*l).string_storage, 0);
+        (*l).string = (*l).string_storage.items;
         return Some(());
     }
 
