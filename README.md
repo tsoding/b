@@ -7,7 +7,7 @@
   <img src="./logo/logo_strawberry.png" width=400>
 </p>
 
-<p align=center>
+<p align=right>
   <sub>Logo by Strawberry 🍓</sub>
 </p>
 
@@ -30,8 +30,12 @@ $ ./build/b -run ./examples/01_hello_world.b
 
 The compiler supports [Uxn](https://100r.co/site/uxn.html) target. Make sure you have `uxnemu` in your `$PATH` if you want to use `-run` flag.
 
+### GC32
+
+The compiler supports [Govno Core 32](https://github.com/xi816/gc32) target. Make sure you have `gc32` and `kasm` in your `$PATH` if you are compiling for this target.
+
 ```console
-$ ./build/b -t uxn -run ./examples/01_hello_world.b ./std/uxn.b
+$ ./build/b -t govnocore32 -run ./examples/01_hello_world.b ./std/gc32.b
 ```
 
 Also check out more examples at [./examples/](./examples/).

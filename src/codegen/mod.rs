@@ -5,6 +5,7 @@ pub mod gas_aarch64_linux;
 pub mod fasm_x86_64_linux;
 pub mod ir;
 pub mod uxn;
+pub mod gc32;
 
 // TODO: add wasm target
 //   Don't touch this TODO! @rexim wants to stream it!
@@ -14,6 +15,7 @@ pub enum Target {
     Gas_AArch64_Linux,
     Uxn,
     IR,
+    GovnoCore32
 }
 
 #[derive(Clone, Copy)]
@@ -29,6 +31,7 @@ pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("gas-aarch64-linux"), target: Target::Gas_AArch64_Linux },
     Target_Name { name: c!("uxn"),               target: Target::Uxn               },
     Target_Name { name: c!("ir"),                target: Target::IR                },
+    Target_Name { name: c!("govnocore32"),       target: Target::GovnoCore32       },
 ];
 
 pub unsafe fn name_of_target(target: Target) -> Option<*const c_char> {
