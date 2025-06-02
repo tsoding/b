@@ -37,6 +37,26 @@ pub mod libc {
         pub fn isdigit(c: c_int) -> c_int;
     }
 
+    pub mod time {
+        use core::ffi::*;
+
+        pub type c_time_t = u64;
+        pub type c_clockid_t = u32;
+
+        pub const CLOCK_MONOTONIC: c_clockid_t = 1;
+
+        #[repr(C)]
+        #[derive(Clone, Copy)]
+        pub struct c_timespec {
+            pub tv_sec: c_time_t,
+            pub tv_nsec: c_long,
+        }
+
+        extern "C" {
+            pub fn clock_gettime(clockid: c_clockid_t, tp: *mut c_timespec) -> c_int;
+        }
+    }
+
     // count is the amount of items, not bytes
     pub unsafe fn realloc_items<T>(ptr: *mut T, count: usize) -> *mut T {
         extern "C" {

@@ -14,6 +14,54 @@ pub mod arena;
 pub mod codegen;
 pub mod lexer;
 
+pub mod time {
+    use core::mem::zeroed;
+    use crate::crust::libc::time::{clock_gettime, CLOCK_MONOTONIC};
+
+    #[derive(Clone, Copy)]
+    pub struct Instant {
+        pub secs: i64,
+        pub nanos: i64,
+    }
+
+    impl Instant {
+        pub unsafe fn now() -> Option<Instant> {
+            let mut time = zeroed();
+            if clock_gettime(CLOCK_MONOTONIC, &raw mut time) != 0 {
+                return None
+            }
+            let instant = Instant {
+                secs:  time.tv_sec as i64,
+                nanos: time.tv_nsec as i64
+            };
+            Some(instant)
+        }
+
+        pub unsafe fn diff_nanos(this: Instant, that: Instant) -> i64 {
+            let secs = this.secs - that.secs;
+            if secs == 0 {
+                this.nanos - that.nanos
+            } else if secs > 0 {
+                1_000_000_000 * (secs + 1) + this.nanos - that.nanos
+            } else {
+                1_000_000_000 * (secs + 1) + that.nanos - this.nanos
+            }
+        }
+    }
+
+    pub unsafe fn elapsed_millis(then: Instant) -> Option<f64> {
+        Some(Instant::diff_nanos(Instant::now()?, then) as f64 / 1e6)
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Stats {
+    pub compiler_millis: f64,
+    pub codegen_millis: f64,
+    pub assembler_millis: f64,
+    pub linker_millis: f64,
+}
+
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
@@ -24,6 +72,7 @@ use crust::libc::*;
 use arena::Arena;
 use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
 use lexer::{Lexer, Loc, Token};
+use time::Instant;
 
 pub unsafe fn expect_clexes(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
     for i in 0..clexes.len() {
@@ -943,6 +992,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
+    let print_stats = flag_bool(c!("stats"), false, c!("Print compilation statistics"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
     let mut input_paths: Array<*mut c_char> = zeroed();
@@ -990,6 +1040,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None;
     };
 
+    let mut stats: Stats = zeroed();
+
     let mut c: Compiler = zeroed();
     let mut input: String_Builder = zeroed();
     for i in 0..input_paths.count {
@@ -998,9 +1050,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
 
+        let start = Instant::now()?;
         let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
-
         compile_program(&mut l, &mut c)?;
+        stats.compiler_millis = time::elapsed_millis(start)?;
     }
 
     let mut output: String_Builder = zeroed();
@@ -1072,7 +1125,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Fasm_x86_64_Linux => {
+            let start = Instant::now()?;
             codegen::fasm_x86_64_linux::generate_program(&mut output, &c);
+            stats.codegen_millis = time::elapsed_millis(start)?;
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1095,12 +1150,16 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
+            let start = Instant::now()?;
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            stats.assembler_millis = time::elapsed_millis(start)?;
+
+            let start = Instant::now()?;
             cmd_append! {
                 &mut cmd,
                 c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
@@ -1112,6 +1171,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 }
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            stats.linker_millis = time::elapsed_millis(start)?;
+
             if *run {
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
@@ -1177,6 +1238,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
     }
+
+    if *print_stats {
+        fprintf(stderr(), c!("INFO: compiler took   %5.1f ms\n"), stats.compiler_millis);
+        fprintf(stderr(), c!("INFO: codegen took    %5.1f ms\n"), stats.codegen_millis);
+        fprintf(stderr(), c!("INFO: assembler took  %5.1f ms\n"), stats.assembler_millis);
+        fprintf(stderr(), c!("INFO: linker took     %5.1f ms\n"), stats.linker_millis);
+    }
+
     Some(())
 }
 
