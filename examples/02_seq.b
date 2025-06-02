@@ -1,8 +1,7 @@
 // -*- mode: simpc -*-
 
-// TODO: make examples/02_seq.b work with html-js
-//   This may require implementing missing POSIX function and command line arguments.
-//   We can pass command line arguments through URL query parameters.
+// TODO: is it possible to make seq and echo examples work on Uxn target?
+//   Maybe there is some sort of mechanism that enables passing command line arguments?
 main(argc, argv) {
     extrn printf, fprintf, stderr, atoi;
 
