@@ -1,7 +1,16 @@
-// flag.h -- v1.1.0 -- command-line flag parsing
+// flag.h -- v1.2.0 -- command-line flag parsing
 //
 //   Inspired by Go's flag module: https://pkg.go.dev/flag
 //
+// Macros API:
+// - FLAG_LIST_INIT_CAP - initial capacity of the Flag_List Dynamic Array.
+// - FLAGS_CAP - how many flags you can define.
+// - FLAG_PUSH_DASH_DASH_BACK - make flag_parse() retain "--" in the rest args
+//   (available via flag_rest_argc() and flag_rest_argv()). Useful when you need
+//   to know whether flag_parse() has stopped due to encountering "--" or due to
+//   encountering a non-flag. Ideally this should've been a default behavior,
+//   but it breaks backward compatibility. Hence it's a feature macro.
+//   TODO: make FLAG_PUSH_DASH_DASH_BACK a default behavior on a major version upgrade.
 #ifndef FLAG_H_
 #define FLAG_H_
 
@@ -218,9 +227,15 @@ bool flag_parse(int argc, char **argv)
         }
 
         if (strcmp(flag, "--") == 0) {
-            // NOTE: but if it's the terminator we don't need to push it back
+#ifdef FLAG_PUSH_DASH_DASH_BACK
+            // NOTE: pushing dash dash back into args as requested by the user
+            c->rest_argc = argc + 1;
+            c->rest_argv = argv - 1;
+#else
+            // NOTE: not pushing dash dash back into args for backward compatibility
             c->rest_argc = argc;
             c->rest_argv = argv;
+#endif // FLAG_PUSH_DASH_DASH_BACK
             return true;
         }
 
@@ -427,6 +442,7 @@ void flag_print_error(FILE *stream)
 /*
    Revision history:
 
+     1.2.0 (2025-05-31) Introduce FLAG_PUSH_DASH_DASH_BACK (by @nullnominal)
      1.1.0 (2025-05-09) Introduce flag list
      1.0.0 (2025-03-03) Initial release
                         Save program_name in the context

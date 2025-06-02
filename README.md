@@ -4,7 +4,11 @@
 > Compiler is not fully implemented yet.
 
 <p align=center>
-  <img src="./logo/logo.png" width=400>
+  <img src="./logo/logo_strawberry.png" width=400>
+</p>
+
+<p align=right>
+  <sub>Logo by Strawberry 🍓</sub>
 </p>
 
 Compiler for the B Programming Language implemented in [Crust](https://github.com/tsoding/crust)
@@ -20,6 +24,14 @@ Compiler for the B Programming Language implemented in [Crust](https://github.co
 ```console
 $ make
 $ ./build/b -run ./examples/01_hello_world.b
+```
+
+### Uxn
+
+The compiler supports [Uxn](https://100r.co/site/uxn.html) target. Make sure you have `uxnemu` in your `$PATH` if you want to use `-run` flag.
+
+```console
+$ ./build/b -t uxn -run ./examples/01_hello_world.b ./std/uxn.b
 ```
 
 Also check out more examples at [./examples/](./examples/).

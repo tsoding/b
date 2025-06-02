@@ -1,5 +1,4 @@
 use core::ffi::*;
-use core::mem::zeroed;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
@@ -7,10 +6,12 @@ use crate::{missingf, Loc};
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
-        Arg::Ref(index) => {
+        Arg::Deref(index) => {
             sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8);
             sb_appendf(output, c!("    mov %s, [%s]\n"), reg, reg)
         }
+        Arg::RefAutoVar(index)  => sb_appendf(output, c!("    lea %s, [rbp-%zu]\n"), reg, index*8),
+        Arg::RefExternal(name)  => sb_appendf(output, c!("    lea %s, [_%s]\n"), reg, name),
         Arg::External(name)     => sb_appendf(output, c!("    mov %s, [_%s]\n"), reg, name),
         Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
         Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"), reg, value),
@@ -222,9 +223,25 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) 
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
-    for i in 0..extrns.len() {
-        sb_appendf(output, c!("extrn '%s' as _%s\n"), (*extrns)[i], (*extrns)[i]);
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char]) {
+    'skip: for i in 0..extrns.len() {
+        let name = (*extrns)[i];
+
+        for j in 0..funcs.len() {
+            let func = (*funcs)[j];
+            if strcmp(func.name, name) == 0 {
+                continue 'skip
+            }
+        }
+
+        for j in 0..globals.len() {
+            let global = (*globals)[j];
+            if strcmp(global, name) == 0 {
+                continue 'skip
+            }
+        }
+
+        sb_appendf(output, c!("extrn '%s' as _%s\n"), name, name);
     }
 }
 
@@ -253,7 +270,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     sb_appendf(output, c!("format ELF64\n"));
     generate_funcs(output, da_slice((*c).funcs));
-    generate_extrns(output, da_slice((*c).extrns));
+    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
 }
