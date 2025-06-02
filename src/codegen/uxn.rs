@@ -88,8 +88,8 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
         let byte = match patch.kind {
             PatchKind::UpperAbsolute => ((addr + 0x100) >> 8) & 0xff,
             PatchKind::LowerAbsolute => (addr + 0x100) & 0xff,
-            PatchKind::UpperRelative => ((addr - patch.addr - 2) >> 8) & 0xff,
-            PatchKind::LowerRelative => (addr - patch.addr - 1) & 0xff,
+            PatchKind::UpperRelative => (addr.wrapping_sub(patch.addr).wrapping_sub(2) >> 8) & 0xff,
+            PatchKind::LowerRelative => (addr.wrapping_sub(patch.addr).wrapping_sub(1)) & 0xff,
         };
         *(*output).items.add(patch.addr as usize) = byte as c_char;
     }
