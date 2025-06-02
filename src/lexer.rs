@@ -469,7 +469,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         // TODO: I don't know in which order the characters should be packed in the char literal
         (*l).int_number = 0;
         for i in 0..(*l).string_storage.count {
-            (*l).int_number *= 0xFF;
+            (*l).int_number *= 0x100;
             (*l).int_number += *(*l).string_storage.items.add(i) as u64;
         }
 
