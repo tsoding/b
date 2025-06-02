@@ -25,6 +25,7 @@ TESTS=\
 	$(BUILD)/tests/goto \
 	$(BUILD)/tests/hello \
 	$(BUILD)/tests/inc_dec \
+	$(BUILD)/tests/lexer \
 	$(BUILD)/tests/literals \
 	$(BUILD)/tests/minus_2 \
 	$(BUILD)/tests/recursion \

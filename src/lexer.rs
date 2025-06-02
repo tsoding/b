@@ -395,6 +395,22 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         return Some(());
     }
 
+    if skip_prefix(l, c!("0")) {
+        (*l).token = Token::IntLit;
+        (*l).int_number = 0;
+        while let Some(x) = peek_char(l) {
+            // TODO: check for overflows?
+            if '0' as c_char <= x && x <= '7' as c_char {
+                (*l).int_number *= 8;
+                (*l).int_number += x as u64 - '0' as u64;
+                skip_char(l);
+            } else {
+                break
+            }
+        }
+        return Some(())
+    }
+
     if isdigit(x as c_int) != 0 {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
