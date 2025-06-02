@@ -434,6 +434,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         parse_string_into_storage(l, '"' as c_char)?;
         if is_eof(l) {
             diagf!(loc(l), c!("LEXER ERROR: Unfinished string literal\n"));
+            diagf!((*l).loc, c!("LEXER INFO: Literal starts here\n"));
             (*l).token = Token::ParseError;
             return None;
         }
@@ -449,6 +450,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         parse_string_into_storage(l, '\'' as c_char)?;
         if is_eof(l) {
             diagf!(loc(l), c!("LEXER ERROR: Unfinished character literal\n"));
+            diagf!((*l).loc, c!("LEXER INFO: Literal starts here\n"));
             (*l).token = Token::ParseError;
             return None;
         }
