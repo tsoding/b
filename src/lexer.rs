@@ -257,21 +257,18 @@ pub unsafe fn skip_prefix(l: *mut Lexer, mut prefix: *const c_char) -> bool {
     true
 }
 
+pub unsafe fn skip_until(l: *mut Lexer, prefix: *const c_char) {
+    while !is_eof(l) && !skip_prefix(l, prefix) {
+        skip_char(l);
+    }
+}
+
 pub unsafe fn is_identifier(x: c_char) -> bool {
     isalnum(x as c_int) != 0 || x == '_' as c_char
 }
 
 pub unsafe fn is_identifier_start(x: c_char) -> bool {
     isalpha(x as c_int) != 0 || x == '_' as c_char
-}
-
-pub unsafe fn skip_line(l: *mut Lexer) {
-    while let Some(x) = peek_char(l) {
-        skip_char(l);
-        if x == '\n' as c_char {
-            break
-        }
-    }
 }
 
 pub unsafe fn loc(l: *mut Lexer) -> Loc {
@@ -318,21 +315,17 @@ pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<
 }
 
 pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
-    skip_whitespaces(l);
-
     'comments: loop {
+        skip_whitespaces(l);
+
         // TODO: C++ style comments are not particularly historically accurate
         if skip_prefix(l, c!("//")) {
-            skip_line(l);
-            skip_whitespaces(l);
+            skip_until(l, c!("\n"));
             continue 'comments;
         }
 
         if skip_prefix(l, c!("/*")) {
-            while !is_eof(l) && !skip_prefix(l, c!("*/")) {
-                skip_char(l);
-            }
-            skip_whitespaces(l);
+            skip_until(l, c!("*/"));
             continue 'comments;
         }
 

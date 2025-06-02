@@ -1,3 +1,6 @@
+/* B comment */
+// C++ comment
+
 main() {
     extrn assert_equal;
     assert_equal(0105, 69, "0105 == 69");
