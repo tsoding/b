@@ -78,11 +78,11 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
             for j in 0..(*a).named_labels.count {
                 let named_label = *(*a).named_labels.items.add(j);
                 if named_label.label == patch.label {
-                    fprintf(stderr, c!("Label '%s' was never linked\n"), named_label.name);
+                    fprintf(stderr(), c!("Label '%s' was never linked\n"), named_label.name);
                     abort();
                 }
             }
-            fprintf(stderr, c!("Label #%ld was never linked (error in the uxn codegen)\n"), patch.label);
+            fprintf(stderr(), c!("Label #%ld was never linked (error in the uxn codegen)\n"), patch.label);
             abort();
         }
         let byte = match patch.kind {
@@ -624,7 +624,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_lit_stz2(output, FIRST_ARG);
             write_op(output, UxnOp::JMP2r);
         } else {
-            fprintf(stderr, c!("Unknown extrn: `%s`, can not link\n"), name);
+            fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
             abort();
         }
     }

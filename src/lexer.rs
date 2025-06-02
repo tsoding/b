@@ -13,8 +13,8 @@ pub struct Loc {
 #[macro_export]
 macro_rules! diagf {
     ($loc:expr, $($args:tt)*) => {{
-        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, $loc.line_number, $loc.line_offset);
-        fprintf(stderr, $($args)*);
+        fprintf(stderr(), c!("%s:%d:%d: "), $loc.input_path, $loc.line_number, $loc.line_offset);
+        fprintf(stderr(), $($args)*);
     }};
 }
 
@@ -22,9 +22,9 @@ macro_rules! diagf {
 macro_rules! missingf {
     ($loc:expr, $($args:tt)*) => {{
         let file = file!();
-        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, $loc.line_number, $loc.line_offset);
-        fprintf(stderr, $($args)*);
-        fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
+        fprintf(stderr(), c!("%s:%d:%d: TODO: "), $loc.input_path, $loc.line_number, $loc.line_offset);
+        fprintf(stderr(), $($args)*);
+        fprintf(stderr(), c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
         abort();
     }}
 }

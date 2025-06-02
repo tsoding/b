@@ -815,9 +815,9 @@ pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Opti
 }
 
 pub unsafe fn usage() {
-    fprintf(stderr, c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
-    fprintf(stderr, c!("OPTIONS:\n"));
-    flag_print_options(stderr);
+    fprintf(stderr(), c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    flag_print_options(stderr());
 }
 
 #[derive(Clone, Copy)]
@@ -861,11 +861,11 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             diagf!(name_loc, c!("NOTE: Reserved keywords are: "));
             for i in 0..B_KEYWORDS.len() {
                 if i > 0 {
-                    fprintf(stderr, c!(", "));
+                    fprintf(stderr(), c!(", "));
                 }
-                fprintf(stderr, c!("`%s`"), (*B_KEYWORDS)[i]);
+                fprintf(stderr(), c!("`%s`"), (*B_KEYWORDS)[i]);
             }
-            fprintf(stderr, c!("\n"));
+            fprintf(stderr(), c!("\n"));
             return None;
         }
 
@@ -954,7 +954,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     'args: while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
-            flag_print_error(stderr);
+            flag_print_error(stderr());
             return None;
         }
         argc = flag_rest_argc();
@@ -975,22 +975,22 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     if strcmp(*target_name, c!("list")) == 0 {
-        fprintf(stderr, c!("Compilation targets:\n"));
+        fprintf(stderr(), c!("Compilation targets:\n"));
         for i in 0..TARGET_NAMES.len() {
-            fprintf(stderr, c!("    %s\n"), (*TARGET_NAMES)[i].name);
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[i].name);
         }
         return Some(());
     }
 
     if input_paths.count == 0 {
         usage();
-        fprintf(stderr, c!("ERROR: no input is provided\n"));
+        fprintf(stderr(), c!("ERROR: no input is provided\n"));
         return None;
     }
 
     let Some(target) = target_by_name(*target_name) else {
         usage();
-        fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
+        fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
     };
 
@@ -1030,7 +1030,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cfg!(target_arch = "aarch64") {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
                 return None;
             }
 
@@ -1095,7 +1095,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cfg!(target_arch = "x86_64") {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
                 return None;
             }
 

@@ -1,6 +1,7 @@
 BUILD=build
-THIRDPARTY=thirdparty
 SRC=src
+
+CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 
 RSS=\
 	$(SRC)/arena.rs \
@@ -14,10 +15,7 @@ RSS=\
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs
-OBJS=\
-	$(BUILD)/nob.o \
-	$(BUILD)/flag.o \
-	$(BUILD)/arena.o
+
 TESTS=\
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
@@ -37,12 +35,31 @@ TESTS=\
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector
 
+LINUX_OBJS=\
+	$(BUILD)/nob.linux.o \
+	$(BUILD)/flag.linux.o \
+	$(BUILD)/libc.linux.o \
+	$(BUILD)/arena.linux.o
 
-$(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
-	rustc --edition 2021 -g -C opt-level=z -C link-args="$(OBJS) -lc -lgcc" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
+MINGW32_OBJS=\
+	$(BUILD)/nob.mingw32.o \
+	$(BUILD)/flag.mingw32.o \
+	$(BUILD)/libc.mingw32.o \
+	$(BUILD)/arena.mingw32.o
 
-$(BUILD)/%.o: $(THIRDPARTY)/%.c | $(BUILD)
+$(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
+	rustc $(CRUST_FLAGS) -C link-args="$(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
+
+$(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
 	clang -fPIC -g -c $< -o $@
+
+# Cross-compilation on Linux to Windows using mingw32-w64
+# Invoked on demand by `make ./build/b.exe`
+$(BUILD)/b.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b
+
+$(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
+	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@
 
 $(BUILD):
 	mkdir -pv $(BUILD)
