@@ -1,13 +1,7 @@
 BUILD=build
-THIRDPARTY=thirdparty
 SRC=src
 
-CC=clang
-LINKFLAGS=-lc -lgcc
-
-# CC=x86_64-w64-mingw32-cc
-# RUSTFLAGS=--target x86_64-pc-windows-gnu
-# LINKFLAGS=-lmsvcrt -lkernel32
+CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 
 RSS=\
 	$(SRC)/arena.rs \
@@ -20,18 +14,34 @@ RSS=\
 	$(SRC)/codegen/gas_aarch64_linux.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs
-OBJS=\
-	$(BUILD)/nob.o \
-	$(BUILD)/stb_c_lexer.o \
-	$(BUILD)/flag.o \
-	$(BUILD)/libc.o \
-	$(BUILD)/arena.o
 
-$(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
-	rustc $(RUSTFLAGS) --edition 2021 -g -C opt-level=0 -C link-args="$(OBJS) $(LINKFLAGS)" -C panic="abort" $(SRC)/b.rs -o $(BUILD)/b
+LINUX_OBJS=\
+	$(BUILD)/nob.linux.o \
+	$(BUILD)/stb_c_lexer.linux.o \
+	$(BUILD)/flag.linux.o \
+	$(BUILD)/libc.linux.o \
+	$(BUILD)/arena.linux.o
 
-$(BUILD)/%.o: $(THIRDPARTY)/%.c | $(BUILD)
-	$(CC) -fPIC -g -c $< -o $@
+MINGW32_OBJS=\
+	$(BUILD)/nob.mingw32.o \
+	$(BUILD)/stb_c_lexer.mingw32.o \
+	$(BUILD)/flag.mingw32.o \
+	$(BUILD)/libc.mingw32.o \
+	$(BUILD)/arena.mingw32.o
+
+$(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
+	rustc $(CRUST_FLAGS) -C link-args="$(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
+
+$(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
+	clang -fPIC -g -c $< -o $@
+
+# Cross-compilation on Linux to Windows using mingw32-w64
+# Invoked on demand by `make ./build/b.exe`
+$(BUILD)/b.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b
+
+$(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
+	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@
 
 $(BUILD):
 	mkdir -pv $(BUILD)
