@@ -1183,7 +1183,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
             } else {
-                c!("x86_64-w64-mingw32-cc")
+                c!("x86_64-w64-mingw32-gcc")
             };
 
             let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
