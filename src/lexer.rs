@@ -224,7 +224,7 @@ pub unsafe fn skip_char(l: *mut Lexer) {
 }
 
 pub unsafe fn skip_chars(l: *mut Lexer, mut n: usize) {
-    while n > 0 && !is_eof(l){
+    while n > 0 && !is_eof(l) {
         skip_char(l);
         n -= 1;
     }
@@ -464,7 +464,6 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
             (*l).int_number *= 0x100;
             (*l).int_number += *(*l).string_storage.items.add(i) as u64;
         }
-
         return Some(());
     }
 
