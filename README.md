@@ -5,9 +5,6 @@
 
 <p align=center>
   <img src="./logo/logo_strawberry.png" width=400>
-</p>
-
-<p align=right>
   <sub>Logo by Strawberry 🍓</sub>
 </p>
 
