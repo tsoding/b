@@ -24,7 +24,7 @@ OBJS=\
 	$(BUILD)/nob.o \
 	$(BUILD)/stb_c_lexer.o \
 	$(BUILD)/flag.o \
-	$(BUILD)/stdio.o \
+	$(BUILD)/libc.o \
 	$(BUILD)/arena.o
 
 $(BUILD)/b: $(RSS) $(OBJS) | $(BUILD)
