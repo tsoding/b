@@ -286,6 +286,7 @@ impl Binop {
 pub enum Op {
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
+    Asm            {args: Array<*const c_char>},
     Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
@@ -416,6 +417,31 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             lexer::get_token(l)?;
 
             if (*l).token == Token::OParen {
+                if strcmp(name, c!("__asm__")) == 0 {
+                    let mut args: Array<*const c_char> = zeroed();
+
+                    while (*l).token != Token::CParen {
+
+                        lexer::get_token(l)?;
+                        match (*l).token {
+                            Token::String => { 
+                                da_append(&mut args, strdup((*l).string));
+                            }
+                            _ => {
+                                diagf!((*l).loc, c!("ERROR: __asm__ only takes strings"));
+                            }
+                        }
+
+                        lexer::get_token(l)?;
+                        expect_clexes(l, &[Token::Comma, Token::CParen])?;
+
+                    }
+
+                    let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+
+                    push_opcode(Op::Asm {args}, (*l).loc, c);
+                    return Some((Arg::AutoVar(result), false))
+                }
                 Some((compile_function_call(l, c, name, name_loc)?, false))
             } else {
                 (*l).parse_point = saved_point;
