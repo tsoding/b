@@ -466,7 +466,6 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
             (*l).token = Token::ParseError;
             return None;
         }
-        // TODO: I don't know in which order the characters should be packed in the char literal
         (*l).int_number = 0;
         for i in 0..(*l).string_storage.count {
             (*l).int_number *= 0x100;
