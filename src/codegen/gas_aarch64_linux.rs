@@ -5,11 +5,7 @@ use crate::crust::libc::*;
 use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, align_bytes};
 use crate::{missingf, Loc};
 
-pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: i64, loc: Loc) {
-    if literal < 0 {
-        missingf!(loc, c!("Loading negative numbers is not supported yet\n"));
-    }
-
+pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u64) {
     let mut literal = literal as u64;
 
     if literal == 0 {
@@ -61,7 +57,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
         }
         Arg::Literal(value) => {
-            load_literal_to_reg(output, reg, value, loc);
+            load_literal_to_reg(output, reg, value);
         }
         Arg::DataOffset(offset) => {
             sb_appendf(output, c!("    adrp %s, .dat\n"), reg);
