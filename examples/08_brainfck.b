@@ -25,11 +25,12 @@ BUF_LEN;
 
 main() {
   extrn malloc, memset, read, putchar, dprintf, getchar, atoi;
-  auto memory, cursor, len, input_buf, stop, addr_buf;
+  auto memory, cursor, len, input_buf, stop, addr_buf, W;
 
   STDIN = 0; STDOUT = 1; BUF_LEN = 512;
 
-  len    = 30000;
+  W      = &0[1];
+  len    = 30000*W;
   cursor = 0;
   stop   = 0;
 
@@ -68,34 +69,34 @@ main() {
         fullfilled = 1;
       }
       if ((!fullfilled) & (cmd == '+')) {
-        if (*(memory + cursor) == 255) {
-          *(memory + cursor) = 0;
+        if (memory[cursor] == 255) {
+          memory[cursor] = 0;
         } else {
-          *(memory + cursor) = (*(memory + cursor) + 1);
+          memory[cursor] = memory[cursor] + 1;
         }
         fullfilled = 1;
       }
       if ((!fullfilled) & (cmd == '-')) {
-        if (!*(memory + cursor)) {
-          *(memory + cursor) = 255;
+        if (!memory[cursor]) {
+          memory[cursor] = 255;
         } else {
-          *(memory + cursor) = (*(memory + cursor) - 1);
+          memory[cursor] = memory[cursor] - 1;
         }
         fullfilled = 1;
       }
       if ((!fullfilled) & (cmd == '.')) {
-        dprintf(STDOUT, "%c", *(memory + cursor));
+        dprintf(STDOUT, "%c", memory[cursor]);
         fullfilled = 1;
       }
 
       if (cmd == ',') {
         auto char_val; char_val = getchar();
-        *(memory + cursor) = char_val;
+        memory[cursor] = char_val;
         fullfilled = 1;
       }
 
       if (cmd == '[') {
-        if (!*(memory + cursor)) {
+        if (!memory[cursor]) {
           auto stack, jumped;
           stack = 1; jumped = 0;
           input_cursor += 1;
@@ -122,7 +123,7 @@ main() {
 
 
       if ((!fullfilled) & (cmd == ']')) {
-        if (*(memory + cursor)) {
+        if (memory[cursor]) {
           auto stack, jumped;
           stack = 1; jumped = 0;
           input_cursor -= 1;
@@ -156,7 +157,7 @@ main() {
         if (addr_len > 0) {
           *(addr_buf + addr_len - 1) = 0;
           addr = atoi(addr_buf);
-          dprintf(STDOUT, "MEMORY(+%d) -> %d\n", addr, *(memory + addr));
+          dprintf(STDOUT, "MEMORY(+%d) -> %d\n", addr, memory[addr]);
         }
       }
 
