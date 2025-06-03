@@ -1,6 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, CallTarget, Compiler};
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
@@ -74,8 +74,16 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, rhs);
                 sb_appendf(output, c!("\n"));
             }
-            Op::Funcall{result, name, args} => {
-                sb_appendf(output, c!("    auto[%zu] = call(\"%s\""), result, name);
+            Op::Funcall{result, fun, args} => {
+                match fun {
+                    CallTarget::Name(name) => {
+                        sb_appendf(output, c!("    auto[%zu] = call(\"%s\""), result, name);
+                    }
+                    CallTarget::Arg(arg) => {
+                        sb_appendf(output, c!("    auto[%zu] = call("), result);
+                        dump_arg(output, arg);
+                    }
+                };
                 for i in 0..args.count {
                     sb_appendf(output, c!(", "));
                     dump_arg(output, *args.items.add(i));

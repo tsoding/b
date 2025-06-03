@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, CallTarget, Compiler};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -345,7 +345,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::LDA2);
                 write_op(output, UxnOp::STA2);
             }
-            Op::Funcall {result, name, args} => {
+            Op::Funcall {result, fun, args} => {
                 if args.count > MAX_ARGS.into() {
                     missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), MAX_ARGS, args.count);
                 }
@@ -353,8 +353,15 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     load_arg(*args.items.add(i), output, assembler);
                     write_lit_stz2(output, FIRST_ARG + (i as u8) * 2)
                 }
-                write_op(output, UxnOp::JSI);
-                write_label_rel(output, get_or_create_label_by_name(assembler, name), assembler);
+                match fun {
+                    CallTarget::Name(name) => {
+                        write_op(output, UxnOp::JSI);
+                        write_label_rel(output, get_or_create_label_by_name(assembler, name), assembler);
+                    },
+                    CallTarget::Arg(_arg) => {
+                        missingf!(op.loc, c!("Indirect calls not yet supported in uxn\n"));
+                    }
+                };
                 write_lit_ldz2(output, FIRST_ARG);
                 store_auto(output, result);
             }

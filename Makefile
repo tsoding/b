@@ -35,7 +35,8 @@ LINUX_TESTS=\
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
-	$(BUILD)/tests/vector
+	$(BUILD)/tests/vector \
+	$(BUILD)/tests/rvalue_call
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
@@ -56,7 +57,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
 	$(BUILD)/tests/unary_priority.exe \
-	$(BUILD)/tests/vector.exe
+	$(BUILD)/tests/vector.exe \
+	$(BUILD)/tests/rvalue_call.exe
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \

@@ -2,7 +2,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, align_bytes};
+use crate::{Compiler, Binop, Op, CallTarget, OpWithLocation, Arg, Func, align_bytes};
 use crate::{missingf, Loc};
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u64) {
@@ -231,7 +231,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 load_arg_to_reg(arg, c!("x1"), output, op.loc);
                 sb_appendf(output, c!("    str x1, [x0]\n"));
             },
-            Op::Funcall {result, name, args} => {
+            Op::Funcall {result, fun, args} => {
                 if args.count > REGISTERS.len() {
                     missingf!(op.loc, c!("Too many function call arguments. We support only %zu but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
@@ -239,7 +239,14 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     let reg = (*REGISTERS)[i];
                     load_arg_to_reg(*args.items.add(i), reg, output, op.loc);
                 }
-                sb_appendf(output, c!("    bl %s\n"), name);
+                match fun {
+                    CallTarget::Name(name) => sb_appendf(output, c!("    bl %s\n"), name),
+                    CallTarget::Arg(arg) => {
+                        load_arg_to_reg(arg, c!("x16"), output, op.loc);
+                        sb_appendf(output, c!("    blr x16\n"), name)
+                    },
+                };
+
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
             },
             Op::Jmp {addr} => {
