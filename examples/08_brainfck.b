@@ -174,3 +174,5 @@ main() {
 // Special commands:
 // - # -> to reset the memory and the cursor
 // - $ -> to inspect a memory address
+
+// TODO: does not work on fasm-x86_64-windows due to using dprintf
