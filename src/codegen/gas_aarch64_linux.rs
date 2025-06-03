@@ -214,6 +214,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         sb_appendf(output, c!("    cset x0, le\n"));
                         sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
                     },
+                    Binop::LogOr | Binop::LogAnd => todo!(),
                 }
             }
             Op::ExternalAssign{name, arg} => {

@@ -186,6 +186,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         sb_appendf(output, c!("    setle dl\n"));
                         sb_appendf(output, c!("    mov [rbp-%zu], rdx\n"), index*8);
                     }
+                    Binop::LogOr | Binop::LogAnd => todo!(),
                 }
             }
             Op::Funcall{result, name, args} => {

@@ -403,6 +403,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 // return
                 write_op(output, UxnOp::JMP2r);
             }
+            Op::Binop {binop: Binop::LogAnd, ..} => {
+                missingf!(op.loc, c!("LogAnd must lower to control flow, not plain Binop."));
+            }
+            Op::Binop {binop: Binop::LogOr, ..} => {
+                missingf!(op.loc, c!("LogOr must lower to control flow, not plain Binop."));
+            }
         }
     }
     link_label(assembler, *op_labels.items.add(body.len()), (*output).count);

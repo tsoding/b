@@ -192,14 +192,18 @@ pub enum Binop {
     GreaterEqual,
     LessEqual,
     BitOr,
+    LogOr,
     BitAnd,
+    LogAnd,
     BitShl,
     BitShr,
 }
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
+    &[Binop::LogOr],
     &[Binop::BitOr],
+    &[Binop::LogAnd],
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
     &[Binop::Equal, Binop::NotEqual],
@@ -245,6 +249,8 @@ impl Binop {
             Token::Shr       => Some(Binop::BitShr),
             Token::EqEq      => Some(Binop::Equal),
             Token::NotEq     => Some(Binop::NotEqual),
+            Token::LogAnd    => Some(Binop::LogAnd),
+            Token::LogOr      => Some(Binop::LogOr),
             _ => None,
         }
     }
@@ -505,14 +511,58 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
             while let Some(binop) = Binop::from_token((*l).token) {
                 if binop.precedence() != precedence { break; }
 
-                let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
+                let loc = (*l).loc;
+                if binop == Binop::LogAnd {
+                    let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    let addr_skip_rhs = (*c).func_body.count;
+                    push_opcode(Op::JmpIfNot {addr: 0, arg: lhs}, loc, c);
 
-                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
-                lhs = Arg::AutoVar(index);
+                    let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
+                    let rhs_norm = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop: Binop::NotEqual, index: rhs_norm, lhs: rhs, rhs: Arg::Literal(0)}, loc, c);
+                    push_opcode(Op::AutoAssign {index: result, arg: Arg::AutoVar(rhs_norm)}, loc, c);
 
-                lvalue = false;
+                    let addr_after = (*c).func_body.count;
+                    push_opcode(Op::Jmp {addr: 0}, loc, c);
 
+                    let addr_set_zero = (*c).func_body.count;
+                    push_opcode(Op::AutoAssign {index: result, arg: Arg::Literal(0)}, loc, c);
+
+                    let addr_end = (*c).func_body.count;
+                    (*(*c).func_body.items.add(addr_skip_rhs)).opcode = Op::JmpIfNot {addr: addr_set_zero, arg: lhs};
+                    (*(*c).func_body.items.add(addr_after)).opcode = Op::Jmp {addr: addr_end};
+
+                    lhs = Arg::AutoVar(result);
+                    lvalue = false;
+                } else if binop == Binop::LogOr {
+                    let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    let addr_skip_rhs = (*c).func_body.count;
+                    push_opcode(Op::JmpIfNot {addr: 0, arg: lhs}, loc, c);
+
+                    push_opcode(Op::AutoAssign {index: result, arg: Arg::Literal(1)}, loc, c);
+                    let addr_after = (*c).func_body.count;
+                    push_opcode(Op::Jmp {addr: 0}, loc, c);
+
+                    let addr_rhs = (*c).func_body.count;
+                    let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
+                    let rhs_norm = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop: Binop::NotEqual, index: rhs_norm, lhs: rhs, rhs: Arg::Literal(0)}, loc, c);
+                    push_opcode(Op::AutoAssign {index: result, arg: Arg::AutoVar(rhs_norm)}, loc, c);
+
+                    let addr_end = (*c).func_body.count;
+                    (*(*c).func_body.items.add(addr_skip_rhs)).opcode = Op::JmpIfNot {addr: addr_rhs, arg: lhs};
+                    (*(*c).func_body.items.add(addr_after)).opcode = Op::Jmp {addr: addr_end};
+
+                    lhs = Arg::AutoVar(result);
+                    lvalue = false;
+                } else {
+                    let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
+                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                    push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
+
+                    lhs = Arg::AutoVar(index);
+                    lvalue = false;
+                }
                 saved_point = (*l).parse_point;
                 lexer::get_token(l)?;
             }

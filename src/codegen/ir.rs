@@ -70,6 +70,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Binop::NotEqual     => sb_appendf(output, c!(" != ")),
                     Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
                     Binop::LessEqual    => sb_appendf(output, c!(" < ")),
+                    Binop::LogOr | Binop::LogAnd => todo!(),
                 };
                 dump_arg(output, rhs);
                 sb_appendf(output, c!("\n"));
