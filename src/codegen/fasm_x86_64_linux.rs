@@ -254,8 +254,8 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*co
 }
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+    sb_appendf(output, c!("section \".data\"\n"));
     if data.len() > 0 {
-        sb_appendf(output, c!("section \".data\"\n"));
         sb_appendf(output, c!("dat: db "));
         for i in 0..data.len() {
             if i > 0 {
