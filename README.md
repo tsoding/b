@@ -7,7 +7,7 @@
   <img src="./logo/logo_strawberry.png" width=400>
 </p>
 
-<p align=right>
+<p align=center>
   <sub>Logo by Strawberry 🍓</sub>
 </p>
 
@@ -27,6 +27,8 @@ $ ./build/b -run ./examples/01_hello_world.b
 ```
 
 ### Uxn
+
+<!-- TODO: document dependencies for the rest of the targets. Like mingw32-w64 and wine on Linux for Fasm_x86_64_Windows, etc. -->
 
 The compiler supports [Uxn](https://100r.co/site/uxn.html) target. Make sure you have `uxnemu` in your `$PATH` if you want to use `-run` flag.
 

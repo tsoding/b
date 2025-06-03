@@ -6,105 +6,26 @@
 
 #[macro_use]
 pub mod nob;
-pub mod stb_c_lexer;
 #[macro_use]
 pub mod flag;
 #[macro_use]
 pub mod crust;
 pub mod arena;
 pub mod codegen;
+pub mod lexer;
 
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
 use core::slice;
 use nob::*;
-use stb_c_lexer::*;
 use flag::*;
 use crust::libc::*;
 use arena::Arena;
 use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
+use lexer::{Lexer, Loc, Token};
 
-#[derive(Clone, Copy)]
-pub struct Loc {
-    pub input_path:   *const c_char,
-    pub input_start:  *const c_char,
-    pub input_offset: *const c_char,
-}
-
-macro_rules! diagf {
-    ($loc:expr, $($args:tt)*) => {{
-        let mut stb_loc: stb_lex_location = zeroed();
-        stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
-        fprintf(stderr, c!("%s:%d:%d: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
-        fprintf(stderr, $($args)*);
-    }};
-}
-
-#[macro_export]
-macro_rules! missingf {
-    ($loc:expr, $($args:tt)*) => {{
-        let file = file!();
-        let mut stb_loc = zeroed();
-        crate::stb_c_lexer_get_location($loc.input_start, $loc.input_offset, &mut stb_loc);
-        fprintf(stderr, c!("%s:%d:%d: TODO: "), $loc.input_path, stb_loc.line_number, stb_loc.line_offset + 1);
-        fprintf(stderr, $($args)*);
-        fprintf(stderr, c!("%.*s:%d: INFO: implementation should go here\n"), file.len(), file.as_ptr(), line!());
-        abort();
-    }}
-}
-
-unsafe fn display_token_kind_temp(token: c_long) -> *const c_char {
-    match token {
-        CLEX_id         => c!("identifier"),
-        CLEX_eq         => c!("=="),
-        CLEX_noteq      => c!("!="),
-        CLEX_lesseq     => c!("<="),
-        CLEX_greatereq  => c!(">="),
-        CLEX_andand     => c!("&&"),
-        CLEX_oror       => c!("||"),
-        CLEX_shl        => c!("<<"),
-        CLEX_shr        => c!(">>"),
-        CLEX_plusplus   => c!("++"),
-        CLEX_minusminus => c!("--"),
-        CLEX_arrow      => c!("->"),
-        CLEX_andeq      => c!("&="),
-        CLEX_oreq       => c!("|="),
-        CLEX_xoreq      => c!("^="),
-        CLEX_pluseq     => c!("+="),
-        CLEX_minuseq    => c!("-="),
-        CLEX_muleq      => c!("*="),
-        CLEX_diveq      => c!("/="),
-        CLEX_modeq      => c!("%="),
-        CLEX_shleq      => c!("<<="),
-        CLEX_shreq      => c!(">>="),
-        CLEX_eqarrow    => c!("=>"),
-        CLEX_dqstring   => c!("string literal"),
-        // NOTE: single quote strings are opt-in in stb_c_lexer.h (see STB_C_LEX_C_SQ_STRINGS)
-        CLEX_sqstring   => c!("single quote literal"),
-        CLEX_charlit    => c!("character literal"),
-        CLEX_intlit     => c!("integer literal"),
-        CLEX_floatlit   => c!("floating-point literal"),
-        CLEX_eof        => c!("end of file"),
-        _ => {
-            if token >= 0 && token < 256 {
-                temp_sprintf(c!("`%c`"), token)
-            } else {
-                temp_sprintf(c!("<<<UNKNOWN TOKEN %ld>>>"), token)
-            }
-        }
-    }
-}
-
-pub unsafe fn lexer_loc(l: *const stb_lexer, input_path: *const c_char) -> Loc {
-    Loc {
-        input_path,
-        input_start: (*l).input_stream,
-        input_offset: (*l).where_firstchar,
-    }
-}
-
-pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clexes: *const [c_long]) -> Option<()> {
+pub unsafe fn expect_clexes(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
     for i in 0..clexes.len() {
         if (*clexes)[i] == (*l).token {
             return Some(());
@@ -120,37 +41,37 @@ pub unsafe fn expect_clexes(l: *const stb_lexer, input_path: *const c_char, clex
                 sb_appendf(&mut sb, c!(", "));
             }
         }
-        sb_appendf(&mut sb, c!("%s"), display_token_kind_temp((*clexes)[i]));
+        sb_appendf(&mut sb, c!("%s"), lexer::display_token((*clexes)[i]));
     }
     da_append(&mut sb, 0);
 
-    diagf!(lexer_loc(l, input_path), c!("ERROR: expected %s, but got %s\n"), sb.items, display_token_kind_temp((*l).token));
+    diagf!((*l).loc, c!("ERROR: expected %s, but got %s\n"), sb.items, lexer::display_token((*l).token));
 
     free(sb.items);
     None
 }
 
-pub unsafe fn expect_clex(l: *const stb_lexer, input_path: *const c_char, clex: c_long) -> Option<()> {
-    expect_clexes(l, input_path, &[clex])
+pub unsafe fn expect_clex(l: *mut Lexer, clex: Token) -> Option<()> {
+    expect_clexes(l, &[clex])
 }
 
-pub unsafe fn get_and_expect_clex(l: *mut stb_lexer, input_path: *const c_char, clex: c_long) -> Option<()> {
-    stb_c_lexer_get_token(l);
-    expect_clex(l, input_path, clex)
+pub unsafe fn get_and_expect_clex(l: *mut Lexer, clex: Token) -> Option<()> {
+    lexer::get_token(l)?;
+    expect_clex(l, clex)
 }
 
-pub unsafe fn expect_clex_id(l: *const stb_lexer, input_path: *const c_char, id: *const c_char) -> Option<()> {
-    expect_clex(l, input_path, CLEX_id)?;
+pub unsafe fn expect_clex_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
+    expect_clex(l, Token::ID)?;
     if strcmp((*l).string, id) != 0 {
-        diagf!(lexer_loc(l, input_path), c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
+        diagf!((*l).loc, c!("ERROR: expected `%s`, but got `%s`\n"), id, (*l).string);
         return None;
     }
     Some(())
 }
 
-pub unsafe fn get_and_expect_clex_id(l: *mut stb_lexer, input_path: *const c_char, id: *const c_char) -> Option<()> {
-    stb_c_lexer_get_token(l);
-    expect_clex_id(l, input_path, id)
+pub unsafe fn get_and_expect_clex_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
+    lexer::get_token(l)?;
+    expect_clex_id(l, id)
 }
 
 #[repr(C)]
@@ -204,16 +125,45 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
-pub unsafe fn declare_var(l: *mut stb_lexer, input_path: *const c_char, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
+pub unsafe fn declare_var(l: *mut Lexer, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
     let scope = da_last_mut(vars);
     let existing_var = find_var_near(scope, name);
     if !existing_var.is_null() {
-        diagf!(lexer_loc(l, input_path), c!("ERROR: redefinition of variable `%s`\n"), name);
+        diagf!((*l).loc, c!("ERROR: redefinition of variable `%s`\n"), name);
         diagf!((*existing_var).loc, c!("NOTE: the first declaration is located here\n"));
         return None;
     }
 
     da_append(scope, Var {name, loc, storage});
+    Some(())
+}
+
+#[derive(Clone, Copy)]
+pub struct Label {
+    name: *const c_char,
+    loc: Loc,
+    addr: usize,
+}
+
+pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *const Label {
+    for i in 0..(*labels).count {
+        let label = (*labels).items.add(i);
+        if strcmp((*label).name, name) == 0 {
+            return label
+        }
+    }
+    ptr::null()
+}
+
+pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
+    let existing_label = find_label(labels, name);
+    if !existing_label.is_null() {
+        diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
+        diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
+        return None;
+    }
+
+    da_append(labels, Label {name, loc, addr});
     Some(())
 }
 
@@ -240,9 +190,11 @@ unsafe fn is_keyword(name: *const c_char) -> bool {
 #[derive(Clone, Copy)]
 pub enum Arg {
     AutoVar(usize),
-    Ref(usize),
+    Deref(usize),
+    RefAutoVar(usize),
+    RefExternal(*const c_char),
     External(*const c_char),
-    Literal(i64),
+    Literal(u64),
     DataOffset(usize),
 }
 
@@ -280,39 +232,39 @@ impl Binop {
     // The outer Option indicates success.
     // The inner Option indicates whether the assign has binop associated with it.
     // It's kinda confusing but I don't know how to make it "prettier"
-    pub fn from_assign_token(token: c_long) -> Option<Option<Self>> {
+    pub fn from_assign_token(token: Token) -> Option<Option<Self>> {
         match token {
-            token if token == '=' as c_long => Some(None),
-            CLEX_shleq                      => Some(Some(Binop::BitShl)),
-            CLEX_shreq                      => Some(Some(Binop::BitShr)),
-            CLEX_modeq                      => Some(Some(Binop::Mod)),
-            CLEX_oreq                       => Some(Some(Binop::BitOr)),
-            CLEX_andeq                      => Some(Some(Binop::BitAnd)),
-            CLEX_pluseq                     => Some(Some(Binop::Plus)),
-            CLEX_minuseq                    => Some(Some(Binop::Minus)),
-            CLEX_muleq                      => Some(Some(Binop::Mult)),
-            CLEX_diveq                      => Some(Some(Binop::Div)),
-            _ => None,
+            Token::Eq      => Some(None),
+            Token::ShlEq   => Some(Some(Binop::BitShl)),
+            Token::ShrEq   => Some(Some(Binop::BitShr)),
+            Token::ModEq   => Some(Some(Binop::Mod)),
+            Token::OrEq    => Some(Some(Binop::BitOr)),
+            Token::AndEq   => Some(Some(Binop::BitAnd)),
+            Token::PlusEq  => Some(Some(Binop::Plus)),
+            Token::MinusEq => Some(Some(Binop::Minus)),
+            Token::MulEq   => Some(Some(Binop::Mult)),
+            Token::DivEq   => Some(Some(Binop::Div)),
+            _              => None,
         }
     }
 
-    pub fn from_token(token: c_long) -> Option<Self> {
+    pub fn from_token(token: Token) -> Option<Self> {
         match token {
-            token if token == '+' as c_long => Some(Binop::Plus),
-            token if token == '-' as c_long => Some(Binop::Minus),
-            token if token == '*' as c_long => Some(Binop::Mult),
-            token if token == '/' as c_long => Some(Binop::Div),
-            token if token == '%' as c_long => Some(Binop::Mod),
-            token if token == '<' as c_long => Some(Binop::Less),
-            token if token == '>' as c_long => Some(Binop::Greater),
-            CLEX_greatereq                  => Some(Binop::GreaterEqual),
-            CLEX_lesseq                     => Some(Binop::LessEqual),
-            token if token == '|' as c_long => Some(Binop::BitOr),
-            token if token == '&' as c_long => Some(Binop::BitAnd),
-            CLEX_shl                        => Some(Binop::BitShl),
-            CLEX_shr                        => Some(Binop::BitShr),
-            CLEX_eq                         => Some(Binop::Equal),
-            CLEX_noteq                      => Some(Binop::NotEqual),
+            Token::Plus      => Some(Binop::Plus),
+            Token::Minus     => Some(Binop::Minus),
+            Token::Mul       => Some(Binop::Mult),
+            Token::Div       => Some(Binop::Div),
+            Token::Mod       => Some(Binop::Mod),
+            Token::Less      => Some(Binop::Less),
+            Token::Greater   => Some(Binop::Greater),
+            Token::GreaterEq => Some(Binop::GreaterEqual),
+            Token::LessEq    => Some(Binop::LessEqual),
+            Token::Or        => Some(Binop::BitOr),
+            Token::And       => Some(Binop::BitAnd),
+            Token::Shl       => Some(Binop::BitShl),
+            Token::Shr       => Some(Binop::BitShr),
+            Token::EqEq      => Some(Binop::Equal),
+            Token::NotEq     => Some(Binop::NotEqual),
             _ => None,
         }
     }
@@ -380,35 +332,54 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
     (*t).count
 }
 
-pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
-    stb_c_lexer_get_token(l);
+pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
+    lexer::get_token(l)?;
     let arg = match (*l).token {
-        token if token == '(' as c_long => {
-            let result = compile_expression(l, input_path, c)?;
-            get_and_expect_clex(l, input_path, ')' as c_long)?;
+        Token::OParen => {
+            let result = compile_expression(l, c)?;
+            get_and_expect_clex(l, Token::CParen)?;
             Some(result)
         }
-        token if token == '!' as c_long => {
-            let (arg, _) = compile_primary_expression(l, input_path, c)?;
+        Token::Not => {
+            let (arg, _) = compile_primary_expression(l, c)?;
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::UnaryNot{result, arg}, lexer_loc(l, input_path), c);
+            push_opcode(Op::UnaryNot{result, arg}, (*l).loc, c);
             Some((Arg::AutoVar(result), false))
         }
-        token if token == '*' as c_long => {
-            let (arg, _) = compile_primary_expression(l, input_path, c)?;
+        Token::Mul => {
+            let (arg, _) = compile_primary_expression(l, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::AutoAssign {index, arg}, lexer_loc(l, input_path), c);
-            Some((Arg::Ref(index), true))
+            push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
+            Some((Arg::Deref(index), true))
         }
-        token if token == '-' as c_long => {
-            let (arg, _) = compile_primary_expression(l, input_path, c)?;
+        Token::Minus => {
+            let (arg, _) = compile_primary_expression(l, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Negate {result: index, arg}, lexer_loc(l, input_path), c);
+            push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
             Some((Arg::AutoVar(index), false))
         }
-        CLEX_plusplus => {
-            let loc = lexer_loc(l, input_path);
-            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+        Token::And => {
+            // TODO: decipher sections 3.0 and 4.2 of the B user manual
+            // not sure if this implementation is correct
+
+            let loc = (*l).loc;
+            let (arg, is_lvalue) = compile_primary_expression(l, c)?;
+
+            if !is_lvalue {
+                diagf!(loc, c!("ERROR: cannot take the address of an rvalue\n"));
+                return None;
+            }
+
+            match arg {
+                Arg::Deref(index)   =>  Some((Arg::AutoVar(index), false)), // "&*x is identically x"
+                Arg::External(name) =>  Some((Arg::RefExternal(name), false)),
+                Arg::AutoVar(index) =>  Some((Arg::RefAutoVar(index), false)),
+                Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
+            }
+        }
+        Token::PlusPlus => {
+            let loc = (*l).loc;
+            let (arg, is_lvalue) = compile_primary_expression(l, c)?;
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
@@ -418,9 +389,9 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
             Some((arg, false))
         }
-        CLEX_minusminus => {
-            let loc = lexer_loc(l, input_path);
-            let (arg, is_lvalue) = compile_primary_expression(l, input_path, c)?;
+        Token::MinusMinus => {
+            let loc = (*l).loc;
+            let (arg, is_lvalue) = compile_primary_expression(l, c)?;
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
@@ -430,22 +401,22 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
             Some((arg, false))
         }
-        CLEX_charlit | CLEX_intlit => Some((Arg::Literal((*l).int_number), false)),
-        CLEX_id => {
-            let name = arena::strdup(&mut (*c).arena, (*l).string);
-            let name_loc = lexer_loc(l, input_path);
+        Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
+        Token::ID => {
+            let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+            let name_loc = (*l).loc;
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                diagf!(lexer_loc(l, input_path), c!("ERROR: could not find name `%s`\n"), name);
+                diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
                 return None;
             }
 
             let saved_point = (*l).parse_point;
-            stb_c_lexer_get_token(l);
+            lexer::get_token(l)?;
 
-            if (*l).token == '(' as c_long {
-                Some((compile_function_call(l, input_path, c, name, name_loc)?, false))
+            if (*l).token == Token::OParen {
+                Some((compile_function_call(l, c, name, name_loc)?, false))
             } else {
                 (*l).parse_point = saved_point;
                 match (*var_def).storage {
@@ -454,7 +425,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
                 }
             }
         }
-        CLEX_dqstring => {
+        Token::String => {
             let offset = (*c).data.count;
             let string_len = strlen((*l).string);
             da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
@@ -468,7 +439,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
-            diagf!(lexer_loc(l, input_path), c!("Expected start of a primary expression by got %s\n"), display_token_kind_temp((*l).token));
+            diagf!((*l).loc, c!("Expected start of a primary expression by got %s\n"), lexer::display_token((*l).token));
             None
         }
     };
@@ -476,18 +447,18 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
     let (arg, is_lvalue) = arg?;
 
     let saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
+    lexer::get_token(l)?;
 
-    if (*l).token == '[' as c_long {
-        let (offset, _) = compile_expression(l, input_path, c)?;
-        get_and_expect_clex(l, input_path, ']' as c_long)?;
+    if (*l).token == Token::OBracket {
+        let (offset, _) = compile_expression(l, c)?;
+        get_and_expect_clex(l, Token::CBracket)?;
 
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, lexer_loc(l, input_path), c);
+        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, (*l).loc, c);
 
-        Some((Arg::Ref(result), true))
-    } else if (*l).token == CLEX_plusplus {
-        let loc = lexer_loc(l, input_path);
+        Some((Arg::Deref(result), true))
+    } else if (*l).token == Token::PlusPlus {
+        let loc = (*l).loc;
         if !is_lvalue {
             diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
             return None;
@@ -498,8 +469,8 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
         compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
 
         Some((Arg::AutoVar(pre), false))
-    } else if (*l).token == CLEX_minusminus {
-        let loc = lexer_loc(l, input_path);
+    } else if (*l).token == Token::MinusMinus {
+        let loc = (*l).loc;
         if !is_lvalue {
             diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
             return None;
@@ -519,7 +490,7 @@ pub unsafe fn compile_primary_expression(l: *mut stb_lexer, input_path: *const c
 // TODO: communicate to the caller of this function that it expects `lhs` to be an lvalue
 pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
     match lhs {
-        Arg::Ref(index) => {
+        Arg::Deref(index) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
             push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
             push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
@@ -532,35 +503,35 @@ pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut 
         Arg::AutoVar(index) => {
             push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
         }
-        Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+        Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
     }
 }
 
-pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
+pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
     if precedence >= Binop::MAX_PRECEDENCE {
-        return compile_primary_expression(l, input_path, c);
+        return compile_primary_expression(l, c);
     }
 
-    let (mut lhs, mut lvalue) = compile_binop_expression(l, input_path, c, precedence + 1)?;
+    let (mut lhs, mut lvalue) = compile_binop_expression(l, c, precedence + 1)?;
 
     let mut saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
+    lexer::get_token(l)?;
 
     if let Some(binop) = Binop::from_token((*l).token) {
         if binop.precedence() == precedence {
             while let Some(binop) = Binop::from_token((*l).token) {
                 if binop.precedence() != precedence { break; }
 
-                let (rhs, _) = compile_binop_expression(l, input_path, c, precedence + 1)?;
+                let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
 
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop {binop, index, lhs, rhs}, lexer_loc(l, input_path), c);
+                push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
                 lhs = Arg::AutoVar(index);
 
                 lvalue = false;
 
                 saved_point = (*l).parse_point;
-                stb_c_lexer_get_token(l);
+                lexer::get_token(l)?;
             }
         }
     }
@@ -570,15 +541,15 @@ pub unsafe fn compile_binop_expression(l: *mut stb_lexer, input_path: *const c_c
 }
 
 #[allow(unused_variables)]
-pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
-    let (lhs, mut lvalue) = compile_binop_expression(l, input_path, c, 0)?;
+pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
+    let (lhs, mut lvalue) = compile_binop_expression(l, c, 0)?;
 
     let mut saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
+    lexer::get_token(l)?;
 
     while let Some(binop) = Binop::from_assign_token((*l).token) {
-        let binop_loc = lexer_loc(l, input_path);
-        let (rhs, _) = compile_assign_expression(l, input_path, c, precedence + 1)?;
+        let binop_loc = (*l).loc;
+        let (rhs, _) = compile_assign_expression(l, c, precedence + 1)?;
 
         if !lvalue {
             diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
@@ -589,7 +560,7 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
             compile_binop(lhs, rhs, binop, binop_loc, c);
         } else {
             match lhs {
-                Arg::Ref(index) => {
+                Arg::Deref(index) => {
                     push_opcode(Op::Store {index, arg: rhs}, binop_loc, c);
                 }
                 Arg::External(name) => {
@@ -598,43 +569,43 @@ pub unsafe fn compile_assign_expression(l: *mut stb_lexer, input_path: *const c_
                 Arg::AutoVar(index) => {
                     push_opcode(Op::AutoAssign {index, arg: rhs}, binop_loc, c);
                 }
-                Arg::Literal(_) | Arg::DataOffset(_) => unreachable!(),
+                Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
             }
         }
 
         lvalue = false;
 
         saved_point = (*l).parse_point;
-        stb_c_lexer_get_token(l);
+        lexer::get_token(l)?;
     }
 
     (*l).parse_point = saved_point;
     Some((lhs, lvalue))
 }
 
-pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<(Arg, bool)> {
-    let (arg, is_lvalue) = compile_assign_expression(l, input_path, c, 0)?;
+pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
+    let (arg, is_lvalue) = compile_assign_expression(l, c, 0)?;
 
     let saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
+    lexer::get_token(l)?;
 
-    if (*l).token == '?' as c_long {
+    if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
         let addr_condition = (*c).func_body.count;
-        push_opcode(Op::JmpIfNot{addr: 0, arg}, lexer_loc(l, input_path), c);
+        push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
 
-        let (if_true, _) = compile_expression(l, input_path, c)?;
-        push_opcode(Op::AutoAssign {index: result, arg: if_true}, lexer_loc(l, input_path), c);
+        let (if_true, _) = compile_expression(l, c)?;
+        push_opcode(Op::AutoAssign {index: result, arg: if_true}, (*l).loc, c);
 
         let addr_skips_true = (*c).func_body.count;
-        push_opcode(Op::Jmp{addr: 0}, lexer_loc(l, input_path), c);
+        push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
 
         let addr_false = (*c).func_body.count;
-        get_and_expect_clex(l, input_path, ':' as c_long)?;
+        get_and_expect_clex(l, Token::Colon)?;
 
-        let (if_false, _) = compile_expression(l, input_path, c)?;
-        push_opcode(Op::AutoAssign {index: result, arg: if_false}, lexer_loc(l, input_path), c);
+        let (if_false, _) = compile_expression(l, c)?;
+        push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
 
         let addr_after_false = (*c).func_body.count;
         (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg};
@@ -647,18 +618,18 @@ pub unsafe fn compile_expression(l: *mut stb_lexer, input_path: *const c_char, c
     }
 }
 
-pub unsafe fn compile_block(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
+pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     loop {
         let saved_point = (*l).parse_point;
-        stb_c_lexer_get_token(l);
-        if (*l).token == '}' as c_long { return Some(()); }
+        lexer::get_token(l)?;
+        if (*l).token == Token::CCurly { return Some(()); }
         (*l).parse_point = saved_point;
 
-        compile_statement(l, input_path, c)?
+        compile_statement(l, c)?
     }
 }
 
-pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler, name: *const c_char, loc: Loc) -> Option<Arg> {
+pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *const c_char, loc: Loc) -> Option<Arg> {
     let var_def = find_var_deep(&(*c).vars, name);
     if var_def.is_null() {
         diagf!(loc, c!("ERROR: could not find function `%s`\n"), name);
@@ -667,20 +638,18 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
 
     let mut args: Array<Arg> = zeroed();
     let saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
-    if (*l).token != ')' as c_long {
+    lexer::get_token(l)?;
+    if (*l).token != Token::CParen {
         (*l).parse_point = saved_point;
         loop {
-            let (expr, _) = compile_expression(l, input_path, c)?;
+            let (expr, _) = compile_expression(l, c)?;
             da_append(&mut args, expr);
-            stb_c_lexer_get_token(l);
-            expect_clexes(l, input_path, &[')' as c_long, ',' as c_long])?;
-            if (*l).token == ')' as c_long {
-                break;
-            } else if (*l).token == ',' as c_long {
-                continue;
-            } else {
-                unreachable!();
+            lexer::get_token(l)?;
+            expect_clexes(l, &[Token::CParen, Token::Comma])?;
+            match (*l).token {
+                Token::CParen => break,
+                Token::Comma => continue,
+                _ => unreachable!(),
             }
         }
     }
@@ -688,7 +657,7 @@ pub unsafe fn compile_function_call(l: *mut stb_lexer, input_path: *const c_char
     match (*var_def).storage {
         Storage::External{name} => {
             let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Funcall {result, name, args}, lexer_loc(l, input_path), c);
+            push_opcode(Op::Funcall {result, name, args}, (*l).loc, c);
             Some(Arg::AutoVar(result))
         }
         Storage::Auto{..} => {
@@ -706,24 +675,24 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
     da_append(names, name)
 }
 
-pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
+pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
-    stb_c_lexer_get_token(l);
+    lexer::get_token(l)?;
 
-    if (*l).token == '{' as c_long {
+    if (*l).token == Token::OCurly {
         scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-                compile_block(l, input_path, c)?;
+                compile_block(l, c)?;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
         scope_pop(&mut (*c).vars);
         Some(())
     } else {
-        if (*l).token == CLEX_id && (strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0) {
+        if (*l).token == Token::ID && (strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0) {
             let extrn = strcmp((*l).string, c!("extrn")) == 0;
             'vars: loop {
-                get_and_expect_clex(l, input_path, CLEX_id)?;
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
-                let loc = lexer_loc(l, input_path);
+                get_and_expect_clex(l, Token::ID)?;
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let loc = (*l).loc;
                 let storage = if extrn {
                     name_declare_if_not_exists(&mut (*c).extrns, name);
                     Storage::External{name}
@@ -731,39 +700,37 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     Storage::Auto{index}
                 };
-                declare_var(l, input_path, &mut (*c).vars, name, loc, storage)?;
-                stb_c_lexer_get_token(l);
-                expect_clexes(l, input_path, &[',' as c_long, ';' as c_long])?;
-                if (*l).token == ';' as c_long {
-                    break 'vars;
-                } else if (*l).token == ',' as c_long {
-                    continue 'vars;
-                } else {
-                    unreachable!()
+                declare_var(l, &mut (*c).vars, name, loc, storage)?;
+                lexer::get_token(l)?;
+                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
+                match (*l).token {
+                    Token::SemiColon => break 'vars,
+                    Token::Comma => continue 'vars,
+                    _ => unreachable!(),
                 }
             }
 
             Some(())
-        } else if (*l).token == CLEX_id && strcmp((*l).string, c!("if")) == 0 {
-            get_and_expect_clex(l, input_path, '(' as c_long)?;
+        } else if (*l).token == Token::ID && strcmp((*l).string, c!("if")) == 0 {
+            get_and_expect_clex(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let (cond, _) = compile_expression(l, input_path, c)?;
-            get_and_expect_clex(l, input_path, ')' as c_long)?;
+            let (cond, _) = compile_expression(l, c)?;
+            get_and_expect_clex(l, Token::CParen)?;
 
             let addr_condition = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, lexer_loc(l, input_path), c);
+            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, (*l).loc, c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
-            compile_statement(l, input_path, c)?;
+            compile_statement(l, c)?;
 
             let saved_point = (*l).parse_point;
-            stb_c_lexer_get_token(l);
+            lexer::get_token(l)?;
 
-            if (*l).token == CLEX_id && strcmp((*l).string, c!("else")) == 0 {
+            if (*l).token == Token::ID && strcmp((*l).string, c!("else")) == 0 {
                 let addr_skips_else = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: 0}, lexer_loc(l, input_path), c);
+                push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
                 let addr_else = (*c).func_body.count;
-                compile_statement(l, input_path, c)?;
+                compile_statement(l, c)?;
                 let addr_after_else = (*c).func_body.count;
                 (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_else, arg: cond};
                 (*(*c).func_body.items.add(addr_skips_else)).opcode = Op::Jmp      {addr: addr_after_else};
@@ -774,42 +741,61 @@ pub unsafe fn compile_statement(l: *mut stb_lexer, input_path: *const c_char, c:
             }
 
             Some(())
-        } else if (*l).token == CLEX_id && strcmp((*l).string, c!("while")) == 0 {
+        } else if (*l).token == Token::ID && strcmp((*l).string, c!("while")) == 0 {
             let begin = (*c).func_body.count;
-            get_and_expect_clex(l, input_path, '(' as c_long)?;
+            get_and_expect_clex(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let (arg, _) = compile_expression(l, input_path, c)?;
+            let (arg, _) = compile_expression(l, c)?;
 
-            get_and_expect_clex(l, input_path, ')' as c_long)?;
+            get_and_expect_clex(l, Token::CParen)?;
             let condition_jump = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg}, lexer_loc(l, input_path), c);
+            push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
-            compile_statement(l, input_path, c)?;
-            push_opcode(Op::Jmp{addr: begin}, lexer_loc(l, input_path), c);
+            compile_statement(l, c)?;
+            push_opcode(Op::Jmp{addr: begin}, (*l).loc, c);
             let end = (*c).func_body.count;
             (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
             Some(())
-        } else if (*l).token == CLEX_id && strcmp((*l).string, c!("return")) == 0 {
-            stb_c_lexer_get_token(l);
-            expect_clexes(l, input_path, &[';' as c_long, '(' as c_long])?;
-            if (*l).token == ';' as c_long {
-                push_opcode(Op::Return {arg: None}, lexer_loc(l, input_path), c);
-            } else if (*l).token == '(' as c_long {
-                let (arg, _) = compile_expression(l, input_path, c)?;
-                get_and_expect_clex(l, input_path, ')' as c_long)?;
-                get_and_expect_clex(l, input_path, ';' as c_long)?;
-                push_opcode(Op::Return {arg: Some(arg)}, lexer_loc(l, input_path), c);
+        } else if (*l).token == Token::ID && strcmp((*l).string, c!("return")) == 0 {
+            lexer::get_token(l)?;
+            expect_clexes(l, &[Token::SemiColon, Token::OParen])?;
+            if (*l).token == Token::SemiColon {
+                push_opcode(Op::Return {arg: None}, (*l).loc, c);
+            } else if (*l).token == Token::OParen {
+                let (arg, _) = compile_expression(l, c)?;
+                get_and_expect_clex(l, Token::CParen)?;
+                get_and_expect_clex(l, Token::SemiColon)?;
+                push_opcode(Op::Return {arg: Some(arg)}, (*l).loc, c);
             } else {
                 unreachable!();
             }
             Some(())
+        } else if (*l).token == Token::ID && strcmp((*l).string, c!("goto")) == 0 {
+            get_and_expect_clex(l, Token::ID)?;
+            let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
+            let loc = (*l).loc;
+            let addr = (*c).func_body.count;
+            da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
+            get_and_expect_clex(l, Token::SemiColon)?;
+            push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+            Some(())
         } else {
+            if (*l).token == Token::ID {
+                let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
+                let name_loc = (*l).loc;
+                let addr = (*c).func_body.count;
+                lexer::get_token(l)?;
+                if (*l).token == Token::Colon {
+                    define_label(&mut (*c).func_labels, name, name_loc, addr)?;
+                    return Some(());
+                }
+            }
             (*l).parse_point = saved_point;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            compile_expression(l, input_path, c)?;
+            compile_expression(l, c)?;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
-            get_and_expect_clex(l, input_path, ';' as c_long)?;
+            get_and_expect_clex(l, Token::SemiColon)?;
             Some(())
         }
     }
@@ -827,9 +813,9 @@ pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Opti
 }
 
 pub unsafe fn usage() {
-    fprintf(stderr, c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
-    fprintf(stderr, c!("OPTIONS:\n"));
-    flag_print_options(stderr);
+    fprintf(stderr(), c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    flag_print_options(stderr());
 }
 
 #[derive(Clone, Copy)]
@@ -847,22 +833,25 @@ pub struct Compiler {
     pub auto_vars_ator: AutoVarsAtor,
     pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
+    pub func_labels: Array<Label>,
+    pub func_labels_used: Array<Label>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<*const c_char>,
-    pub arena: Arena,
+    pub arena_names: Arena,
+    pub arena_labels: Arena,
 }
 
-pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *mut Compiler) -> Option<()> {
+pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     scope_push(&mut (*c).vars);          // begin global scope
     'def: loop {
-        stb_c_lexer_get_token(l);
-        if (*l).token == CLEX_eof { break 'def }
+        lexer::get_token(l)?;
+        if (*l).token == Token::EOF { break 'def }
 
-        expect_clex(l, input_path, CLEX_id)?;
+        expect_clex(l, Token::ID)?;
 
-        let name = arena::strdup(&mut (*c).arena, (*l).string);
-        let name_loc = lexer_loc(l, input_path);
+        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+        let name_loc = (*l).loc;
 
         // TODO: maybe the keywords should be identified on the level of lexing
         if is_keyword((*l).string) {
@@ -870,45 +859,54 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
             diagf!(name_loc, c!("NOTE: Reserved keywords are: "));
             for i in 0..B_KEYWORDS.len() {
                 if i > 0 {
-                    fprintf(stderr, c!(", "));
+                    fprintf(stderr(), c!(", "));
                 }
-                fprintf(stderr, c!("`%s`"), (*B_KEYWORDS)[i]);
+                fprintf(stderr(), c!("`%s`"), (*B_KEYWORDS)[i]);
             }
-            fprintf(stderr, c!("\n"));
+            fprintf(stderr(), c!("\n"));
             return None;
         }
 
         let saved_point = (*l).parse_point;
-        stb_c_lexer_get_token(l);
-        if (*l).token == '(' as c_long { // Function definition
+        lexer::get_token(l)?;
+        if (*l).token == Token::OParen { // Function definition
+            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name});
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
-            stb_c_lexer_get_token(l);
-            if (*l).token != ')' as c_long {
+            lexer::get_token(l)?;
+            if (*l).token != Token::CParen {
                 (*l).parse_point = saved_point;
                 'params: loop {
-                    get_and_expect_clex(l, input_path, CLEX_id)?;
-                    let name = arena::strdup(&mut (*c).arena, (*l).string);
-                    let name_loc = lexer_loc(l, input_path);
+                    get_and_expect_clex(l, Token::ID)?;
+                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    let name_loc = (*l).loc;
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
+                    declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
-                    stb_c_lexer_get_token(l);
-                    expect_clexes(l, input_path, &[',' as c_long, ')' as c_long])?;
-                    if (*l).token == ')' as c_long {
-                        break 'params;
-                    } else if (*l).token == ',' as c_long {
-                        continue 'params;
-                    } else {
-                        unreachable!()
+                    lexer::get_token(l)?;
+                    expect_clexes(l, &[Token::CParen, Token::Comma])?;
+                    match (*l).token {
+                        Token::CParen => break 'params,
+                        Token::Comma => continue 'params,
+                        _ => unreachable!(),
                     }
                 }
             }
-            compile_statement(l, input_path, c)?;
+            compile_statement(l, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
-            declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name});
+            for i in 0..(*c).func_labels_used.count {
+                let used_label = *(*c).func_labels_used.items.add(i);
+                let existing_label = find_label(&(*c).func_labels, used_label.name);
+                if existing_label.is_null() {
+                    diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
+                    return None;
+                }
+                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
+            }
+            arena::reset(&mut (*c).arena_labels);
+
             da_append(&mut (*c).funcs, Func {
                 name,
                 name_loc,
@@ -917,12 +915,14 @@ pub unsafe fn compile_program(l: *mut stb_lexer, input_path: *const c_char, c: *
                 auto_vars_count: (*c).auto_vars_ator.max,
             });
             (*c).func_body = zeroed();
+            (*c).func_labels.count = 0;
+            (*c).func_labels_used.count = 0;
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
             name_declare_if_not_exists(&mut (*c).globals, name);
-            declare_var(l, input_path, &mut (*c).vars, name, name_loc, Storage::External{name})?;
-            get_and_expect_clex(l, input_path, ';' as c_long)?;
+            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
+            get_and_expect_clex(l, Token::SemiColon)?;
         }
     }
     scope_pop(&mut (*c).vars);          // end global scope
@@ -959,7 +959,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     'args: while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
-            flag_print_error(stderr);
+            flag_print_error(stderr());
             return None;
         }
         argc = flag_rest_argc();
@@ -981,48 +981,47 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if (*target_name).is_null() {
         usage();
-        fprintf(stderr, c!("ERROR: no value is provided for -%s flag."), flag_name(target_name));
+        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag."), flag_name(target_name));
         return None;
     }
 
     if strcmp(*target_name, c!("list")) == 0 {
-        fprintf(stderr, c!("Compilation targets:\n"));
+        fprintf(stderr(), c!("Compilation targets:\n"));
         for i in 0..TARGET_NAMES.len() {
-            fprintf(stderr, c!("    %s\n"), (*TARGET_NAMES)[i].name);
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[i].name);
         }
         return Some(());
     }
 
+    if input_paths.count == 0 {
+        usage();
+        fprintf(stderr(), c!("ERROR: no input is provided\n"));
+        return None;
+    }
+
     let Some(target) = target_by_name(*target_name) else {
         usage();
-        fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
+        fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
     };
 
     if input_paths.count == 0 {
         usage();
-        fprintf(stderr, c!("ERROR: no inputs are provided\n"));
+        fprintf(stderr(), c!("ERROR: no inputs are provided\n"));
         return None;
     }
 
     let mut c: Compiler = zeroed();
-
-    let mut string_store: [c_char; 1024] = zeroed(); // TODO: size of identifiers and string literals is limited because of stb_c_lexer.h
+    let mut input: String_Builder = zeroed();
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
 
-        // TODO: Leaking memory on each file read.
-        // This is needed to not invalidate input_start in struct Loc. If stb_c_lexer.h just allowed us
-        // to calculate stb_lex_location-s on the fly without calling to the slow stb_c_lexer_get_location()
-        // we would not need to maintain input_start in the Loc-s and we could simply reset the input String_Builder
-        // on each iteration.
-        let mut input: String_Builder = zeroed();
+        input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
 
-        let mut l: stb_lexer = zeroed();
-        stb_c_lexer_init(&mut l, input.items, input.items.add(input.count), string_store.as_mut_ptr(), string_store.len() as i32);
+        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
 
-        compile_program(&mut l, input_path, &mut c)?;
+        compile_program(&mut l, &mut c)?;
     }
 
     let mut output: String_Builder = zeroed();
@@ -1048,7 +1047,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
                 return None;
             }
 
@@ -1113,7 +1112,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr, c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
                 return None;
             }
 
@@ -1271,12 +1270,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
     Some(())
 }
-
-// TODO(2025-05-18 07:06:26): B lexing is different from the C one.
-//   Hack stb_c_lexer.h into stb_b_lexer.h
-//   On the other hand, frankly speaking B lexing sucks.
-//   C lexing is much better. So an executive decision on the trade off between
-//   convenience and historical accuracy is required here.
 
 // TODO: Continue compilation for as long as possible
 //   even if you encounter semantical errors like unknown variables, functions, etc.
