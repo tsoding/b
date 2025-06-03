@@ -945,7 +945,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target_name = if let Some(default_target) = default_target {
         name_of_target(default_target).expect("default target name not found")
     } else {
-        c!("None")
+        ptr::null()
     };
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
@@ -979,6 +979,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
+    if (*target_name).is_null() {
+        usage();
+        fprintf(stderr, c!("ERROR: no value is provided for -%s flag."), flag_name(target_name));
+        return None;
+    }
+
     if strcmp(*target_name, c!("list")) == 0 {
         fprintf(stderr, c!("Compilation targets:\n"));
         for i in 0..TARGET_NAMES.len() {
@@ -987,21 +993,17 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    if input_paths.count == 0 {
-        usage();
-        fprintf(stderr, c!("ERROR: no input is provided\n"));
-        return None;
-    }
-
     let Some(target) = target_by_name(*target_name) else {
         usage();
-        if strcmp(*target_name, c!("None")) == 0 {
-            fprintf(stderr, c!("ERROR: unable to guess default target, please use the `-t` flag\n"));
-        } else {
-            fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
-        }
+        fprintf(stderr, c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
     };
+
+    if input_paths.count == 0 {
+        usage();
+        fprintf(stderr, c!("ERROR: no inputs are provided\n"));
+        return None;
+    }
 
     let mut c: Compiler = zeroed();
 
