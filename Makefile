@@ -58,7 +58,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/ternary.exe \
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
-	$(BUILD)/tests/multiple-postfix
+	$(BUILD)/tests/multiple-postfix.exe
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
