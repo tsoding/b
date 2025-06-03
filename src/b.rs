@@ -56,6 +56,10 @@ pub mod time {
 
 #[derive(Clone, Copy)]
 pub struct Stats {
+    pub files_count: u32,
+    pub tokens_count: u32,
+    pub total_millis: f64,
+    pub lexer_millis: f64,
     pub compiler_millis: f64,
     pub codegen_millis: f64,
     pub assembler_millis: f64,
@@ -1059,6 +1063,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     let mut stats: Stats = zeroed();
+    let total_start = Instant::now()?;
+
     let mut c: Compiler = zeroed();
     let mut input: String_Builder = zeroed();
     for i in 0..input_paths.count {
@@ -1070,7 +1076,22 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         let start = Instant::now()?;
         let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
         compile_program(&mut l, &mut c)?;
-        stats.compiler_millis = time::elapsed_millis(start)?;
+
+        stats.compiler_millis += time::elapsed_millis(start)?;
+        stats.files_count += 1;
+
+        if *print_stats {
+            // Second pass for lexing stats
+            let start = Instant::now()?;
+            l.parse_point.current = l.input_stream;
+            while let Some(_) = lexer::get_token(&mut l) {
+                if l.token == Token::EOF {
+                    break;
+                }
+                stats.tokens_count += 1;
+            }
+            stats.lexer_millis += time::elapsed_millis(start)?;
+        }
     }
 
     let mut output: String_Builder = zeroed();
@@ -1326,11 +1347,17 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
+    stats.total_millis += time::elapsed_millis(total_start)?;
+    stats.total_millis -= stats.lexer_millis;  // Second passes
+
     if *print_stats {
-        fprintf(stderr(), c!("INFO: compiler took   %5.1f ms\n"), stats.compiler_millis);
-        fprintf(stderr(), c!("INFO: codegen took    %5.1f ms\n"), stats.codegen_millis);
-        fprintf(stderr(), c!("INFO: assembler took  %5.1f ms\n"), stats.assembler_millis);
-        fprintf(stderr(), c!("INFO: linker took     %5.1f ms\n"), stats.linker_millis);
+        fprintf(stderr(), c!("[INFO] Compiled %d file(s) in %.1f seconds\n"), stats.files_count, stats.total_millis / 1000.0);
+        fprintf(stderr(), c!("[INFO]     tokens parsed     : %6zu\n"), stats.tokens_count);
+        fprintf(stderr(), c!("[INFO]     compiler took     : %6.1f ms \n"), stats.compiler_millis);
+        fprintf(stderr(), c!("[INFO]       of which lexing : %6.1f ms \n"), stats.lexer_millis);
+        fprintf(stderr(), c!("[INFO]     codegen took      : %6.1f ms \n"), stats.codegen_millis);
+        fprintf(stderr(), c!("[INFO]     assembler took    : %6.1f ms \n"), stats.assembler_millis);
+        fprintf(stderr(), c!("[INFO]     linker took       : %6.1f ms \n"), stats.linker_millis);
     }
 
     Some(())
