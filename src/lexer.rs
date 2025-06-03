@@ -31,12 +31,17 @@ macro_rules! missingf {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Token {
+    // Terminal
     EOF,
     ParseError,
+
+    // Values
     ID,
     String,
     CharLit,
     IntLit,
+
+    // Puncts
     OCurly,
     CCurly,
     OParen,
@@ -75,16 +80,32 @@ pub enum Token {
     Colon,
     SemiColon,
     Comma,
+
+    // Keywords
+    Auto,
+    Extrn,
+    Case,
+    If,
+    Else,
+    While,
+    Switch,
+    Goto,
+    Return,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
     match token {
+        // Terminal
         Token::EOF        => c!("end of file"),
         Token::ParseError => c!("parse error"),
+
+        // Values
         Token::ID         => c!("identifier"),
         Token::String     => c!("string"),
         Token::CharLit    => c!("character"),
         Token::IntLit     => c!("integer literal"),
+
+        // Puncts
         Token::OCurly     => c!("`{`"),
         Token::CCurly     => c!("`}`"),
         Token::OParen     => c!("`(`"),
@@ -123,9 +144,25 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::Colon      => c!("`:`"),
         Token::SemiColon  => c!("`;`"),
         Token::Comma      => c!("`,`"),
+
+        Token::Auto       => c!("keyword `auto`"),
+        Token::Extrn      => c!("keyword `extrn`"),
+        Token::Case       => c!("keyword `case`"),
+        Token::If         => c!("keyword `if`"),
+        Token::Else       => c!("keyword `else`"),
+        Token::While      => c!("keyword `while`"),
+        Token::Switch     => c!("keyword `switch`"),
+        Token::Goto       => c!("keyword `goto`"),
+        Token::Return     => c!("keyword `return`"),
     }
 }
 
+// IMPORTANT! The order of PUNCTS is important because they are checked as prefixes of input sequentially.
+//   It's important to keep `+=` before `+` because otherwise `+=` may end up getting tokenized as `+` and `=`.
+//   As a rule of thumb, if one token is a substring of another one, keep the array index of the longer one lower
+//   so it's checked earlier.
+//   TODO: Maybe we should create a function that analyses the PUNCTS and orders them accordingly, so this notice is
+//   not needed
 // TODO: Some punctuations are not historically accurate. =+ instead of +=, etc.
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("?"), Token::Question),
@@ -166,6 +203,18 @@ pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!(">>"), Token::Shr),
     (c!(">="), Token::GreaterEq),
     (c!(">"), Token::Greater),
+];
+
+const KEYWORDS: *const [(*const c_char, Token)] = &[
+    (c!("auto"), Token::Auto),
+    (c!("extrn"), Token::Extrn),
+    (c!("case"), Token::Case),
+    (c!("if"), Token::If),
+    (c!("else"), Token::Else),
+    (c!("while"), Token::While),
+    (c!("switch"), Token::Switch),
+    (c!("goto"), Token::Goto),
+    (c!("return"), Token::Return),
 ];
 
 #[derive(Clone, Copy)]
@@ -223,13 +272,6 @@ pub unsafe fn skip_char(l: *mut Lexer) {
     }
 }
 
-pub unsafe fn skip_chars(l: *mut Lexer, mut n: usize) {
-    while n > 0 && !is_eof(l){
-        skip_char(l);
-        n -= 1;
-    }
-}
-
 pub unsafe fn skip_whitespaces(l: *mut Lexer) {
     while let Some(x) = peek_char(l) {
         if isspace(x as i32) != 0 {
@@ -257,21 +299,18 @@ pub unsafe fn skip_prefix(l: *mut Lexer, mut prefix: *const c_char) -> bool {
     true
 }
 
+pub unsafe fn skip_until(l: *mut Lexer, prefix: *const c_char) {
+    while !is_eof(l) && !skip_prefix(l, prefix) {
+        skip_char(l);
+    }
+}
+
 pub unsafe fn is_identifier(x: c_char) -> bool {
     isalnum(x as c_int) != 0 || x == '_' as c_char
 }
 
 pub unsafe fn is_identifier_start(x: c_char) -> bool {
     isalpha(x as c_int) != 0 || x == '_' as c_char
-}
-
-pub unsafe fn skip_line(l: *mut Lexer) {
-    while let Some(x) = peek_char(l) {
-        skip_char(l);
-        if x == '\n' as c_char {
-            break
-        }
-    }
 }
 
 pub unsafe fn loc(l: *mut Lexer) -> Loc {
@@ -294,6 +333,7 @@ pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<
                     return None;
                 };
                 let x = match x {
+                    x if x == '0'   as c_char => '\0' as c_char,
                     x if x == 'n'   as c_char => '\n' as c_char,
                     x if x == 't'   as c_char => '\t' as c_char,
                     x if x == delim           => delim,
@@ -318,21 +358,17 @@ pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<
 }
 
 pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
-    skip_whitespaces(l);
-
     'comments: loop {
+        skip_whitespaces(l);
+
         // TODO: C++ style comments are not particularly historically accurate
         if skip_prefix(l, c!("//")) {
-            skip_line(l);
-            skip_whitespaces(l);
+            skip_until(l, c!("\n"));
             continue 'comments;
         }
 
         if skip_prefix(l, c!("/*")) {
-            while !is_eof(l) && !skip_prefix(l, c!("*/")) {
-                skip_char(l);
-            }
-            skip_whitespaces(l);
+            skip_until(l, c!("*/"));
             continue 'comments;
         }
 
@@ -367,6 +403,15 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         }
         da_append(&mut (*l).string_storage, 0);
         (*l).string = (*l).string_storage.items;
+
+        for i in 0..KEYWORDS.len() {
+            let (id, token) = (*KEYWORDS)[i];
+            if strcmp((*l).string, id) == 0 {
+                (*l).token = token;
+                return Some(());
+            }
+        }
+
         return Some(())
     }
 
@@ -395,6 +440,22 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         return Some(());
     }
 
+    if skip_prefix(l, c!("0")) {
+        (*l).token = Token::IntLit;
+        (*l).int_number = 0;
+        while let Some(x) = peek_char(l) {
+            // TODO: check for overflows?
+            if '0' as c_char <= x && x <= '7' as c_char {
+                (*l).int_number *= 8;
+                (*l).int_number += x as u64 - '0' as u64;
+                skip_char(l);
+            } else {
+                break
+            }
+        }
+        return Some(())
+    }
+
     if isdigit(x as c_int) != 0 {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
@@ -418,11 +479,13 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         parse_string_into_storage(l, '"' as c_char)?;
         if is_eof(l) {
             diagf!(loc(l), c!("LEXER ERROR: Unfinished string literal\n"));
+            diagf!((*l).loc, c!("LEXER INFO: Literal starts here\n"));
             (*l).token = Token::ParseError;
             return None;
         }
         skip_char(l);
         da_append(&mut (*l).string_storage, 0);
+        (*l).string = (*l).string_storage.items;
         return Some(());
     }
 
@@ -433,6 +496,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         parse_string_into_storage(l, '\'' as c_char)?;
         if is_eof(l) {
             diagf!(loc(l), c!("LEXER ERROR: Unfinished character literal\n"));
+            diagf!((*l).loc, c!("LEXER INFO: Literal starts here\n"));
             (*l).token = Token::ParseError;
             return None;
         }
@@ -448,13 +512,11 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
             (*l).token = Token::ParseError;
             return None;
         }
-        // TODO: I don't know in which order the characters should be packed in the char literal
         (*l).int_number = 0;
         for i in 0..(*l).string_storage.count {
-            (*l).int_number *= 0xFF;
+            (*l).int_number *= 0x100;
             (*l).int_number += *(*l).string_storage.items.add(i) as u64;
         }
-
         return Some(());
     }
 

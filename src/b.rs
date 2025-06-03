@@ -167,26 +167,6 @@ pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: 
     Some(())
 }
 
-const B_KEYWORDS: *const [*const c_char] = &[
-    c!("auto"),
-    c!("extrn"),
-    c!("case"),
-    c!("if"),
-    c!("while"),
-    c!("switch"),
-    c!("goto"),
-    c!("return"),
-];
-
-unsafe fn is_keyword(name: *const c_char) -> bool {
-    for i in 0..B_KEYWORDS.len() {
-        if strcmp((*B_KEYWORDS)[i], name) == 0 {
-            return true
-        }
-    }
-    false
-}
-
 #[derive(Clone, Copy)]
 pub enum Arg {
     AutoVar(usize),
@@ -705,16 +685,17 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
 
-    if (*l).token == Token::OCurly {
-        scope_push(&mut (*c).vars);
+    match (*l).token {
+        Token::OCurly => {
+            scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-                compile_block(l, c)?;
+            compile_block(l, c)?;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
-        scope_pop(&mut (*c).vars);
-        Some(())
-    } else {
-        if (*l).token == Token::ID && (strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0) {
-            let extrn = strcmp((*l).string, c!("extrn")) == 0;
+            scope_pop(&mut (*c).vars);
+            Some(())
+        }
+        Token::Extrn | Token::Auto => {
+            let extrn = (*l).token == Token::Extrn;
             'vars: loop {
                 get_and_expect_clex(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
@@ -728,18 +709,17 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 };
                 declare_var(l, &mut (*c).vars, name, loc, storage)?;
                 lexer::get_token(l)?;
-                expect_clexes(l, &[Token::Comma, Token::SemiColon])?;
-                if (*l).token == Token::SemiColon {
-                    break 'vars;
-                } else if (*l).token == Token::Comma {
-                    continue 'vars;
-                } else {
-                    unreachable!()
+                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
+                match (*l).token {
+                    Token::SemiColon => break 'vars,
+                    Token::Comma => continue 'vars,
+                    _ => unreachable!(),
                 }
             }
 
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("if")) == 0 {
+        }
+        Token::If => {
             get_and_expect_clex(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (cond, _) = compile_expression(l, c)?;
@@ -754,7 +734,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
 
-            if (*l).token == Token::ID && strcmp((*l).string, c!("else")) == 0 {
+            if (*l).token == Token::Else {
                 let addr_skips_else = (*c).func_body.count;
                 push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
                 let addr_else = (*c).func_body.count;
@@ -769,7 +749,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             }
 
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("while")) == 0 {
+        }
+        Token::While => {
             let begin = (*c).func_body.count;
             get_and_expect_clex(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -785,7 +766,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let end = (*c).func_body.count;
             (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("return")) == 0 {
+        }
+        Token::Return => {
             lexer::get_token(l)?;
             expect_clexes(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
@@ -799,7 +781,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 unreachable!();
             }
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("goto")) == 0 {
+        }
+        Token::Goto => {
             get_and_expect_clex(l, Token::ID)?;
             let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
             let loc = (*l).loc;
@@ -808,7 +791,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_clex(l, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
             Some(())
-        } else {
+        }
+        _ => {
             if (*l).token == Token::ID {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = (*l).loc;
@@ -881,20 +865,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         let name = arena::strdup(&mut (*c).arena_names, (*l).string);
         let name_loc = (*l).loc;
 
-        // TODO: maybe the keywords should be identified on the level of lexing
-        if is_keyword((*l).string) {
-            diagf!(name_loc, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
-            diagf!(name_loc, c!("NOTE: Reserved keywords are: "));
-            for i in 0..B_KEYWORDS.len() {
-                if i > 0 {
-                    fprintf(stderr(), c!(", "));
-                }
-                fprintf(stderr(), c!("`%s`"), (*B_KEYWORDS)[i]);
-            }
-            fprintf(stderr(), c!("\n"));
-            return None;
-        }
-
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
         if (*l).token == Token::OParen { // Function definition
@@ -913,13 +883,11 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
                     lexer::get_token(l)?;
-                    expect_clexes(l, &[Token::Comma, Token::CParen])?;
-                    if (*l).token == Token::CParen {
-                        break 'params;
-                    } else if (*l).token == Token::Comma {
-                        continue 'params;
-                    } else {
-                        unreachable!()
+                    expect_clexes(l, &[Token::CParen, Token::Comma])?;
+                    match (*l).token {
+                        Token::CParen => break 'params,
+                        Token::Comma => continue 'params,
+                        _ => unreachable!(),
                     }
                 }
             }
@@ -962,12 +930,21 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
-    if cfg!(target_arch = "aarch64") {
-        default_target = Target::Gas_AArch64_Linux;
+    if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+        default_target = Some(Target::Gas_AArch64_Linux);
+    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
+        default_target = Some(Target::Fasm_x86_64_Linux);
+    } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
+        default_target = Some(Target::Fasm_x86_64_Windows);
     } else {
-        default_target = Target::Fasm_x86_64_Linux;
+        default_target = None;
     }
-    let default_target_name = name_of_target(default_target).expect("default target name not found");
+
+    let default_target_name = if let Some(default_target) = default_target {
+        name_of_target(default_target).expect("default target name not found")
+    } else {
+        ptr::null()
+    };
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
@@ -1000,6 +977,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
+    if (*target_name).is_null() {
+        usage();
+        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag."), flag_name(target_name));
+        return None;
+    }
+
     if strcmp(*target_name, c!("list")) == 0 {
         fprintf(stderr(), c!("Compilation targets:\n"));
         for i in 0..TARGET_NAMES.len() {
@@ -1019,6 +1002,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
     };
+
+    if input_paths.count == 0 {
+        usage();
+        fprintf(stderr(), c!("ERROR: no inputs are provided\n"));
+        return None;
+    }
 
     let mut c: Compiler = zeroed();
     let mut input: String_Builder = zeroed();
@@ -1054,9 +1043,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !cfg!(target_arch = "aarch64") {
+            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
                 return None;
             }
 
@@ -1102,7 +1091,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Fasm_x86_64_Linux => {
-            codegen::fasm_x86_64_linux::generate_program(&mut output, &c);
+            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1119,9 +1108,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !cfg!(target_arch = "x86_64") {
+            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 is not supported for now\n"));
+                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
                 return None;
             }
 
@@ -1154,6 +1143,76 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 cmd_append! {
                     &mut cmd,
                     run_path,
+                }
+
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }
+                }
+
+                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            }
+        }
+        Target::Fasm_x86_64_Windows => {
+            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::Os::Windows);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), output_asm_path);
+
+            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
+                c!("cc")
+            } else {
+                c!("x86_64-w64-mingw32-gcc")
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
+            cmd_append! {
+                &mut cmd,
+                c!("fasm"), output_asm_path, output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                if !cfg!(target_os = "windows") {
+                    cmd_append! {
+                        &mut cmd,
+                        c!("wine"),
+                    }
+                }
+
+                cmd_append! {
+                    &mut cmd,
+                    effective_output_path,
                 }
 
                 for i in 0..run_args.count {
