@@ -1,4 +1,5 @@
 use core::ffi::*;
+use core::cmp;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
@@ -191,18 +192,36 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 }
             }
             Op::Funcall{result, name, args} => {
-                if args.count > registers.len() {
-                    missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), registers.len(), args.count);
+                match os {
+                    Os::Linux => {
+                        if args.count > registers.len() {
+                            missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), registers.len(), args.count);
+                        }
+                        // TODO: implement similar additional pushing argument to stack for Os::Linux as for Os::Windows
+                        for i in 0..args.count {
+                            let reg = (*registers)[i];
+                            load_arg_to_reg(*args.items.add(i), reg, output);
+                        }
+                        sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
+                                                                   // floating point args via al. Since B
+                                                                   // does not distinguish regular and
+                                                                   // variadic functions we set al to 0 just
+                                                                   // in case.
+                    }
+                    Os::Windows => {
+                        let mut i = 0;
+                        while i < cmp::min(args.count, registers.len()) {
+                            let reg = (*registers)[i];
+                            load_arg_to_reg(*args.items.add(i), reg, output);
+                            i += 1;
+                        }
+                        while i < args.count {
+                            load_arg_to_reg(*args.items.add(i), c!("rax"), output);
+                            sb_appendf(output, c!("    push rax\n"));
+                            i += 1;
+                        }
+                    }
                 }
-                for i in 0..args.count {
-                    let reg = (*registers)[i];
-                    load_arg_to_reg(*args.items.add(i), reg, output);
-                }
-                sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
-                                                           // floating point args via al. Since B
-                                                           // does not distinguish regular and
-                                                           // variadic functions we set al to 0 just
-                                                           // in case.
                 sb_appendf(output, c!("    call _%s\n"), name);
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
