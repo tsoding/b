@@ -7,7 +7,7 @@ main(argc, argv) {
     extrn printf, fprintf, stderr, atoi;
 
     auto W;
-    W = 8;
+    W = 8;                      // TODO: breaks Uxn target
 
     if (argc <= 1) {
         fprintf(stderr, "%s: missing operand\n", *argv);
