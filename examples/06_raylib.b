@@ -1,9 +1,15 @@
 // -*- mode: simpc -*-
 
 // To compile this example you need to download raylib from https://github.com/raysan5/raylib/releases
-// Than pass appropriate linker flags to the b compiler:
+// Than pass appropriate linker flags to the b compiler.
+// # Linux
+//
 // $ b raylib.b -L -L/path/to/raylib-version_linux_amd64/lib/ -L -l:libraylib.a -L -lm -run
+//
+// # Windows mingw32-w64
+// > b -t fasm-x86_64-windows raylib.b -L -L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -L -l:libraylib.a -L -lwinmm -L -lgdi32 -run
 
+// TODO: Crashing during runtime when compiled with -t fasm-x86_64-windows and running via wine
 main() {
     // libc
     extrn malloc;

@@ -31,12 +31,17 @@ macro_rules! missingf {
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Token {
+    // Terminal
     EOF,
     ParseError,
+
+    // Values
     ID,
     String,
     CharLit,
     IntLit,
+
+    // Puncts
     OCurly,
     CCurly,
     OParen,
@@ -75,16 +80,33 @@ pub enum Token {
     Colon,
     SemiColon,
     Comma,
+
+    // Keywords
+    Auto,
+    Extrn,
+    Case,
+    If,
+    Else,
+    While,
+    Switch,
+    Goto,
+    Return,
+    Asm,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
     match token {
+        // Terminal
         Token::EOF        => c!("end of file"),
         Token::ParseError => c!("parse error"),
+
+        // Values
         Token::ID         => c!("identifier"),
         Token::String     => c!("string"),
         Token::CharLit    => c!("character"),
         Token::IntLit     => c!("integer literal"),
+
+        // Puncts
         Token::OCurly     => c!("`{`"),
         Token::CCurly     => c!("`}`"),
         Token::OParen     => c!("`(`"),
@@ -123,9 +145,26 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::Colon      => c!("`:`"),
         Token::SemiColon  => c!("`;`"),
         Token::Comma      => c!("`,`"),
+
+        Token::Auto       => c!("keyword `auto`"),
+        Token::Extrn      => c!("keyword `extrn`"),
+        Token::Case       => c!("keyword `case`"),
+        Token::If         => c!("keyword `if`"),
+        Token::Else       => c!("keyword `else`"),
+        Token::While      => c!("keyword `while`"),
+        Token::Switch     => c!("keyword `switch`"),
+        Token::Goto       => c!("keyword `goto`"),
+        Token::Return     => c!("keyword `return`"),
+        Token::Asm        => c!("keyword `__asm__`"),
     }
 }
 
+// IMPORTANT! The order of PUNCTS is important because they are checked as prefixes of input sequentially.
+//   It's important to keep `+=` before `+` because otherwise `+=` may end up getting tokenized as `+` and `=`.
+//   As a rule of thumb, if one token is a substring of another one, keep the array index of the longer one lower
+//   so it's checked earlier.
+//   TODO: Maybe we should create a function that analyses the PUNCTS and orders them accordingly, so this notice is
+//   not needed
 // TODO: Some punctuations are not historically accurate. =+ instead of +=, etc.
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("?"), Token::Question),
@@ -166,6 +205,19 @@ pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!(">>"), Token::Shr),
     (c!(">="), Token::GreaterEq),
     (c!(">"), Token::Greater),
+];
+
+const KEYWORDS: *const [(*const c_char, Token)] = &[
+    (c!("auto"), Token::Auto),
+    (c!("extrn"), Token::Extrn),
+    (c!("case"), Token::Case),
+    (c!("if"), Token::If),
+    (c!("else"), Token::Else),
+    (c!("while"), Token::While),
+    (c!("switch"), Token::Switch),
+    (c!("goto"), Token::Goto),
+    (c!("return"), Token::Return),
+    (c!("__asm__"), Token::Asm),
 ];
 
 #[derive(Clone, Copy)]
@@ -354,6 +406,15 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         }
         da_append(&mut (*l).string_storage, 0);
         (*l).string = (*l).string_storage.items;
+
+        for i in 0..KEYWORDS.len() {
+            let (id, token) = (*KEYWORDS)[i];
+            if strcmp((*l).string, id) == 0 {
+                (*l).token = token;
+                return Some(());
+            }
+        }
+
         return Some(())
     }
 
