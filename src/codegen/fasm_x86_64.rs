@@ -24,7 +24,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
     let stack_size = match os {
         Os::Linux   => align_bytes(auto_vars_count*8, 16),
-        Os::Windows => align_bytes(auto_vars_count*8, 16) + 32, // +32 bytes for "shadow space" (took 2 hours to figure out)
+        Os::Windows => align_bytes(auto_vars_count*8, 16),
     };
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
@@ -215,14 +215,24 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                             load_arg_to_reg(*args.items.add(i), reg, output);
                             i += 1;
                         }
-                        while i < args.count {
+
+                        // args on the stack are push right to left
+                        // so we need to iterate them in reverse
+                        let first_stack_arg = i;
+                        i = args.count-1;
+                        while i >= first_stack_arg {
                             load_arg_to_reg(*args.items.add(i), c!("rax"), output);
                             sb_appendf(output, c!("    push rax\n"));
-                            i += 1;
+                            i -= 1;
                         }
                     }
                 }
+                // allocate 32 bytes for "shadow space"
+                // it must be allocated at the top of the stack after all arguments are pushed
+                // so we can't allocate it at function prologue
+                sb_appendf(output, c!("    sub rsp, 32\n"), name);
                 sb_appendf(output, c!("    call _%s\n"), name);
+                sb_appendf(output, c!("    add rsp, 32\n"), name); // deallocate "shadow space"
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
             Op::JmpIfNot{addr, arg} => {
