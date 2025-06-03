@@ -1159,6 +1159,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     &mut cmd,
                     c!("uxnemu"), effective_output_path,
                 }
+                for i in 0..run_args.count {
+                    cmd_append! {
+                        &mut cmd,
+                        *(run_args).items.add(i),
+                    }
+                }
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
