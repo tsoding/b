@@ -1079,6 +1079,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
         let start = Instant::now()?;
         let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
+
         compile_program(&mut l, &mut c)?;
 
         stats.compiler_millis += time::elapsed_millis(start)?;
