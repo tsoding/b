@@ -383,31 +383,6 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             Some((arg, false))
         }
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
-        Token::Asm => {
-            get_and_expect_clex(l, Token::OParen)?;
-
-            let mut args: Array<*const c_char> = zeroed();
-
-            while (*l).token != Token::CParen {
-                lexer::get_token(l)?;
-                match (*l).token {
-                    Token::String => {
-                        da_append(&mut args, strdup((*l).string));
-                    }
-                    _ => {
-                        diagf!((*l).loc, c!("ERROR: %s only takes strings"), (*l).string);
-                    }
-                }
-
-                lexer::get_token(l)?;
-                expect_clexes(l, &[Token::Comma, Token::CParen])?;
-            }
-
-            let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-
-            push_opcode(Op::Asm {args}, (*l).loc, c);
-            return Some((Arg::AutoVar(result), false))
-        }
         Token::ID => {
             let name = arena::strdup(&mut (*c).arena_names, (*l).string);
             let name_loc = (*l).loc;
@@ -790,6 +765,30 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
             get_and_expect_clex(l, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+            Some(())
+        }
+        Token::Asm => {
+            get_and_expect_clex(l, Token::OParen)?;
+
+            let mut args: Array<*const c_char> = zeroed();
+
+            while (*l).token != Token::CParen {
+                lexer::get_token(l)?;
+                match (*l).token {
+                    Token::String => {
+                        da_append(&mut args, strdup((*l).string));
+                    }
+                    _ => {
+                        diagf!((*l).loc, c!("ERROR: %s only takes strings"), (*l).string);
+                    }
+                }
+
+                lexer::get_token(l)?;
+                expect_clexes(l, &[Token::Comma, Token::CParen])?;
+            }
+            get_and_expect_clex(l, Token::SemiColon)?;
+
+            push_opcode(Op::Asm {args}, (*l).loc, c);
             Some(())
         }
         _ => {
