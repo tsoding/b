@@ -38,14 +38,7 @@ pub mod time {
         }
 
         pub unsafe fn diff_nanos(this: Instant, that: Instant) -> i64 {
-            let secs = this.secs - that.secs;
-            if secs == 0 {
-                this.nanos - that.nanos
-            } else if secs > 0 {
-                1_000_000_000 * (secs + 1) + this.nanos - that.nanos
-            } else {
-                1_000_000_000 * (secs + 1) + that.nanos - this.nanos
-            }
+            1_000_000_000 * (this.secs - that.secs) + this.nanos - that.nanos
         }
     }
 
