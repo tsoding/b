@@ -1,11 +1,11 @@
 div(a, b) {
     extrn printf;
-    printf("%6d/%3d = %2d\n", a, b, a/b);
+    printf("%d/%d = %d\n", a, b, a/b);
 }
 
 mod(a, b) {
     extrn printf;
-    printf("%6d%%%3d = %2d\n", a, b, a%b);
+    printf("%d%%%d = %d\n", a, b, a%b);
 }
 
 main() {
