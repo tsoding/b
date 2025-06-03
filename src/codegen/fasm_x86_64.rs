@@ -22,10 +22,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 }
 
 pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
-    let stack_size = match os {
-        Os::Linux   => align_bytes(auto_vars_count*8, 16),
-        Os::Windows => align_bytes(auto_vars_count*8, 16),
-    };
+    let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
     sb_appendf(output, c!("    push rbp\n"));
@@ -227,9 +224,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         // allocate 32 bytes for "shadow space"
                         // it must be allocated at the top of the stack after all arguments are pushed
                         // so we can't allocate it at function prologue
-                        sb_appendf(output, c!("    sub rsp, 32\n"), name);
+                        sb_appendf(output, c!("    sub rsp, 32\n"));
                         sb_appendf(output, c!("    call _%s\n"), name);
-                        sb_appendf(output, c!("    add rsp, 32\n"), name); // deallocate "shadow space"
+                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8+32); // deallocate stack args & "shadow space"
                     }
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
