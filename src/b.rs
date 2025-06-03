@@ -22,7 +22,7 @@ use nob::*;
 use flag::*;
 use crust::libc::*;
 use arena::Arena;
-use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name};
+use codegen::{Target, name_of_target, TARGET_NAMES, target_by_name, target_word_size};
 use lexer::{Lexer, Loc, Token};
 
 pub unsafe fn expect_clexes(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
@@ -434,7 +434,9 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         get_and_expect_clex(l, Token::CBracket)?;
 
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: offset}, (*l).loc, c);
+        let word_size = Arg::Literal(target_word_size((*c).target));
+        push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
+        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
 
         Some((Arg::Deref(result), true))
     } else if (*l).token == Token::PlusPlus {
@@ -826,6 +828,7 @@ pub struct Compiler {
     pub globals: Array<*const c_char>,
     pub arena_names: Arena,
     pub arena_labels: Arena,
+    pub target: Target,
 }
 
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
@@ -984,6 +987,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     let mut c: Compiler = zeroed();
+    c.target = target;
     let mut input: String_Builder = zeroed();
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
