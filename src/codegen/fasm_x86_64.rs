@@ -231,6 +231,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
+            Op::Asm {args} => {
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), arg);
+                }
+            }
             Op::JmpIfNot{addr, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    test rax, rax\n"));

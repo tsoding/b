@@ -358,6 +358,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_lit_ldz2(output, FIRST_ARG);
                 store_auto(output, result);
             }
+            Op::Asm {..} => missingf!(op.loc, c!("Inline assembly\n")),
             Op::Jmp {addr} => {
                 write_op(output, UxnOp::JMI);
                 write_label_rel(output, *op_labels.items.add(addr), assembler);

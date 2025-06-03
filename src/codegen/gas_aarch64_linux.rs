@@ -242,6 +242,13 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 sb_appendf(output, c!("    bl %s\n"), name);
                 sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
             },
+            Op::Asm {args} => {
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), arg);
+                }
+            }
+
             Op::Jmp {addr} => {
                 sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
             },
