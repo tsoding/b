@@ -54,3 +54,13 @@ pub unsafe fn target_by_name(name: *const c_char) -> Option<Target> {
     }
     None
 }
+
+pub unsafe fn target_word_size(target: Target) -> u64 {
+    match target {
+        Target::Fasm_x86_64_Windows => 8,
+        Target::Fasm_x86_64_Linux   => 8,
+        Target::Gas_AArch64_Linux   => 8,
+        Target::Uxn                 => 2,
+        Target::IR                  => 1,
+    }
+}

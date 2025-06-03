@@ -4,32 +4,27 @@ word;
 
 display(base, n) {
     extrn printf;
-    auto it, i;
+    auto i;
 
-    it = base;
     i  = 0;
     while (i < n) {
-        if (*it) printf("#"); else printf(".");
-        it += word;
+        if (base[i]) printf("#"); else printf(".");
         i  += 1;
     }
     printf("\n");
 }
 
 next(base, n) {
-    auto it, i, state;
+    auto i, state;
 
-    it = base;
-    state = *it | *(it + word) << 1;
+    state = base[0] | base[1] << 1;
     i  = 2;
-    it = base + 2*word;
     while (i < n) {
         state <<= 1;
-        state  |= *it;
+        state  |= base[i];
         state  &= 7;
-        *(it - word) = (110>>state)&1;
-        i  += 1;
-        it += word;
+        base[i - 1] = (110>>state)&1;
+        i += 1;
     }
 }
 
@@ -37,11 +32,11 @@ main() {
     extrn malloc, memset;
     auto base, n;
 
-    word = 8;
+    word = &0[1]; /* trick to obtain the word size */
     n    = 100;
     base = malloc(word*n);
     memset(base, 0, word*n);
-    *(base + (n - 2)*word) = 1;
+    base[n - 2] = 1;
 
     display(base, n);
     auto i;
