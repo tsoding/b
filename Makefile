@@ -16,7 +16,8 @@ RSS=\
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs
 
-TESTS=\
+LINUX_TESTS=\
+	$(BUILD)/tests/args6 \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
@@ -35,6 +36,27 @@ TESTS=\
 	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector
+
+MINGW32_TESTS=\
+	$(BUILD)/tests/args6.exe \
+	$(BUILD)/tests/compare.exe \
+	$(BUILD)/tests/deref_assign.exe \
+	$(BUILD)/tests/divmod.exe \
+	$(BUILD)/tests/e.exe \
+	$(BUILD)/tests/forward-declare.exe \
+	$(BUILD)/tests/goto.exe \
+	$(BUILD)/tests/hello.exe \
+	$(BUILD)/tests/inc_dec.exe \
+	$(BUILD)/tests/lexer.exe \
+	$(BUILD)/tests/literals.exe \
+	$(BUILD)/tests/minus_2.exe \
+	$(BUILD)/tests/recursion.exe \
+	$(BUILD)/tests/ref.exe \
+	$(BUILD)/tests/return.exe \
+	$(BUILD)/tests/ternary-side-effect.exe \
+	$(BUILD)/tests/ternary.exe \
+	$(BUILD)/tests/unary_priority.exe \
+	$(BUILD)/tests/vector.exe
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
@@ -66,10 +88,15 @@ $(BUILD):
 	mkdir -pv $(BUILD)
 
 .PHONY: test
-test: $(TESTS)
+test: $(LINUX_TESTS)
 
 $(BUILD)/tests/%: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
 	$(BUILD)/b -run -o $@ $< ./std/test.b
+
+test-mingw32: $(MINGW32_TESTS)
+
+$(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t fasm-x86_64-windows -run -o $@ $< ./std/test.b
 
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests

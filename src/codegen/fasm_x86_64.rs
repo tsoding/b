@@ -207,6 +207,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                                                                    // does not distinguish regular and
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
+                        sb_appendf(output, c!("    call _%s\n"), name);
                     }
                     Os::Windows => {
                         let mut i = 0;
@@ -218,21 +219,19 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
                         // args on the stack are push right to left
                         // so we need to iterate them in reverse
-                        let first_stack_arg = i;
-                        i = args.count-1;
-                        while i >= first_stack_arg {
-                            load_arg_to_reg(*args.items.add(i), c!("rax"), output);
+                        for j in (i..args.count).rev() {
+                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
                             sb_appendf(output, c!("    push rax\n"));
-                            i -= 1;
                         }
+
+                        // allocate 32 bytes for "shadow space"
+                        // it must be allocated at the top of the stack after all arguments are pushed
+                        // so we can't allocate it at function prologue
+                        sb_appendf(output, c!("    sub rsp, 32\n"), name);
+                        sb_appendf(output, c!("    call _%s\n"), name);
+                        sb_appendf(output, c!("    add rsp, 32\n"), name); // deallocate "shadow space"
                     }
                 }
-                // allocate 32 bytes for "shadow space"
-                // it must be allocated at the top of the stack after all arguments are pushed
-                // so we can't allocate it at function prologue
-                sb_appendf(output, c!("    sub rsp, 32\n"), name);
-                sb_appendf(output, c!("    call _%s\n"), name);
-                sb_appendf(output, c!("    add rsp, 32\n"), name); // deallocate "shadow space"
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
             Op::JmpIfNot{addr, arg} => {
