@@ -167,26 +167,6 @@ pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: 
     Some(())
 }
 
-const B_KEYWORDS: *const [*const c_char] = &[
-    c!("auto"),
-    c!("extrn"),
-    c!("case"),
-    c!("if"),
-    c!("while"),
-    c!("switch"),
-    c!("goto"),
-    c!("return"),
-];
-
-unsafe fn is_keyword(name: *const c_char) -> bool {
-    for i in 0..B_KEYWORDS.len() {
-        if strcmp((*B_KEYWORDS)[i], name) == 0 {
-            return true
-        }
-    }
-    false
-}
-
 #[derive(Clone, Copy)]
 pub enum Arg {
     AutoVar(usize),
@@ -679,16 +659,17 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
 
-    if (*l).token == Token::OCurly {
-        scope_push(&mut (*c).vars);
+    match (*l).token {
+        Token::OCurly => {
+            scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
-                compile_block(l, c)?;
+            compile_block(l, c)?;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
-        scope_pop(&mut (*c).vars);
-        Some(())
-    } else {
-        if (*l).token == Token::ID && (strcmp((*l).string, c!("extrn")) == 0 || strcmp((*l).string, c!("auto")) == 0) {
-            let extrn = strcmp((*l).string, c!("extrn")) == 0;
+            scope_pop(&mut (*c).vars);
+            Some(())
+        }
+        Token::Extrn | Token::Auto => {
+            let extrn = (*l).token == Token::Extrn;
             'vars: loop {
                 get_and_expect_clex(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
@@ -711,7 +692,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             }
 
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("if")) == 0 {
+        }
+        Token::If => {
             get_and_expect_clex(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (cond, _) = compile_expression(l, c)?;
@@ -726,7 +708,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
 
-            if (*l).token == Token::ID && strcmp((*l).string, c!("else")) == 0 {
+            if (*l).token == Token::Else {
                 let addr_skips_else = (*c).func_body.count;
                 push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
                 let addr_else = (*c).func_body.count;
@@ -741,7 +723,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             }
 
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("while")) == 0 {
+        }
+        Token::While => {
             let begin = (*c).func_body.count;
             get_and_expect_clex(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -757,7 +740,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let end = (*c).func_body.count;
             (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("return")) == 0 {
+        }
+        Token::Return => {
             lexer::get_token(l)?;
             expect_clexes(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
@@ -771,7 +755,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 unreachable!();
             }
             Some(())
-        } else if (*l).token == Token::ID && strcmp((*l).string, c!("goto")) == 0 {
+        }
+        Token::Goto => {
             get_and_expect_clex(l, Token::ID)?;
             let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
             let loc = (*l).loc;
@@ -780,7 +765,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_clex(l, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
             Some(())
-        } else {
+        }
+        _ => {
             if (*l).token == Token::ID {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = (*l).loc;
@@ -852,20 +838,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
         let name = arena::strdup(&mut (*c).arena_names, (*l).string);
         let name_loc = (*l).loc;
-
-        // TODO: maybe the keywords should be identified on the level of lexing
-        if is_keyword((*l).string) {
-            diagf!(name_loc, c!("ERROR: Trying to define a reserved keyword `%s` as a symbol. Please choose a different name.\n"), name);
-            diagf!(name_loc, c!("NOTE: Reserved keywords are: "));
-            for i in 0..B_KEYWORDS.len() {
-                if i > 0 {
-                    fprintf(stderr(), c!(", "));
-                }
-                fprintf(stderr(), c!("`%s`"), (*B_KEYWORDS)[i]);
-            }
-            fprintf(stderr(), c!("\n"));
-            return None;
-        }
 
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
