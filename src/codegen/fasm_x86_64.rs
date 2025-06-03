@@ -1,8 +1,10 @@
 use core::ffi::*;
+use core::cmp;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
+use crate::codegen::Os;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
@@ -19,7 +21,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
@@ -29,12 +31,15 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         sb_appendf(output, c!("    sub rsp, %zu\n"), stack_size);
     }
     assert!(auto_vars_count >= params_count);
-    const REGISTERS: *const[*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")];
-    if params_count > REGISTERS.len() {
-        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
+    let registers: *const[*const c_char] = match os {
+        Os::Linux   => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
+        Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")], // https://en.wikipedia.org/wiki/X86_calling_conventions#Microsoft_x64_calling_convention
+    };
+    if params_count > registers.len() {
+        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), registers.len(), params_count);
     }
     for i in 0..params_count {
-        let reg = (*REGISTERS)[i];
+        let reg = (*registers)[i];
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
     }
     for i in 0..body.len() {
@@ -184,21 +189,54 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 }
             }
             Op::Funcall{result, name, args} => {
-                if args.count > REGISTERS.len() {
-                    missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), REGISTERS.len(), args.count);
+                match os {
+                    Os::Linux => {
+                        if args.count > registers.len() {
+                            missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), registers.len(), args.count);
+                        }
+                        // TODO: implement similar additional pushing argument to stack for Os::Linux as for Os::Windows
+                        for i in 0..args.count {
+                            let reg = (*registers)[i];
+                            load_arg_to_reg(*args.items.add(i), reg, output);
+                        }
+                        sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
+                                                                   // floating point args via al. Since B
+                                                                   // does not distinguish regular and
+                                                                   // variadic functions we set al to 0 just
+                                                                   // in case.
+                        sb_appendf(output, c!("    call _%s\n"), name);
+                    }
+                    Os::Windows => {
+                        let mut i = 0;
+                        while i < cmp::min(args.count, registers.len()) {
+                            let reg = (*registers)[i];
+                            load_arg_to_reg(*args.items.add(i), reg, output);
+                            i += 1;
+                        }
+
+                        // args on the stack are push right to left
+                        // so we need to iterate them in reverse
+                        for j in (i..args.count).rev() {
+                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
+                            sb_appendf(output, c!("    push rax\n"));
+                        }
+
+                        // allocate 32 bytes for "shadow space"
+                        // it must be allocated at the top of the stack after all arguments are pushed
+                        // so we can't allocate it at function prologue
+                        sb_appendf(output, c!("    sub rsp, 32\n"));
+                        sb_appendf(output, c!("    call _%s\n"), name);
+                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8+32); // deallocate stack args & "shadow space"
+                    }
                 }
-                for i in 0..args.count {
-                    let reg = (*REGISTERS)[i];
-                    load_arg_to_reg(*args.items.add(i), reg, output);
-                }
-                sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
-                                                           // floating point args via al. Since B
-                                                           // does not distinguish regular and
-                                                           // variadic functions we set al to 0 just
-                                                           // in case.
-                sb_appendf(output, c!("    call _%s\n"), name);
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
+            Op::Asm {args} => {
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), arg);
+                }
+            }
             Op::JmpIfNot{addr, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    test rax, rax\n"));
@@ -216,10 +254,10 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     sb_appendf(output, c!("    ret\n"));
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
     sb_appendf(output, c!("section \".text\" executable\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
     }
 }
 
@@ -267,9 +305,12 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    sb_appendf(output, c!("format ELF64\n"));
-    generate_funcs(output, da_slice((*c).funcs));
+pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, os: Os) {
+    match os {
+        Os::Linux   => sb_appendf(output, c!("format ELF64\n")),
+        Os::Windows => sb_appendf(output, c!("format MS64 COFF\n")),
+    };
+    generate_funcs(output, da_slice((*c).funcs), os);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
