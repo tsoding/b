@@ -2,7 +2,7 @@ main(argc, argv) {
     extrn printf;
 
     auto W;
-    W = 8;
+    W = 8;  // TODO: breaks Uxn target
 
     auto first;
     first = 1;
