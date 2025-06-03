@@ -1093,7 +1093,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Fasm_x86_64_Linux => {
-            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::fasm_x86_64::Os::Linux);
+            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1158,7 +1158,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Fasm_x86_64_Windows => {
-            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::fasm_x86_64::Os::Windows);
+            codegen::fasm_x86_64::generate_program(&mut output, &c, codegen::Os::Windows);
 
             let base_path;
             if (*output_path).is_null() {

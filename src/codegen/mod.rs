@@ -18,6 +18,12 @@ pub enum Target {
 }
 
 #[derive(Clone, Copy)]
+pub enum Os {
+    Linux,
+    Windows,
+}
+
+#[derive(Clone, Copy)]
 pub struct Target_Name {
     pub name: *const c_char,
     pub target: Target,
