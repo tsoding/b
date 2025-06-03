@@ -122,7 +122,7 @@ init_globals() {
   W = 8;
   W2 = W*2;
   X = 0;
-  Y = W;
+  Y = 1;
   STDIN = 0;
   STDOUT = 1;
   TCSAFLUSH = 2;
@@ -402,3 +402,7 @@ main() {
 
   disable_raw_mode();
 }
+
+// TODO: does not work on fasm_x86_64_windows due to using POSIX stuff
+//   Would be nice to research how hard/easy it is to add the Window support.
+//   But this is not critical.
