@@ -126,6 +126,12 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
     }
 }
 
+// IMPORTANT! The order of PUNCTS is important because they are checked as prefixes of input sequentially.
+//   It's important to keep `+=` before `+` because otherwise `+=` may end up getting tokenized as `+` and `=`.
+//   As a rule of thumb, if one token is a substring of another one, keep the array index of the longer one lower
+//   so it's checked earlier.
+//   TODO: Maybe we should create a function that analyses the PUNCTS and orders them accordingly, so this notice is
+//   not needed
 // TODO: Some punctuations are not historically accurate. =+ instead of +=, etc.
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("?"), Token::Question),
