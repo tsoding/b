@@ -1,8 +1,8 @@
 main() {
     extrn printf;
     auto fmt;
-    fmt = "%lu\n"; // TODO: hack because AArch64 does not support several string literals. inline when it does.
-    printf(fmt, 69);
-    printf(fmt, 1000000);
-    printf(fmt, 123456789987654321);
+    // This must be `llu` and not `lu` because on windows `long` is 32-bits
+    printf("%llu\n", 69);
+    printf("%llu\n", 1000000);
+    printf("%llu\n", 123456789987654321);
 }
