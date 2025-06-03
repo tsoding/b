@@ -40,7 +40,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     assert!(auto_vars_count >= params_count);
     let registers: *const[*const c_char] = match os {
         Os::Linux   => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
-        Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")],
+        Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")], // https://en.wikipedia.org/wiki/X86_calling_conventions#Microsoft_x64_calling_convention
     };
     if params_count > registers.len() {
         missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), registers.len(), params_count);
