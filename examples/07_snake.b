@@ -122,7 +122,7 @@ init_globals() {
   W = 8;
   W2 = W*2;
   X = 0;
-  Y = W;
+  Y = 1;
   STDIN = 0;
   STDOUT = 1;
   TCSAFLUSH = 2;

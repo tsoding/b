@@ -1,19 +1,13 @@
 main(argc, argv) {
     extrn printf;
 
-    auto W;
-    W = 8;
-
-    auto first;
+    auto first, i;
     first = 1;
-    argv += W;
-    argc -= 1;
-    while (argc) {
+    i = 1;
+    while (i < argc) {
         if (!first) printf(" ");
-        printf("%s", *argv);
+        printf("%s", argv[i++]);
         first = 0;
-        argv += W;
-        argc -= 1;
     }
     printf("\n");
 }
