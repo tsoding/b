@@ -37,6 +37,8 @@ printn(n, b) _fprintn(n, b, 0);
 
 /* doesn't support fancy features like padding, but neither did the original in B */
 
+/* TODO: Consider adding support for negative numbers to Uxn's printf. */
+/* TODO: Consider adding support for %ul to Uxn's printf. */
 fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
     extrn char;
     auto i, j, c, arg;
