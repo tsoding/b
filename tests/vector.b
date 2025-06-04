@@ -1,8 +1,7 @@
 main() {
-    extrn printf, malloc;
-    auto xs, W;
+    extrn printf;
+    auto xs 4, W;
     W = &0[1]; // word size
-    xs = malloc(4*W);
 
     *xs = 34;
     *(xs + 1*W) = '+';
