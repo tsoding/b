@@ -1,6 +1,6 @@
 width;
 height;
-word;
+W;
 board1;
 board2;
 board;
@@ -13,12 +13,12 @@ mod(n, b) {
 get(b, x, y) {
 	x = mod(x, width);
 	y = mod(y, height);
-	return (b[(x+y*width)*word]);
+	return (b[x+y*width]);
 }
 set(b, x, y, v) {
 	x = mod(x, width);
 	y = mod(y, height);
-	b[(x+y*width)*word] = v;
+	b[x+y*width] = v;
 }
 
 count_neighbours(b, x, y) {
@@ -88,8 +88,7 @@ main() {
 	auto size;
 	width  = 25;
 	height = 15;
-	word   = 8;
-	size = width*height*word;
+	size = width*height*(&0[1]);
 
 	board1 = malloc(size);
 	board2 = malloc(size);
