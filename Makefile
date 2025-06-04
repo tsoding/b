@@ -32,6 +32,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/recursion \
 	$(BUILD)/tests/ref \
 	$(BUILD)/tests/return \
+	$(BUILD)/tests/switch \
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
@@ -53,6 +54,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/recursion.exe \
 	$(BUILD)/tests/ref.exe \
 	$(BUILD)/tests/return.exe \
+	$(BUILD)/tests/switch.exe \
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
 	$(BUILD)/tests/unary_priority.exe \
@@ -74,6 +76,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/recursion.rom \
 	$(BUILD)/tests/ref.rom \
 	$(BUILD)/tests/return.rom \
+	$(BUILD)/tests/switch.rom \
 	$(BUILD)/tests/ternary-side-effect.rom \
 	$(BUILD)/tests/ternary.rom \
 	$(BUILD)/tests/unary_priority.rom \

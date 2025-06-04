@@ -790,6 +790,68 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             push_opcode(Op::Asm {args}, (*l).loc, c);
             Some(())
         }
+        Token::Switch => {
+            scope_push(&mut (*c).vars);
+            let saved_auto_vars_count = (*c).auto_vars_ator.count;
+
+            let (cond, _) = compile_expression(l, c)?;
+            let addr_before_cases = (*c).func_body.count;
+            push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+            let cases_start = (*c).switch_cases.count; // needed to keep track of nested switch
+
+            get_and_expect_clex(l, Token::OCurly)?;
+
+            lexer::get_token(l);
+            'outer: loop {
+                expect_clexes(l, &[Token::Case, Token::CCurly])?;
+                if (*l).token == Token::CCurly {
+                    break 'outer;
+                }
+
+                let loc = (*l).loc;
+                lexer::get_token(l);
+                expect_clexes(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
+                da_append(&mut (*c).switch_cases, SwitchCase {
+                    loc,
+                    value: (*l).int_number,
+                    addr: (*c).func_body.count,
+                });
+                get_and_expect_clex(l, Token::Colon)?;
+
+                loop {
+                    let saved_point = (*l).parse_point;
+                    lexer::get_token(l);
+                    if (*l).token == Token::Case || (*l).token == Token::CCurly {
+                        continue 'outer;
+                    }
+                    (*l).parse_point = saved_point;
+                    compile_statement(l, c)?;
+                }
+            }
+
+            let addr_after_cases = (*c).func_body.count;
+            push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+
+            let addr_tests = (*c).func_body.count;
+            (*(*c).func_body.items.add(addr_before_cases)).opcode = Op::Jmp {addr: addr_tests};
+
+            let test_result = allocate_auto_var(&mut (*c).auto_vars_ator);
+            for i in cases_start..(*c).switch_cases.count {
+                let case = *(*c).switch_cases.items.add(i);
+                push_opcode(Op::AutoAssign {index: test_result, arg: cond}, (*l).loc, c);
+                compile_binop(Arg::AutoVar(test_result), Arg::Literal(case.value), Binop::NotEqual, case.loc, c);
+                push_opcode(Op::JmpIfNot {addr: case.addr, arg: Arg::AutoVar(test_result)}, (*l).loc, c);
+            }
+
+            let addr_after_tests = (*c).func_body.count;
+            (*(*c).func_body.items.add(addr_after_cases)).opcode = Op::Jmp {addr: addr_after_tests};
+
+            (*c).switch_cases.count = cases_start;
+            (*c).auto_vars_ator.count = saved_auto_vars_count;
+            scope_pop(&mut (*c).vars);
+
+            Some(())
+        }
         _ => {
             if (*l).token == Token::ID {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
@@ -838,6 +900,13 @@ pub struct Func {
 }
 
 #[derive(Clone, Copy)]
+pub struct SwitchCase {
+    loc: Loc,
+    value: u64,
+    addr: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
@@ -845,6 +914,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_labels: Array<Label>,
     pub func_labels_used: Array<Label>,
+    pub switch_cases: Array<SwitchCase>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<*const c_char>,
