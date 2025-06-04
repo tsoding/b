@@ -292,7 +292,6 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*co
 }
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
-    sb_appendf(output, c!("section \".data\"\n"));
     if data.len() > 0 {
         sb_appendf(output, c!("dat: db "));
         for i in 0..data.len() {
@@ -312,6 +311,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     };
     generate_funcs(output, da_slice((*c).funcs), os);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
+    sb_appendf(output, c!("section \".data\"\n"));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
 }
