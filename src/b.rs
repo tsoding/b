@@ -60,6 +60,11 @@ pub unsafe fn get_and_expect_clex(l: *mut Lexer, clex: Token) -> Option<()> {
     expect_clex(l, clex)
 }
 
+pub unsafe fn get_and_expect_clexes(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
+    lexer::get_token(l)?;
+    expect_clexes(l, clexes)
+}
+
 pub unsafe fn expect_clex_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
     expect_clex(l, Token::ID)?;
     if strcmp((*l).string, id) != 0 {
@@ -633,8 +638,7 @@ pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *cons
         loop {
             let (expr, _) = compile_expression(l, c)?;
             da_append(&mut args, expr);
-            lexer::get_token(l)?;
-            expect_clexes(l, &[Token::CParen, Token::Comma])?;
+            get_and_expect_clexes(l, &[Token::CParen, Token::Comma])?;
             match (*l).token {
                 Token::CParen => break,
                 Token::Comma => continue,
@@ -691,8 +695,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     Storage::Auto{index}
                 };
                 declare_var(l, &mut (*c).vars, name, loc, storage)?;
-                lexer::get_token(l)?;
-                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
+                get_and_expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
                 match (*l).token {
                     Token::SemiColon => break 'vars,
                     Token::Comma => continue 'vars,
@@ -751,8 +754,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::Return => {
-            lexer::get_token(l)?;
-            expect_clexes(l, &[Token::SemiColon, Token::OParen])?;
+            get_and_expect_clexes(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
                 push_opcode(Op::Return {arg: None}, (*l).loc, c);
             } else if (*l).token == Token::OParen {
@@ -791,8 +793,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     }
                 }
 
-                lexer::get_token(l)?;
-                expect_clexes(l, &[Token::Comma, Token::CParen])?;
+                get_and_expect_clexes(l, &[Token::Comma, Token::CParen])?;
             }
             get_and_expect_clex(l, Token::SemiColon)?;
 
@@ -906,8 +907,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
-                    lexer::get_token(l)?;
-                    expect_clexes(l, &[Token::CParen, Token::Comma])?;
+                    get_and_expect_clexes(l, &[Token::CParen, Token::Comma])?;
                     match (*l).token {
                         Token::CParen => break 'params,
                         Token::Comma => continue 'params,
@@ -954,19 +954,16 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             // TODO: This code is ugly
             // couldn't find a better way to write it while keeping accurate error messages
-            lexer::get_token(l);
-            expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+            get_and_expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
 
             if (*l).token == Token::OBracket {
                 global.is_vec = true;
-                lexer::get_token(l);
-                expect_clexes(l, &[Token::IntLit, Token::CBracket])?;
+                get_and_expect_clexes(l, &[Token::IntLit, Token::CBracket])?;
                 if (*l).token == Token::IntLit {
                     global.minimum_size = (*l).int_number as usize;
                     get_and_expect_clex(l, Token::CBracket)?;
                 }
-                lexer::get_token(l);
-                expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                get_and_expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
             }
 
             while (*l).token != Token::SemiColon {
@@ -987,11 +984,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 };
                 da_append(&mut global.values, value);
 
-                lexer::get_token(l);
-                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
+                get_and_expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
                 if (*l).token == Token::Comma {
-                    lexer::get_token(l);
-                    expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                    get_and_expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
                 } else {
                     break;
                 }
