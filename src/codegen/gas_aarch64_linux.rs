@@ -2,7 +2,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, align_bytes};
+use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes};
 use crate::{missingf, Loc};
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u64) {
@@ -286,13 +286,20 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     if globals.len() > 0 {
         sb_appendf(output, c!(".bss\n"));
         for i in 0..globals.len() {
-            let name = (*globals)[i];
-            sb_appendf(output, c!(".global %s\n"), name);
-            sb_appendf(output, c!("%s: .zero 8\n"), name);
+            let global = (*globals)[i];
+            if global.is_vec {
+                missingf!(global.name_loc, c!("Global vectors are not supported yet\n"));
+            }
+            if global.values.count == 1 && matches!(*global.values.items, ImmediateValue::Literal(0)) {
+                sb_appendf(output, c!(".global %s\n"), global.name);
+                sb_appendf(output, c!("%s: .zero 8\n"), global.name);
+            } else {
+                missingf!(global.name_loc, c!("Initilizing globals is not supported yet\n"));
+            }
         }
     }
 }

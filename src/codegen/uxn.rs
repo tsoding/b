@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -548,7 +548,7 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
     write_op(output, UxnOp::STA2);
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char], assembler: *mut Assembler) {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global], assembler: *mut Assembler) {
     'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
@@ -559,7 +559,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             }
         }
         for j in 0..globals.len() {
-            let global = (*globals)[j];
+            let global = (*globals)[j].name;
             if strcmp(global, name) == 0 {
                 continue 'skip_function_or_global
             }
@@ -645,11 +645,19 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char], assembler: *mut Assembler) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global], assembler: *mut Assembler) {
     // TODO: if we generate these last, they don't have to be in the .rom file
     for i in 0..globals.len() {
-        link_label(assembler, get_or_create_label_by_name(assembler, (*globals)[i]), (*output).count);
-        write_short(output, 0);
+        let global = (*globals)[i];
+        if global.is_vec {
+            missingf!(global.name_loc, c!("Global vectors are not supported yet\n"));
+        }
+        if global.values.count == 1 && matches!(*global.values.items, ImmediateValue::Literal(0)) {
+            link_label(assembler, get_or_create_label_by_name(assembler, global.name), (*output).count);
+            write_short(output, 0);
+        } else {
+            missingf!(global.name_loc, c!("Initilizing globals is not supported yet\n"));
+        }
     }
 }
 

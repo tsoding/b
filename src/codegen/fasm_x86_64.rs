@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -261,7 +261,7 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], 
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char]) {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global]) {
     'skip: for i in 0..extrns.len() {
         let name = (*extrns)[i];
 
@@ -273,7 +273,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
         }
 
         for j in 0..globals.len() {
-            let global = (*globals)[j];
+            let global = (*globals)[j].name;
             if strcmp(global, name) == 0 {
                 continue 'skip
             }
@@ -283,11 +283,35 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     for i in 0..globals.len() {
-        let name = (*globals)[i];
-        sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
-        sb_appendf(output, c!("_%s: rq 1\n"), name);
+        let global = (*globals)[i];
+        sb_appendf(output, c!("public _%s as '%s'\n"), global.name, global.name);
+        sb_appendf(output, c!("_%s: "), global.name);
+
+        if global.is_vec {
+            sb_appendf(output, c!("dq $+8\n"));
+        }
+
+        if global.values.count > 0 {
+            sb_appendf(output, c!("dq "), global.name);
+            for j in 0..global.values.count {
+                if j > 0 {
+                    sb_appendf(output, c!(","));
+                }
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => sb_appendf(output, c!("0x%X"), lit),
+                    ImmediateValue::Name(name) => sb_appendf(output, c!("_%s"), name),
+                    ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("dat+%zu"), offset),
+                };
+            }
+        }
+
+        if global.values.count < global.minimum_size {
+            sb_appendf(output, c!("\nrq %zu"), global.minimum_size - global.values.count);
+        }
+
+        sb_appendf(output, c!("\n"));
     }
 }
 

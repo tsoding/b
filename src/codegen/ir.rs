@@ -1,6 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
@@ -119,11 +119,27 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     sb_appendf(output, c!("\n"));
     sb_appendf(output, c!("-- Global Variables --\n\n"));
     for i in 0..globals.len() {
-        sb_appendf(output, c!("    %s\n"), (*globals)[i]);
+        let global = (*globals)[i];
+        sb_appendf(output, c!("%s"), global.name);
+        if global.is_vec {
+            sb_appendf(output, c!("[%zu]"), global.minimum_size);
+        }
+        sb_appendf(output, c!(": "));
+        for j in 0..global.values.count {
+            if j > 0 {
+                sb_appendf(output, c!(", "));
+            }
+            match *global.values.items.add(j) {
+                ImmediateValue::Literal(lit) => sb_appendf(output, c!("%zu"), lit),
+                ImmediateValue::Name(name) => sb_appendf(output, c!("%s"), name),
+                ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
+            };
+        }
+        sb_appendf(output, c!("\n"));
     }
 }
 

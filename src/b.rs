@@ -313,6 +313,24 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
     (*t).count
 }
 
+
+pub unsafe fn compile_string(l: *mut Lexer, c: *mut Compiler) -> usize {
+     // TODO: communicate this assumption to the caller of the function
+    assert!((*l).token == Token::String);
+
+    let offset = (*c).data.count;
+    let string_len = strlen((*l).string);
+    da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
+    // TODO: Strings in B are not NULL-terminated.
+    // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
+    // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
+    // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
+    // libc. While the language is still in development we gonna terminate it with 0. We will make it
+    // "spec complaint" later.
+    da_append(&mut (*c).data, 0); // NULL-terminator
+    offset
+}
+
 pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
     lexer::get_token(l)?;
     let arg = match (*l).token {
@@ -404,16 +422,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             }
         }
         Token::String => {
-            let offset = (*c).data.count;
-            let string_len = strlen((*l).string);
-            da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
-            // TODO: Strings in B are not NULL-terminated.
-            // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
-            // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
-            // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
-            // libc. While the language is still in development we gonna terminate it with 0. We will make it
-            // "spec complaint" later.
-            da_append(&mut (*c).data, 0); // NULL-terminator
+            let offset = compile_string(l, c);
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
@@ -838,6 +847,22 @@ pub struct Func {
 }
 
 #[derive(Clone, Copy)]
+pub struct Global {
+    name: *const c_char,
+    name_loc: Loc,
+    values: Array<ImmediateValue>,
+    is_vec: bool,
+    minimum_size: usize,
+}
+
+#[derive(Clone, Copy)]
+pub enum ImmediateValue {
+    Name(*const c_char),
+    Literal(u64),
+    DataOffset(usize),
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
@@ -847,7 +872,7 @@ pub struct Compiler {
     pub func_labels_used: Array<Label>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
-    pub globals: Array<*const c_char>,
+    pub globals: Array<Global>,
     pub arena_names: Arena,
     pub arena_labels: Arena,
     pub target: Target,
@@ -917,9 +942,65 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
-            name_declare_if_not_exists(&mut (*c).globals, name);
             declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
-            get_and_expect_clex(l, Token::SemiColon)?;
+
+            let mut global = Global {
+                name,
+                name_loc,
+                values: zeroed(),
+                is_vec: false,
+                minimum_size: 0,
+            };
+
+            // TODO: This code is ugly
+            // couldn't find a better way to write it while keeping accurate error messages
+            lexer::get_token(l);
+            expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+
+            if (*l).token == Token::OBracket {
+                global.is_vec = true;
+                lexer::get_token(l);
+                expect_clexes(l, &[Token::IntLit, Token::CBracket])?;
+                if (*l).token == Token::IntLit {
+                    global.minimum_size = (*l).int_number as usize;
+                    get_and_expect_clex(l, Token::CBracket)?;
+                }
+                lexer::get_token(l);
+                expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+            }
+
+            while (*l).token != Token::SemiColon {
+                let value = match (*l).token {
+                    Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
+                    Token::String => ImmediateValue::DataOffset(compile_string(l, c)),
+                    Token::ID => {
+                        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                        let scope = da_last_mut(&mut (*c).vars);
+                        let var = find_var_near(scope, name);
+                        if var.is_null() {
+                            diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
+                            return None;
+                        }
+                        ImmediateValue::Name(name)
+                    }
+                    _ => unreachable!()
+                };
+                da_append(&mut global.values, value);
+
+                lexer::get_token(l);
+                expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
+                if (*l).token == Token::Comma {
+                    lexer::get_token(l);
+                    expect_clexes(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                } else {
+                    break;
+                }
+            }
+
+            if !global.is_vec && global.values.count == 0 {
+                da_append(&mut global.values, ImmediateValue::Literal(0));
+            }
+            da_append(&mut (*c).globals, global)
         }
     }
     scope_pop(&mut (*c).vars);          // end global scope
