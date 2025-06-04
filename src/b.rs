@@ -1024,7 +1024,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     let mut stats: Stats = zeroed();
-    let total_start = Instant::now()?;
+    let Some(total_start) = Instant::now() else {
+        // TODO: Don't die, especially if stats not requested.
+        fprintf(stderr(), c!("ERROR: can't get the time\n"));
+        return None;
+    };
 
     let mut c: Compiler = zeroed();
     c.target = target;
