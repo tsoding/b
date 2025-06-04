@@ -72,6 +72,7 @@ fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
                 }
             } else {
                 fputc('%', fd);
+                arg += 2; /* word size */
             }
             arg -= 2; /* word size */
         } else {
