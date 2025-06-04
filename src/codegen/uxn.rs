@@ -231,8 +231,43 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             }
             Op::Binop {binop: Binop::Div, index, lhs, rhs} => {
                 load_arg(lhs, output, assembler);
+                // extract sign A, stash it in the return stack
+                write_op(output, UxnOp::DUP2);
+                write_lit(output, 0x0f);
+                write_op(output, UxnOp::SFT2);
+                write_op(output, UxnOp::STH2k);
+                // get abs value of A
+                write_lit2(output, 0xffff);
+                write_op(output, UxnOp::MUL2);
+                write_op(output, UxnOp::EOR2);
+                write_op(output, UxnOp::STH2kr);
+                write_op(output, UxnOp::ADD2);
+
                 load_arg(rhs, output, assembler);
+                // extract sign B, stash it in the return stack
+                write_op(output, UxnOp::DUP2);
+                write_lit(output, 0x0f);
+                write_op(output, UxnOp::SFT2);
+                write_op(output, UxnOp::STH2k);
+                // get abs value of B
+                write_lit2(output, 0xffff);
+                write_op(output, UxnOp::MUL2);
+                write_op(output, UxnOp::EOR2);
+                write_op(output, UxnOp::STH2kr);
+                write_op(output, UxnOp::ADD2);
+
+                // do unsigned division
                 write_op(output, UxnOp::DIV2);
+
+                // write sign back in
+                write_op(output, UxnOp::EOR2r);
+                write_op(output, UxnOp::STH2kr);
+                write_lit2(output, 0xffff);
+                write_op(output, UxnOp::MUL2);
+                write_op(output, UxnOp::EOR2);
+                write_op(output, UxnOp::STH2r);
+                write_op(output, UxnOp::ADD2);
+
                 store_auto(output, index);
             }
             Op::Binop {binop: Binop::LessEqual, index, lhs, rhs} => {
