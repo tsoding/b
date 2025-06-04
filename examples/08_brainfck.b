@@ -22,23 +22,23 @@
 STDIN;
 STDOUT;
 BUF_LEN;
+MEMORY_LEN;
 
 main() {
-  extrn malloc, memset, read, putchar, dprintf, getchar, atoi;
+  extrn malloc, memset, read, dprintf, getchar, atoi;
   auto memory, cursor, len, input_buf, stop, addr_buf, W;
 
-  STDIN = 0; STDOUT = 1; BUF_LEN = 512;
+  MEMORY_LEN = 30000; STDIN = 0; STDOUT = 1; BUF_LEN = 512;
 
   W      = &0[1];
-  len    = 30000*W;
   cursor = 0;
   stop   = 0;
 
-  memory    = malloc(len);
+  memory    = malloc(MEMORY_LEN*W);
   addr_buf  = malloc(5);
   input_buf = malloc(BUF_LEN);
 
-  memset(memory, 0, len);
+  memset(memory, 0, MEMORY_LEN*W);
   memset(addr_buf, 0, 5);
   memset(input_buf, 0, BUF_LEN);
 
@@ -61,7 +61,7 @@ main() {
       cmd = *(input_buf + input_cursor) & 0xFF;
 
       if ((!fullfilled) & (cmd == '>')) {
-        if (cursor < BUF_LEN) cursor += 1;
+        if (cursor < MEMORY_LEN) cursor += 1;
         fullfilled = 1;
       }
       if ((!fullfilled) & (cmd == '<')) {
@@ -148,7 +148,7 @@ main() {
       }
       if ((!fullfilled) & (cmd == '#')) {
         cursor = 0;
-        memset(memory, 0, len);
+        memset(memory, 0, MEMORY_LEN*W);
       }
 
       if ((!fullfilled) & (cmd == '$') & (cmdslen == 1)) {
