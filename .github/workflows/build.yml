@@ -1,0 +1,43 @@
+name: 🛠️ Build
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [ main ]
+
+jobs:
+  build_artifacts:
+    name: Build B Compiler Artifacts (${{ matrix.target_platform }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - target_platform: linux-x86_64
+            os: ubuntu-latest
+            compiler_target_make: $(BUILD)/b
+            setup_deps: |
+              sudo apt-get update
+              sudo apt-get install -y clang make
+          - target_platform: windows-x86_64
+            os: ubuntu-latest
+            compiler_target_make: $(BUILD)/b.exe
+            setup_deps: |
+              sudo apt-get update
+              sudo apt-get install -y make mingw-w64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install build dependencies
+        run: ${{ matrix.setup_deps }}
+
+      - name: Build B compiler for ${{ matrix.target_platform }}
+        run: make ${{ matrix.compiler_target_make }}
+
+      - name: Verify artifact exists
+        run: test -f ${{ matrix.compiler_target_make }} && echo "Artifact ${{ matrix.compiler_target_make }} built successfully."
