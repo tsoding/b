@@ -58,4 +58,7 @@ jobs:
           cd ..
           uxncli --version
       - name: Run Uxn tests
+        env:
+          SDL_AUDIODRIVER: dummy
+          SDL_VIDEODRIVER: dummy
         run: make test-uxn
