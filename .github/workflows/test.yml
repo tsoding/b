@@ -1,0 +1,61 @@
+name: Test
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    branches: [ main ]
+
+jobs:
+  test_linux:
+    name: Test on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install Clang and fasm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang make fasm
+      - name: Run Linux tests
+        run: make test
+
+  test_mingw_on_linux:
+    name: Test MinGW (cross-compiled) on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install Clang, fasm, and Wine
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang make fasm wine64
+      - name: Run MinGW tests
+        run: make test-mingw32
+
+  test_uxn_on_linux:
+    name: Test Uxn on Linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Install Clang and uxncli
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang make libsdl2-dev git
+          git clone https://git.sr.ht/~rabbits/uxn --depth 1
+          cd uxn
+          ./build.sh
+          sudo cp bin/uxncli /usr/local/bin/
+          cd ..
+          uxncli --version
+      - name: Run Uxn tests
+        run: make test-uxn
