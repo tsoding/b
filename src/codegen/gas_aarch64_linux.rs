@@ -288,17 +288,31 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 
 pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     if globals.len() > 0 {
-        sb_appendf(output, c!(".bss\n"));
+        // TODO: consider splitting globals into bss and data sections,
+        // depending on whether it's zero
+        sb_appendf(output, c!(".data\n"));
         for i in 0..globals.len() {
             let global = (*globals)[i];
+            sb_appendf(output, c!(".global %s\n"), global.name);
+            sb_appendf(output, c!("%s:\n"), global.name);
             if global.is_vec {
-                missingf!(global.name_loc, c!("Global vectors are not supported yet\n"));
+                sb_appendf(output, c!("    .quad .+8\n"), global.name);
             }
-            if global.values.count == 1 && matches!(*global.values.items, ImmediateValue::Literal(0)) {
-                sb_appendf(output, c!(".global %s\n"), global.name);
-                sb_appendf(output, c!("%s: .zero 8\n"), global.name);
-            } else {
-                missingf!(global.name_loc, c!("Initilizing globals is not supported yet\n"));
+            for j in 0..global.values.count {
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => {
+                        sb_appendf(output, c!("    .quad %zu\n"), lit);
+                    }
+                    ImmediateValue::Name(name) => {
+                        sb_appendf(output, c!("    .quad %s\n"), name);
+                    }
+                    ImmediateValue::DataOffset(offset) => {
+                        sb_appendf(output, c!("    .quad .dat+%zu\n"), offset);
+                    }
+                }
+            }
+            if global.values.count < global.minimum_size {
+                sb_appendf(output, c!("    .zero %zu\n"), 8*(global.minimum_size - global.values.count));
             }
         }
     }
