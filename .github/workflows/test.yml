@@ -34,6 +34,6 @@ jobs:
       - name: Install Clang, fasm, and Wine
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang make fasm wine64
+          sudo apt-get install -y clang make fasm mingw-w64 wine64
       - name: Run MinGW tests
         run: make test-mingw32
