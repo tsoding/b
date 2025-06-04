@@ -10,6 +10,7 @@ RSS=\
 	$(SRC)/flag.rs \
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
+	$(SRC)/time.rs \
 	$(SRC)/codegen/fasm_x86_64.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
 	$(SRC)/codegen/uxn.rs \

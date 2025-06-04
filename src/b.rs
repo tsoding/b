@@ -13,39 +13,7 @@ pub mod crust;
 pub mod arena;
 pub mod codegen;
 pub mod lexer;
-
-pub mod time {
-    use core::mem::zeroed;
-    use crate::crust::libc::time::{clock_gettime, CLOCK_MONOTONIC};
-
-    #[derive(Clone, Copy)]
-    pub struct Instant {
-        pub secs: i64,
-        pub nanos: i64,
-    }
-
-    impl Instant {
-        pub unsafe fn now() -> Option<Instant> {
-            let mut time = zeroed();
-            if clock_gettime(CLOCK_MONOTONIC, &raw mut time) != 0 {
-                return None
-            }
-            let instant = Instant {
-                secs:  time.tv_sec as i64,
-                nanos: time.tv_nsec as i64
-            };
-            Some(instant)
-        }
-
-        pub unsafe fn diff_nanos(this: Instant, that: Instant) -> i64 {
-            1_000_000_000 * (this.secs - that.secs) + this.nanos - that.nanos
-        }
-    }
-
-    pub unsafe fn elapsed_millis(then: Instant) -> Option<f64> {
-        Some(Instant::diff_nanos(Instant::now()?, then) as f64 / 1e6)
-    }
-}
+pub mod time;
 
 #[derive(Clone, Copy)]
 pub struct Stats {
