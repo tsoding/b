@@ -354,9 +354,6 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             Some((Arg::AutoVar(index), false))
         }
         Token::And => {
-            // TODO: decipher sections 3.0 and 4.2 of the B user manual
-            // not sure if this implementation is correct
-
             let loc = (*l).loc;
             let (arg, is_lvalue) = compile_primary_expression(l, c)?;
 
