@@ -15,7 +15,7 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - name: Install Clang and fasm
+      - name: Install Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y clang make fasm
