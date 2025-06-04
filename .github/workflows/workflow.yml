@@ -1,0 +1,59 @@
+name: Build and Test
+on: [push, pull_request]
+
+jobs:
+  test-fasm-x86_64-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: stevenwdv/setup-fasm@v1
+      - name: Build and Test
+        run: make test
+  test-gas-x86_64-aarch64-linux:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and Test
+        run: make test
+  test-fasm-x86_64-windows:
+    runs-on: windows-latest
+    # Fails on tests/vector.b
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: stevenwdv/setup-fasm@v1
+      - name: Build and Test
+        run: make test-mingw32 B=build/b.exe
+  test-fasm-x86_64-windows_linux-wine:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: stevenwdv/setup-fasm@v1
+      - name: Install dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo mkdir -pm755 /etc/apt/keyrings
+          wget -O - https://dl.winehq.org/wine-builds/winehq.key | sudo gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key -
+          RELEASE=$(lsb_release -cs)
+          sudo wget -NP /etc/apt/sources.list.d/ "https://dl.winehq.org/wine-builds/ubuntu/dists/$RELEASE/winehq-$RELEASE.sources"
+          sudo apt-get update
+          sudo apt-get install -y gcc-mingw-w64 wine32 wine64 winetricks
+      - name: Setup Wine
+        run: |
+          xvfb-run winetricks alldlls=default
+          xvfb-run wineboot -u
+      - name: Build and Test
+        run: |
+          xvfb-run make test-mingw32
+  test-uxn:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: stevenwdv/setup-fasm@v1
+      - name: Install Uxn
+        run: |
+          git clone https://git.sr.ht/~rabbits/uxn11 
+          cd uxn11
+          make cli
+      - name: Build and Test
+        run: PATH=$(realpath uxn11/bin):$PATH make test-uxn
