@@ -559,21 +559,11 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
         lexer::get_token(l)?;
     }
 
-    (*l).parse_point = saved_point;
-    Some((lhs, lvalue))
-}
-
-pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
-    let (arg, is_lvalue) = compile_assign_expression(l, c, 0)?;
-
-    let saved_point = (*l).parse_point;
-    lexer::get_token(l)?;
-
     if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
         let addr_condition = (*c).func_body.count;
-        push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
+        push_opcode(Op::JmpIfNot{addr: 0, arg: lhs}, (*l).loc, c);
 
         let (if_true, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_true}, (*l).loc, c);
@@ -588,14 +578,18 @@ pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
 
         let addr_after_false = (*c).func_body.count;
-        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg};
+        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg: lhs};
         (*(*c).func_body.items.add(addr_skips_true)).opcode = Op::Jmp      {addr: addr_after_false};
 
         Some((Arg::AutoVar(result), false))
     } else {
         (*l).parse_point = saved_point;
-        Some((arg, is_lvalue))
+        Some((lhs, lvalue))
     }
+}
+
+pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
+    compile_assign_expression(l, c, 0)
 }
 
 pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
