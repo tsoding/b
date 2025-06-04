@@ -1059,7 +1059,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     let mut stats: Stats = zeroed();
-    let total_start = Instant::now()?;
+    let total_start = Instant::now().expect("clock_gettime failed\n");
 
     let mut c: Compiler = zeroed();
     c.target = target;
