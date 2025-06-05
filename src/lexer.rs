@@ -91,6 +91,7 @@ pub enum Token {
     Switch,
     Goto,
     Return,
+    Asm,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
@@ -154,6 +155,7 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::Switch     => c!("keyword `switch`"),
         Token::Goto       => c!("keyword `goto`"),
         Token::Return     => c!("keyword `return`"),
+        Token::Asm        => c!("keyword `__asm__`"),
     }
 }
 
@@ -215,6 +217,7 @@ const KEYWORDS: *const [(*const c_char, Token)] = &[
     (c!("switch"), Token::Switch),
     (c!("goto"), Token::Goto),
     (c!("return"), Token::Return),
+    (c!("__asm__"), Token::Asm),
 ];
 
 #[derive(Clone, Copy)]
