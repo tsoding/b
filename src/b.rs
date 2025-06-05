@@ -838,8 +838,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let test_result = allocate_auto_var(&mut (*c).auto_vars_ator);
             for i in cases_start..(*c).switch_cases.count {
                 let case = *(*c).switch_cases.items.add(i);
-                push_opcode(Op::AutoAssign {index: test_result, arg: cond}, (*l).loc, c);
-                compile_binop(Arg::AutoVar(test_result), Arg::Literal(case.value), Binop::NotEqual, case.loc, c);
+                push_opcode(Op::Binop {binop: Binop::NotEqual, index: test_result, lhs: cond, rhs: Arg::Literal(case.value)}, case.loc, c);
                 push_opcode(Op::JmpIfNot {addr: case.addr, arg: Arg::AutoVar(test_result)}, (*l).loc, c);
             }
 
