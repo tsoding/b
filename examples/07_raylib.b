@@ -20,19 +20,20 @@ main() {
           SetTargetFPS, GetScreenWidth, GetScreenHeight,
           IsKeyPressed;
 
-    auto word;
-    word = 8;
+    auto W;
+    W = &0[1];
 
     auto c, cs, cn;
-    c              = 0;               // Current color
-    cn             = 6;               // Amount of colors
-    cs             = malloc(word*cn); // Color Table
-    *cs            = 0xFF1818FF;      // B originally does not support hex literals actually.
-    *(cs + word)   = 0xFF18FF18;
-    *(cs + word*2) = 0xFFFF1818;
-    *(cs + word*3) = 0xFFFFFF18;
-    *(cs + word*4) = 0xFFFF18FF;
-    *(cs + word*5) = 0xFF18FFFF;
+    c       = 0;            // Current color
+    cn      = 6;            // Amount of colors
+    cs      = malloc(W*cn); // Color Table
+    cs[c++] = 0xFF1818FF;   // B originally does not support hex literals actually.
+    cs[c++] = 0xFF18FF18;
+    cs[c++] = 0xFFFFFF18;
+    cs[c++] = 0xFFFF1818;
+    cs[c++] = 0xFF18FFFF;
+    cs[c++] = 0xFFFF18FF;
+    c       = 0;
 
     auto x, y, dx, dy, sx, sy;
     sx = sy = 100;
@@ -58,7 +59,7 @@ main() {
 
         BeginDrawing();
         ClearBackground(0xFF181818);
-        DrawRectangle(x, y, sx, sy, *(cs + word*c));
+        DrawRectangle(x, y, sx, sy, cs[c]);
         EndDrawing();
     }
 }

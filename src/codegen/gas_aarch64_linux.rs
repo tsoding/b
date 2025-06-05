@@ -43,18 +43,18 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
         }
         Arg::Deref(index) => {
-            sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
+            sb_appendf(output, c!("    ldr %s, [x29, -%zu]\n"), reg, index*8);
             sb_appendf(output, c!("    ldr %s, [%s]\n"), reg, reg);
         },
         Arg::RefAutoVar(index) => {
-            sb_appendf(output, c!("    add %s, sp, %zu\n"), reg, (index + 1)*8);
+            sb_appendf(output, c!("    sub %s, x29, %zu\n"), reg, index*8);
         }
         Arg::RefExternal(name) => {
             sb_appendf(output, c!("    adrp %s, %s\n"), reg, name);
             sb_appendf(output, c!("    add  %s, %s, :lo12:%s\n"), reg, reg, name);
         }
         Arg::AutoVar(index) => {
-            sb_appendf(output, c!("    ldr %s, [sp, %zu]\n"), reg, (index + 1)*8);
+            sb_appendf(output, c!("    ldr %s, [x29, -%zu]\n"), reg, index*8);
         }
         Arg::Literal(value) => {
             load_literal_to_reg(output, reg, value);
@@ -72,21 +72,23 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 }
 
 pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
-    let stack_size = align_bytes((2 + auto_vars_count)*8, 16);
+    let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
-    sb_appendf(output, c!("    stp x29, x30, [sp, -%zu]!\n"), stack_size);
+    //sb_appendf(output, c!("    stp x29, x30, [sp, -%zu]!\n"), stack_size);
+    sb_appendf(output, c!("    stp x29, x30, [sp, -2*8]!\n"));
     sb_appendf(output, c!("    mov x29, sp\n"), name);
+    sb_appendf(output, c!("    sub sp, sp, %zu\n"), stack_size);
     assert!(auto_vars_count >= params_count);
-    // TODO: add the rest of the registers.
-    // The first 8 args go to x0-x7
+    // TODO: add support for the rest of the parameters.
     const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
     if params_count > REGISTERS.len() {
         missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
     }
     for i in 0..params_count {
         let reg = (*REGISTERS)[i];
-        sb_appendf(output, c!("    str %s, [sp, %zu]\n"), reg, (2 + i)*8);
+        let index = i + 1;
+        sb_appendf(output, c!("    str %s, [x29, -%zu]\n"), reg, index*8);
     }
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
@@ -96,7 +98,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("x0"), output, op.loc);
                 }
-                sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
+                sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
+                sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
                 sb_appendf(output, c!("    ret\n"));
             }
             Op::Negate {result, arg} => {
@@ -106,13 +109,13 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                                                            // as an immediate value without moving
                                                            // it to a separate register?
                 sb_appendf(output, c!("    mneg x2, x0, x1\n"));
-                sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (result + 1)*8);
+                sb_appendf(output, c!("    str x2, [x29, -%zu]\n"), result*8);
             }
             Op::UnaryNot {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
                 sb_appendf(output, c!("    cset x0, eq\n"));
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
             },
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
@@ -120,37 +123,37 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    orr x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::BitAnd => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    and x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::BitShl => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    lsl x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::BitShr => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    lsr x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::Plus => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    add x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     }
                     Binop::Minus => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    sub x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::Mod => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
@@ -158,61 +161,61 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         // https://stackoverflow.com/questions/35351470/obtaining-remainder-using-single-aarch64-instruction
                         sb_appendf(output, c!("    sdiv x2, x0, x1\n"));
                         sb_appendf(output, c!("    msub x2, x2, x1, x0\n"));
-                        sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x2, [x29, -%zu]\n"), index*8);
                     }
                     Binop::Div => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    sdiv x2, x0, x1\n"));
-                        sb_appendf(output, c!("    str x2, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x2, [x29, -%zu]\n"), index*8);
                     }
                     Binop::Mult => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    mul x0, x0, x1\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::Less => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    cmp x0, x1\n"));
                         sb_appendf(output, c!("    cset x0, lt\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     }
                     Binop::Greater => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    cmp x0, x1\n"));
                         sb_appendf(output, c!("    cset x0, gt\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     }
                     Binop::Equal => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    cmp x0, x1\n"));
                         sb_appendf(output, c!("    cset x0, eq\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     }
                     Binop::NotEqual => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    cmp x0, x1\n"));
                         sb_appendf(output, c!("    cset x0, ne\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     }
                     Binop::GreaterEqual => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    cmp x0, x1\n"));
                         sb_appendf(output, c!("    cset x0, ge\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                     Binop::LessEqual => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc);
                         sb_appendf(output, c!("    cmp x0, x1\n"));
                         sb_appendf(output, c!("    cset x0, le\n"));
-                        sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                 }
             }
@@ -224,10 +227,10 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             }
             Op::AutoAssign {index, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (index + 1)*8);
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
             },
             Op::Store {index, arg} => {
-                sb_appendf(output, c!("    ldr x0, [sp, %zu]\n"), (index + 1)*8);
+                sb_appendf(output, c!("    ldr x0, [x29, -%zu]\n"), index*8);
                 load_arg_to_reg(arg, c!("x1"), output, op.loc);
                 sb_appendf(output, c!("    str x1, [x0]\n"));
             },
@@ -247,8 +250,15 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     },
                 };
 
-                sb_appendf(output, c!("    str x0, [sp, %zu]\n"), (result + 1)*8);
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
             },
+            Op::Asm {args} => {
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), arg);
+                }
+            }
+
             Op::Jmp {addr} => {
                 sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
             },
@@ -261,7 +271,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     }
     sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());
     sb_appendf(output, c!("    mov x0, 0\n"));
-    sb_appendf(output, c!("    ldp x29, x30, [sp], %zu\n"), stack_size);
+    sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
+    sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
     sb_appendf(output, c!("    ret\n"));
 }
 

@@ -90,6 +90,15 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 sb_appendf(output, c!(")\n"));
             }
+            Op::Asm {args} => {
+                sb_appendf(output, c!("   __asm__(\n"));
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), arg);
+                }
+                sb_appendf(output, c!(")\n"));
+            }
+
             Op::JmpIfNot{addr, arg} => {
                 sb_appendf(output, c!("    jmp_if_not %zu:, "), addr);
                 dump_arg(output, arg);

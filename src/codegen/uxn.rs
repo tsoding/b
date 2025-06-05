@@ -105,9 +105,17 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     // set the top of the stack
     write_lit2(output, 0xffff);
     write_lit_stz2(output, SP);
-    // call main
+    // call main or _start, _start having a priority
+    let mut main_proc = c!("main");
+    for i in 0..(*c).funcs.count {
+        let name = (*(*c).funcs.items.add(i)).name;
+        if strcmp(name, c!("_start")) == 0 {
+            main_proc = c!("_start");
+            break;
+        }
+    }
     write_op(output, UxnOp::JSI);
-    write_label_rel(output, get_or_create_label_by_name(&mut assembler, c!("main")), &mut assembler);
+    write_label_rel(output, get_or_create_label_by_name(&mut assembler, main_proc), &mut assembler);
     // break out of the vector we were returned from
     // also put this as the return address for the next vector which might be called
     let vector_return_label = create_label(&mut assembler);
@@ -117,7 +125,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     write_op(output, UxnOp::BRK);
 
     generate_funcs(output, da_slice((*c).funcs), &mut assembler);
-    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), &mut assembler);
+    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut assembler);
     generate_data_section(output, da_slice((*c).data), &mut assembler);
     generate_globals(output, da_slice((*c).globals), &mut assembler);
 
@@ -365,6 +373,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_lit_ldz2(output, FIRST_ARG);
                 store_auto(output, result);
             }
+            Op::Asm {..} => missingf!(op.loc, c!("Inline assembly\n")),
             Op::Jmp {addr} => {
                 write_op(output, UxnOp::JMI);
                 write_label_rel(output, *op_labels.items.add(addr), assembler);
@@ -546,14 +555,20 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
     write_op(output, UxnOp::STA2);
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], assembler: *mut Assembler) {
-    'skip_function: for i in 0..extrns.len() {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char], assembler: *mut Assembler) {
+    'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
             let func = (*funcs)[j];
             if strcmp(func.name, name) == 0 {
-                continue 'skip_function
+                continue 'skip_function_or_global
+            }
+        }
+        for j in 0..globals.len() {
+            let global = (*globals)[j];
+            if strcmp(global, name) == 0 {
+                continue 'skip_function_or_global
             }
         }
         // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it

@@ -243,6 +243,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
+            Op::Asm {args} => {
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), arg);
+                }
+            }
             Op::JmpIfNot{addr, arg} => {
                 load_arg_to_reg(arg, c!("rax"), output);
                 sb_appendf(output, c!("    test rax, rax\n"));
@@ -299,7 +305,6 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*co
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
-        sb_appendf(output, c!("section \".data\"\n"));
         sb_appendf(output, c!("dat: db "));
         for i in 0..data.len() {
             if i > 0 {
@@ -318,6 +323,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     };
     generate_funcs(output, da_slice((*c).funcs), os);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
+    sb_appendf(output, c!("section \".data\"\n"));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
 }

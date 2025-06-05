@@ -32,10 +32,12 @@ LINUX_TESTS=\
 	$(BUILD)/tests/recursion \
 	$(BUILD)/tests/ref \
 	$(BUILD)/tests/return \
+	$(BUILD)/tests/stack_alloc \
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector \
+	$(BUILD)/tests/multiple-postfix \
 	$(BUILD)/tests/rvalue_call
 
 MINGW32_TESTS=\
@@ -54,11 +56,37 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/recursion.exe \
 	$(BUILD)/tests/ref.exe \
 	$(BUILD)/tests/return.exe \
+	$(BUILD)/tests/stack_alloc.exe \
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
+	$(BUILD)/tests/multiple-postfix.exe \
 	$(BUILD)/tests/rvalue_call.exe
+
+UXN_TESTS=\
+	$(BUILD)/tests/args6.rom \
+	$(BUILD)/tests/compare.rom \
+	$(BUILD)/tests/deref_assign.rom \
+	$(BUILD)/tests/divmod.rom \
+	$(BUILD)/tests/e.rom \
+	$(BUILD)/tests/forward-declare.rom \
+	$(BUILD)/tests/goto.rom \
+	$(BUILD)/tests/hello.rom \
+	$(BUILD)/tests/inc_dec.rom \
+	$(BUILD)/tests/lexer.rom \
+	$(BUILD)/tests/literals.rom \
+	$(BUILD)/tests/minus_2.rom \
+	$(BUILD)/tests/recursion.rom \
+	$(BUILD)/tests/ref.rom \
+	$(BUILD)/tests/return.rom \
+	$(BUILD)/tests/stack_alloc.rom \
+	$(BUILD)/tests/ternary-side-effect.rom \
+	$(BUILD)/tests/ternary.rom \
+	$(BUILD)/tests/unary_priority.rom \
+	$(BUILD)/tests/vector.rom \
+	$(BUILD)/tests/multiple-postfix.rom \
+	$(BUILD)/tests/rvalue_call.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
@@ -102,6 +130,12 @@ $(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
 
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests
+
+test-uxn: $(UXN_TESTS)
+
+$(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t uxn -o $@ $< ./std/test.b ./std/uxn.b
+	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
 FORCE:
