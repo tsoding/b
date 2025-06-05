@@ -171,6 +171,11 @@ pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: 
 pub enum Arg {
     AutoVar(usize),
     Deref(usize),
+    /// Reference to the autovar with the specified index
+    ///
+    /// The autovars are currently expected to be layed out in memory from right to left,
+    /// which is not particularly historically accurate.
+    /// See TODO(2025-06-05 17:45:36)
     RefAutoVar(usize),
     RefExternal(*const c_char),
     External(*const c_char),
