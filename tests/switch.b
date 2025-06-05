@@ -1,5 +1,6 @@
 test(a, b) {
   switch a {
+    case 35:
     case 69:
       return (690);
 
@@ -20,6 +21,7 @@ test(a, b) {
 
 main() {
   extrn printf;
+  printf("(35,69)    => %d\n", test(35,69)    );
   printf("(69,69)    => %d\n", test(69,69)    );
   printf("(420,420)  => %d\n", test(420,420)  );
   printf("(420,1337) => %d\n", test(420,1337) );
