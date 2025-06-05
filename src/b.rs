@@ -859,7 +859,6 @@ pub struct Compiler {
 }
 
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
-    scope_push(&mut (*c).vars);          // begin global scope
     'def: loop {
         lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
@@ -872,7 +871,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
         if (*l).token == Token::OParen { // Function definition
-            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name});
+            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
@@ -927,7 +926,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_token(l, Token::SemiColon)?;
         }
     }
-    scope_pop(&mut (*c).vars);          // end global scope
 
     Some(())
 }
@@ -1016,6 +1014,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut c: Compiler = zeroed();
     c.target = target;
     let mut input: String_Builder = zeroed();
+
+    scope_push(&mut c.vars);          // begin global scope
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
 
@@ -1026,6 +1026,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
         compile_program(&mut l, &mut c)?;
     }
+    scope_pop(&mut c.vars);          // end global scope
 
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
