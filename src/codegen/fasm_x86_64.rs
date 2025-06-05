@@ -258,7 +258,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         }
     }
     sb_appendf(output, c!(".op_%zu:\n"), body.len());
-    sb_appendf(output, c!("    mov rax, 0\n"));
+    if strcmp(name, c!("main")) == 0 {
+        sb_appendf(output, c!("    mov rax, 0\n"));
+    }
     sb_appendf(output, c!("    mov rsp, rbp\n"));
     sb_appendf(output, c!("    pop rbp\n"));
     sb_appendf(output, c!("    ret\n"));
