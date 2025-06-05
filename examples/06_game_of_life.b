@@ -124,6 +124,7 @@ main() {
 		print();
 		step();
 		printf("%c[%dA", 27, height+2);
+        // TODO: does not work on Windows
 		usleep(150000);
 	}
 }
