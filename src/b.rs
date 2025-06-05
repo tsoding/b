@@ -795,7 +795,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             let (cond, _) = compile_expression(l, c)?;
             let test_result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            let mut jmp_addr = 0;
+            let mut jmp_addr = None;
 
             get_and_expect_clex(l, Token::OCurly)?;
             lexer::get_token(l);
@@ -809,7 +809,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 lexer::get_token(l);
                 expect_clexes(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
 
-                if jmp_addr != 0 {
+                if let Some(jmp_addr) = jmp_addr {
                     (*(*c).func_body.items.add(jmp_addr)).opcode = Op::JmpIfNot {
                         addr: (*c).func_body.count,
                         arg: Arg::AutoVar(test_result)
@@ -818,7 +818,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                 push_opcode(Op::AutoAssign {index: test_result, arg: cond}, loc, c);
                 compile_binop(Arg::AutoVar(test_result), Arg::Literal((*l).int_number), Binop::Equal, loc, c);
-                jmp_addr = (*c).func_body.count;
+                jmp_addr = Some((*c).func_body.count);
                 push_opcode(Op::JmpIfNot {addr: 0, arg: Arg::AutoVar(test_result)}, loc, c);
 
                 get_and_expect_clex(l, Token::Colon)?;
@@ -834,7 +834,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 }
             }
 
-            if jmp_addr != 0 {
+            if let Some(jmp_addr) = jmp_addr {
                 (*(*c).func_body.items.add(jmp_addr)).opcode = Op::JmpIfNot {
                     addr: (*c).func_body.count,
                     arg: Arg::AutoVar(test_result)
