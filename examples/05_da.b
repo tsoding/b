@@ -9,7 +9,7 @@ da_append(da, x) {
 
         da[ITEMS] = realloc(da[ITEMS], da[CAPACITY] * W);
     }
-    (da[ITEMS])[(da[COUNT])++] = x;
+    da[ITEMS][da[COUNT]++] = x;
 }
 
 main() {
