@@ -65,10 +65,7 @@ step() {
 			auto a, n, r;
 			n = count_neighbours(*board, x, y);
 			a = get(*board, x,y);
-			// TODO: the parentheses here are needed due to a bug in the compiler
-			// as it'd incorecctly parse the statement as `(r=a) ? (n==2 | n==3) : (n==3)`
-			// instead of `r = ( a ? (n==2 | n==3) : (n==3) )`
-			r = (a ? n == 2 | n == 3 : n==3);
+			r = a ? n == 2 | n == 3 : n==3;
 			set(*next, x, y, r);
 			x += 1;
 		}
@@ -95,7 +92,7 @@ main() {
 	board = &board1;
 	next = &board2;
 
-	
+
 	set(*board, 3, 2, 1);
 	set(*board, 4, 3, 1);
 	set(*board, 2, 4, 1);
