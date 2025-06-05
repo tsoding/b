@@ -1,3 +1,8 @@
+// TODO(2025-06-05 17:45:36): Ken Thompson, Users' Reference to B, 9.3
+// printf implementation implies that the autovars are layed out in the memory from left to right,
+// but our IR assumes right to left, due to how the stack works on the majority of modern platforms
+// Consider making this more historically accurate.
+
 variadic(a, b, c) {
     auto args, i;
     args = &c;
