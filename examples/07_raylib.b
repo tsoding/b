@@ -9,36 +9,87 @@
 // # Windows mingw32-w64
 // > b -t fasm-x86_64-windows raylib.b -L -L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -L -l:libraylib.a -L -lwinmm -L -lgdi32 -run
 
+W;
+
+OBJ_X; OBJ_Y; OBJ_DX; OBJ_DY; OBJ_C; SIZE_OF_OBJ;
+OBJS_COUNT;
+OBJS;
+
+COLORS_COUNT;
+COLORS;
+
+update_obj(obj) {
+    auto nx, ny;
+
+    extrn GetScreenWidth, GetScreenHeight;
+
+    nx = obj[OBJ_X] + obj[OBJ_DX];
+    if (nx < 0 | nx + 100 >= GetScreenWidth()) {
+        obj[OBJ_DX] = -obj[OBJ_DX];
+        obj[OBJ_C] += 1;
+        obj[OBJ_C] %= COLORS_COUNT;
+    } else {
+        obj[OBJ_X] = nx;
+    }
+
+    ny = obj[OBJ_Y] + obj[OBJ_DY];
+    if (ny < 0 | ny + 100 >= GetScreenHeight()) {
+        obj[OBJ_DY] = -obj[OBJ_DY];
+        obj[OBJ_C] += 1;
+        obj[OBJ_C] %= COLORS_COUNT;
+    } else {
+        obj[OBJ_Y] = ny;
+    }
+}
+
+draw_obj(obj) {
+    extrn DrawRectangle;
+    DrawRectangle(obj[OBJ_X], obj[OBJ_Y], 100, 100, COLORS[obj[OBJ_C]]);
+}
+
 // TODO: Crashing during runtime when compiled with -t fasm-x86_64-windows and running via wine
 main() {
     // libc
-    extrn malloc;
+    extrn malloc, rand;
 
     // Raylib
     extrn InitWindow, BeginDrawing, EndDrawing,
-          WindowShouldClose, ClearBackground, DrawRectangle,
-          SetTargetFPS, GetScreenWidth, GetScreenHeight,
+          WindowShouldClose, ClearBackground,
+          SetTargetFPS,
           IsKeyPressed;
 
-    auto W;
     W = &0[1];
 
-    auto c, cs, cn;
-    c       = 0;            // Current color
-    cn      = 6;            // Amount of colors
-    cs      = malloc(W*cn); // Color Table
-    cs[c++] = 0xFF1818FF;   // B originally does not support hex literals actually.
-    cs[c++] = 0xFF18FF18;
-    cs[c++] = 0xFFFFFF18;
-    cs[c++] = 0xFFFF1818;
-    cs[c++] = 0xFF18FFFF;
-    cs[c++] = 0xFFFF18FF;
-    c       = 0;
+    auto i;
 
-    auto x, y, dx, dy, sx, sy;
-    sx = sy = 100;
-    x  = y  = 200;
-    dx = dy = 5;
+    COLORS_COUNT = 6;
+    COLORS = malloc(W*COLORS_COUNT);
+    i = 0;
+    COLORS[i++] = 0xFF1818FF;   // B originally does not support hex literals actually.
+    COLORS[i++] = 0xFF18FF18;
+    COLORS[i++] = 0xFFFF1818;
+    COLORS[i++] = 0xFFFFFF18;
+    COLORS[i++] = 0xFFFF18FF;
+    COLORS[i++] = 0xFF18FFFF;
+
+    i = 0;
+    OBJ_X       = i++;
+    OBJ_Y       = i++;
+    OBJ_DX      = i++;
+    OBJ_DY      = i++;
+    OBJ_C       = i++;
+    SIZE_OF_OBJ = i++;
+
+    OBJS_COUNT = 10;
+    OBJS = malloc(W*SIZE_OF_OBJ*OBJS_COUNT);
+    i = 0; while (i < OBJS_COUNT) {
+        OBJS[i*SIZE_OF_OBJ + OBJ_X]  = rand()%500;
+        OBJS[i*SIZE_OF_OBJ + OBJ_Y]  = rand()%500;
+        OBJS[i*SIZE_OF_OBJ + OBJ_DX] = rand()%10;
+        OBJS[i*SIZE_OF_OBJ + OBJ_DY] = rand()%10;
+        OBJS[i*SIZE_OF_OBJ + OBJ_C]  = rand()%COLORS_COUNT;
+        ++i;
+    }
 
     auto paused;
     paused = 0;
@@ -51,15 +102,16 @@ main() {
         }
 
         if (!paused) {
-            // TODO: Use logic-or || operation here instead of the bit-or
-            auto nx, ny;
-            nx = x + dx; if (nx < 0 | nx + sx >= GetScreenWidth())  { dx = -dx; c = (c + 1)%cn; } else x = nx;
-            ny = y + dy; if (ny < 0 | ny + sy >= GetScreenHeight()) { dy = -dy; c = (c + 1)%cn; } else y = ny;
+            i = 0; while (i < OBJS_COUNT) {
+                update_obj(&OBJS[(i++)*SIZE_OF_OBJ]);
+            }
         }
 
         BeginDrawing();
         ClearBackground(0xFF181818);
-        DrawRectangle(x, y, sx, sy, cs[c]);
+        i = 0; while (i < OBJS_COUNT) {
+            draw_obj(&OBJS[(i++)*SIZE_OF_OBJ]);
+        }
         EndDrawing();
     }
 }
