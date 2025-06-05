@@ -6,10 +6,8 @@ board2;
 board;
 next;
 
-mod(n, b) {
-	auto r; r = n % b;
-	return (r >= 0 ? r : r + b);
-}
+mod(n, b) return ((n%b + b)%b);
+
 get(b, x, y) {
 	x = mod(x, width);
 	y = mod(y, height);
