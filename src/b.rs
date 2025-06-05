@@ -1184,11 +1184,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
+            let cc = c!("x86_64-w64-mingw32-gcc");
 
             let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
             cmd_append! {
