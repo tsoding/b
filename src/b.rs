@@ -692,14 +692,16 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 lexer::get_token(l)?; // TODO: get_and_expect_clexes after #91
                 expect_clexes(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
                 if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
-                    let size = (*l).int_number;
+                    let size = (*l).int_number as usize;
                     if size == 0 {
                         missingf!((*l).loc, c!("automatic vector of size 0\n"));
                     }
                     for _ in 0..size {
                         allocate_auto_var(&mut (*c).auto_vars_ator);
                     }
-                    let arg = Arg::RefAutoVar(index + size as usize);
+                    // TODO: Here we assume the stack grows down. Should we
+                    //   instead find a way for the target to decide that?
+                    let arg = Arg::RefAutoVar(index + size);
                     push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
                     lexer::get_token(l)?; // TODO: get_and_expect_clexes after #91
                     expect_clexes(l, &[Token::SemiColon, Token::Comma])?;
