@@ -1,5 +1,6 @@
 BUILD=build
 SRC=src
+B=$(BUILD)/b
 
 CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 
@@ -103,7 +104,7 @@ $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
 # Cross-compilation on Linux to Windows using mingw32-w64
 # Invoked on demand by `make ./build/b.exe`
 $(BUILD)/b.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(B)
 
 $(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
 	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@
@@ -114,21 +115,21 @@ $(BUILD):
 .PHONY: test
 test: $(LINUX_TESTS)
 
-$(BUILD)/tests/%: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -run -o $@ $< ./std/test.b
+$(BUILD)/tests/%: ./tests/%.b ./std/test.b $(B) FORCE | $(BUILD)/tests
+	$(B) -run -o $@ $< ./std/test.b
 
 test-mingw32: $(MINGW32_TESTS)
 
-$(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t fasm-x86_64-windows -run -o $@ $< ./std/test.b
+$(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(B) FORCE | $(BUILD)/tests
+	$(B) -t fasm-x86_64-windows -run -o $@ $< ./std/test.b
 
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests
 
 test-uxn: $(UXN_TESTS)
 
-$(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t uxn -o $@ $< ./std/test.b ./std/uxn.b
+$(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/uxn.b $(B) FORCE | $(BUILD)/tests
+	$(B) -t uxn -o $@ $< ./std/test.b ./std/uxn.b
 	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
