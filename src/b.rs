@@ -520,8 +520,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
     Some((lhs, lvalue))
 }
 
-#[allow(unused_variables)]
-pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
+pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
     let (lhs, mut lvalue) = compile_binop_expression(l, c, 0)?;
 
     let mut saved_point = (*l).parse_point;
@@ -529,7 +528,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
 
     while let Some(binop) = Binop::from_assign_token((*l).token) {
         let binop_loc = (*l).loc;
-        let (rhs, _) = compile_assign_expression(l, c, precedence + 1)?;
+        let (rhs, _) = compile_assign_expression(l, c)?;
 
         if !lvalue {
             diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
@@ -589,7 +588,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
 }
 
 pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
-    compile_assign_expression(l, c, 0)
+    compile_assign_expression(l, c)
 }
 
 pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
