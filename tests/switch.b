@@ -25,4 +25,7 @@ main() {
   printf("(420,1337) => %d\n", test(420,1337) );
   printf("(420,69)   => %d\n", test(420,69)   );
   printf("(34,35)    => %d\n", test(34,35)    );
+
+  /* According to kbman the syntax is `switch rvalue statement` */
+  switch 69 printf("Unreachable");
 }
