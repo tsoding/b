@@ -427,48 +427,55 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         }
     };
 
-    let (arg, is_lvalue) = arg?;
+    let (mut arg, mut is_lvalue) = arg?;
 
-    let saved_point = (*l).parse_point;
-    lexer::get_token(l)?;
+    loop {
+        let saved_point = (*l).parse_point;
+        lexer::get_token(l)?;
 
-    if (*l).token == Token::OBracket {
-        let (offset, _) = compile_expression(l, c)?;
-        get_and_expect_token(l, Token::CBracket)?;
+        (arg, is_lvalue) = match (*l).token {
+            Token::OBracket => {
+                let (offset, _) = compile_expression(l, c)?;
+                get_and_expect_token(l, Token::CBracket)?;
 
-        let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-        let word_size = Arg::Literal(target_word_size((*c).target));
-        push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
-        push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
+                let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+                let word_size = Arg::Literal(target_word_size((*c).target));
+                push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
+                push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
 
-        Some((Arg::Deref(result), true))
-    } else if (*l).token == Token::PlusPlus {
-        let loc = (*l).loc;
-        if !is_lvalue {
-            diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-            return None;
-        }
+                Some((Arg::Deref(result), true))
+            }
+            Token::PlusPlus => {
+                let loc = (*l).loc;
+                if !is_lvalue {
+                    diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
+                    return None;
+                }
 
-        let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
-        compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
+                let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
+                push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
+                compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
 
-        Some((Arg::AutoVar(pre), false))
-    } else if (*l).token == Token::MinusMinus {
-        let loc = (*l).loc;
-        if !is_lvalue {
-            diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-            return None;
-        }
+                Some((Arg::AutoVar(pre), false))
+            }
+            Token::MinusMinus => {
+                let loc = (*l).loc;
+                if !is_lvalue {
+                    diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
+                    return None;
+                }
 
-        let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
-        push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
-        compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
+                let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
+                push_opcode(Op::AutoAssign {index: pre, arg}, loc, c);
+                compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
 
-        Some((Arg::AutoVar(pre), false))
-    } else {
-        (*l).parse_point = saved_point;
-        Some((arg, is_lvalue))
+                Some((Arg::AutoVar(pre), false))
+            }
+            _ => {
+                (*l).parse_point = saved_point;
+                return Some((arg, is_lvalue));
+            }
+        }?;
     }
 }
 

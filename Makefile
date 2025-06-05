@@ -36,7 +36,8 @@ LINUX_TESTS=\
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
 	$(BUILD)/tests/unary_priority \
-	$(BUILD)/tests/vector
+	$(BUILD)/tests/vector \
+	$(BUILD)/tests/multiple-postfix
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
@@ -58,7 +59,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
 	$(BUILD)/tests/unary_priority.exe \
-	$(BUILD)/tests/vector.exe
+	$(BUILD)/tests/vector.exe \
+	$(BUILD)/tests/multiple-postfix.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
