@@ -700,7 +700,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
                     let size = (*l).int_number as usize;
                     if size == 0 {
-                        missingf!((*l).loc, c!("automatic vector of size 0\n"));
+                        missingf!((*l).loc, c!("It's unclear how to compile automatic vector of size 0\n"));
                     }
                     for _ in 0..size {
                         allocate_auto_var(&mut (*c).auto_vars_ator);
