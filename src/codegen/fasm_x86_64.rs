@@ -3,7 +3,7 @@ use core::cmp;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{missingf, Loc};
+use crate::Loc;
 use crate::codegen::Os;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
