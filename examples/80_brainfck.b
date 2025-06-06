@@ -24,7 +24,7 @@ BUF_LEN;
 MEMORY_LEN;
 
 main() {
-  extrn malloc, memset, read, printf, getchar, atoi, setvbuf, stdout;
+  extrn malloc, memset, read, printf, getchar, atoi, fflush;
   auto memory, cursor, len, input_buf, stop, addr_buf, W, _IONBF;
 
   MEMORY_LEN = 30000; STDIN = 0; _IONBF = 2; BUF_LEN = 512;
@@ -41,13 +41,12 @@ main() {
   memset(addr_buf, 0, 5);
   memset(input_buf, 0, BUF_LEN);
 
-  setvbuf(stdout, 0, _IONBF, 0);
-
   while (!stop) {
     auto cmdslen; cmdslen = 0;
     auto input_cursor; input_cursor = 0;
 
     printf("# ");
+    fflush(0);
     cmdslen = read(STDIN, input_buf, BUF_LEN);
     if (cmdslen > 0) {
       *(input_buf + cmdslen - 1) = 0; // removing the extra newline
@@ -86,6 +85,7 @@ main() {
       }
       if ((!fullfilled) & (cmd == '.')) {
         printf("%c", memory[cursor]);
+        fflush(0);
         fullfilled = 1;
       }
 
