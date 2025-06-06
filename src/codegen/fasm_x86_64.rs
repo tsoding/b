@@ -3,7 +3,6 @@ use core::cmp;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{missingf, Loc};
 use crate::codegen::Os;
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
@@ -21,7 +20,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
@@ -35,13 +34,18 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         Os::Linux   => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
         Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")], // https://en.wikipedia.org/wiki/X86_calling_conventions#Microsoft_x64_calling_convention
     };
-    if params_count > registers.len() {
-        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), registers.len(), params_count);
-    }
-    for i in 0..params_count {
+
+    let mut i = 0;
+    while i < cmp::min(params_count, registers.len()) {
         let reg = (*registers)[i];
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
+        i += 1;
     }
+    for j in i..params_count {
+        sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 2)*8);
+        sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), (j + 1)*8);
+    }
+
     for i in 0..body.len() {
         sb_appendf(output, c!(".op_%zu:\n"), i);
         let op = (*body)[i];
@@ -191,20 +195,27 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             Op::Funcall{result, name, args} => {
                 match os {
                     Os::Linux => {
-                        if args.count > registers.len() {
-                            missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), registers.len(), args.count);
-                        }
-                        // TODO: implement similar additional pushing argument to stack for Os::Linux as for Os::Windows
-                        for i in 0..args.count {
+                        let mut i = 0;
+                        while i < cmp::min(args.count, registers.len()) {
                             let reg = (*registers)[i];
                             load_arg_to_reg(*args.items.add(i), reg, output);
+                            i += 1;
                         }
+
+                        // args on the stack are push right to left
+                        // so we need to iterate them in reverse
+                        for j in (i..args.count).rev() {
+                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
+                            sb_appendf(output, c!("    push rax\n"));
+                        }
+
                         sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
                                                                    // floating point args via al. Since B
                                                                    // does not distinguish regular and
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
                         sb_appendf(output, c!("    call _%s\n"), name);
+                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8); // deallocate stack args
                     }
                     Os::Windows => {
                         let mut i = 0;
@@ -257,7 +268,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
     sb_appendf(output, c!("section \".text\" executable\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
     }
 }
 
