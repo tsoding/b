@@ -92,7 +92,7 @@ pub unsafe fn scope_push(vars: *mut Array<Array<Var>>) {
     if (*vars).count < (*vars).capacity {
         // Reusing already allocated scopes
         (*vars).count += 1;
-        (*da_last_mut(vars)).count = 0;
+        (*da_last_mut(vars).expect("There should be always at least the global scope")).count = 0;
     } else {
         da_append(vars, zeroed());
     }
@@ -126,7 +126,7 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
 }
 
 pub unsafe fn declare_var(l: *mut Lexer, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
-    let scope = da_last_mut(vars);
+    let scope = da_last_mut(vars).expect("There should be always at least the global scope");
     let existing_var = find_var_near(scope, name);
     if !existing_var.is_null() {
         diagf!((*l).loc, c!("ERROR: redefinition of variable `%s`\n"), name);
@@ -655,6 +655,14 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
     da_append(names, name)
 }
 
+pub unsafe fn backpatch_jmp(backpatch: *mut OpWithLocation, addr: usize) {
+    match (*backpatch).opcode {
+        Op::Jmp{..}           => (*backpatch).opcode = Op::Jmp { addr },
+        Op::JmpIfNot{arg, ..} => (*backpatch).opcode = Op::JmpIfNot { addr, arg },
+        _                     => unreachable!()
+    }
+}
+
 pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -790,58 +798,55 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             push_opcode(Op::Asm {args}, (*l).loc, c);
             Some(())
         }
-        Token::Switch => {
-            scope_push(&mut (*c).vars);
+        Token::Case => {
+            let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) else {
+                diagf!((*l).loc, c!("case label outside of switch\n"));
+                return None;
+            };
 
-            let (cond, _) = compile_expression(l, c)?;
-            let test_result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            let mut jmp_addr = None;
-
-            get_and_expect_clex(l, Token::OCurly)?;
+            let case_loc = (*l).loc;
             lexer::get_token(l);
-            'outer: loop {
-                expect_clexes(l, &[Token::Case, Token::CCurly])?;
-                if (*l).token == Token::CCurly {
-                    break;
-                }
+            expect_clexes(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
+            let case_value = (*l).int_number;
+            get_and_expect_clex(l, Token::Colon)?;
 
-                let loc = (*l).loc; // `case` location
-                lexer::get_token(l);
-                expect_clexes(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
+            let addr = (*c).func_body.count;
+            push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
+            push_opcode(Op::Binop{
+                binop: Binop::Equal,
+                index: (*switch_frame).cond,
+                lhs: (*switch_frame).value,
+                rhs: Arg::Literal(case_value)
+            }, case_loc, c);
+            push_opcode(Op::JmpIfNot {
+                addr: 0,
+                arg: Arg::AutoVar((*switch_frame).cond)
+            }, case_loc, c);
 
-                if let Some(jmp_addr) = jmp_addr {
-                    (*(*c).func_body.items.add(jmp_addr)).opcode = Op::JmpIfNot {
-                        addr: (*c).func_body.count,
-                        arg: Arg::AutoVar(test_result)
-                    };
-                }
+            let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
+            backpatch_jmp(backpatch, addr + 1);
+            (*switch_frame).jmp_addr = addr + 2;
 
-                push_opcode(Op::AutoAssign {index: test_result, arg: cond}, loc, c);
-                compile_binop(Arg::AutoVar(test_result), Arg::Literal((*l).int_number), Binop::Equal, loc, c);
-                jmp_addr = Some((*c).func_body.count);
-                push_opcode(Op::JmpIfNot {addr: 0, arg: Arg::AutoVar(test_result)}, loc, c);
+            Some(())
+        }
+        Token::Switch => {
+            let saved_auto_vars_count = (*c).auto_vars_ator.count;
 
-                get_and_expect_clex(l, Token::Colon)?;
+            let switch_loc = (*l).loc;
+            let (value, _) = compile_expression(l, c)?;
+            let cond = allocate_auto_var(&mut (*c).auto_vars_ator);
+            let jmp_addr = (*c).func_body.count;
+            da_append(&mut (*c).switch_stack, Switch {jmp_addr, value, cond});
+            push_opcode(Op::Jmp {addr: 0}, switch_loc, c);
+            compile_statement(l, c)?;
 
-                loop {
-                    let saved_point = (*l).parse_point;
-                    lexer::get_token(l);
-                    if (*l).token == Token::Case || (*l).token == Token::CCurly {
-                        continue 'outer;
-                    }
-                    (*l).parse_point = saved_point;
-                    compile_statement(l, c)?;
-                }
-            }
+            let switch_frame = da_last_mut(&mut (*c).switch_stack).expect("Switch stack was modified by somebody else");
+            let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
+            backpatch_jmp(backpatch, (*c).func_body.count);
+            (*c).switch_stack.count -= 1;
 
-            if let Some(jmp_addr) = jmp_addr {
-                (*(*c).func_body.items.add(jmp_addr)).opcode = Op::JmpIfNot {
-                    addr: (*c).func_body.count,
-                    arg: Arg::AutoVar(test_result)
-                };
-            }
+            (*c).auto_vars_ator.count = saved_auto_vars_count;
 
-            scope_pop(&mut (*c).vars);
             Some(())
         }
         _ => {
@@ -892,6 +897,13 @@ pub struct Func {
 }
 
 #[derive(Clone, Copy)]
+pub struct Switch {
+    pub jmp_addr: usize,
+    pub value: Arg,
+    pub cond: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
@@ -899,6 +911,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_labels: Array<Label>,
     pub func_labels_used: Array<Label>,
+    pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<*const c_char>,
