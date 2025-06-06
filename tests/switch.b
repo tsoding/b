@@ -1,4 +1,4 @@
-test(a, b) {
+test_lookup(a, b) {
   switch a {
     case 69:
       return (690);
@@ -25,14 +25,17 @@ unreachable(message) {
 }
 
 main() {
-  extrn printf;
-  printf("(69,69)    => %d\n", test(69,69)    );
-  printf("(420,420)  => %d\n", test(420,420)  );
-  printf("(420,1337) => %d\n", test(420,1337) );
-  printf("(420,69)   => %d\n", test(420,69)   );
-  printf("(34,35)    => %d\n", test(34,35)    );
+  extrn printf, assert_equal;
 
-  /* According to kbman the syntax of switch-case is `switch rvalue statement` */
+  assert_equal(test_lookup(69,69),    690,  "(69,69)    => 690");
+  assert_equal(test_lookup(420,420),  42,   "(420,420)  => 42");
+  assert_equal(test_lookup(420,1337), 7331, "(420,1337) => 7331");
+  assert_equal(test_lookup(420,69),   -2,   "(420,69)   => -2");
+  assert_equal(test_lookup(34,35),    -1,   "(34,35)    => -1");
+
+  /* According to kbman the syntax of switch-case is `switch rvalue statement`.
+   * So bellow are valid cases.
+   */
   switch 69 {
     unreachable("curly");
   }
