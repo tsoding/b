@@ -32,6 +32,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/recursion \
 	$(BUILD)/tests/ref \
 	$(BUILD)/tests/return \
+	$(BUILD)/tests/switch \
 	$(BUILD)/tests/stack_alloc \
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
@@ -56,6 +57,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/recursion.exe \
 	$(BUILD)/tests/ref.exe \
 	$(BUILD)/tests/return.exe \
+	$(BUILD)/tests/switch.exe \
 	$(BUILD)/tests/stack_alloc.exe \
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
@@ -80,6 +82,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/recursion.rom \
 	$(BUILD)/tests/ref.rom \
 	$(BUILD)/tests/return.rom \
+	$(BUILD)/tests/switch.rom \
 	$(BUILD)/tests/stack_alloc.rom \
 	$(BUILD)/tests/ternary-side-effect.rom \
 	$(BUILD)/tests/ternary.rom \
