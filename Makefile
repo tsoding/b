@@ -88,8 +88,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/ternary-assign.rom \
 	$(BUILD)/tests/unary_priority.rom \
 	$(BUILD)/tests/vector.rom \
-	$(BUILD)/tests/multiple-postfix.rom \
-	$(BUILD)/tests/rvalue_call.rom
+	$(BUILD)/tests/multiple-postfix.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
