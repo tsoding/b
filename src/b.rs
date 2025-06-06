@@ -707,6 +707,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     }
                     // TODO: Here we assume the stack grows down. Should we
                     //   instead find a way for the target to decide that?
+                    //   See TODO(2025-06-05 17:45:36)
                     let arg = Arg::RefAutoVar(index + size);
                     push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
