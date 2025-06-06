@@ -32,10 +32,15 @@ LINUX_TESTS=\
 	$(BUILD)/tests/recursion \
 	$(BUILD)/tests/ref \
 	$(BUILD)/tests/return \
+	$(BUILD)/tests/switch \
+	$(BUILD)/tests/stack_alloc \
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
+	$(BUILD)/tests/ternary-assign \
 	$(BUILD)/tests/unary_priority \
-	$(BUILD)/tests/vector
+	$(BUILD)/tests/vector \
+	$(BUILD)/tests/multiple-postfix \
+	$(BUILD)/tests/rvalue_call
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
@@ -53,10 +58,15 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/recursion.exe \
 	$(BUILD)/tests/ref.exe \
 	$(BUILD)/tests/return.exe \
+	$(BUILD)/tests/switch.exe \
+	$(BUILD)/tests/stack_alloc.exe \
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
+	$(BUILD)/tests/ternary-assign.exe \
 	$(BUILD)/tests/unary_priority.exe \
-	$(BUILD)/tests/vector.exe
+	$(BUILD)/tests/vector.exe \
+	$(BUILD)/tests/multiple-postfix.exe \
+	$(BUILD)/tests/rvalue_call.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
@@ -74,10 +84,15 @@ UXN_TESTS=\
 	$(BUILD)/tests/recursion.rom \
 	$(BUILD)/tests/ref.rom \
 	$(BUILD)/tests/return.rom \
+	$(BUILD)/tests/switch.rom \
+	$(BUILD)/tests/stack_alloc.rom \
 	$(BUILD)/tests/ternary-side-effect.rom \
 	$(BUILD)/tests/ternary.rom \
+	$(BUILD)/tests/ternary-assign.rom \
 	$(BUILD)/tests/unary_priority.rom \
-	$(BUILD)/tests/vector.rom
+	$(BUILD)/tests/vector.rom \
+	$(BUILD)/tests/multiple-postfix.rom \
+	$(BUILD)/tests/rvalue_call.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
