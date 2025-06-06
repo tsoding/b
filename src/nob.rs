@@ -10,14 +10,20 @@ pub struct Array<T> {
     pub capacity: usize,
 }
 
-pub unsafe fn da_last<T>(xs: *const Array<T>) -> *const T {
-    assert!((*xs).count > 0);
-    (*xs).items.add((*xs).count-1)
+pub unsafe fn da_last<T>(xs: *const Array<T>) -> Option<*const T> {
+    if (*xs).count > 0 {
+        Some((*xs).items.add((*xs).count-1))
+    } else {
+        None
+    }
 }
 
-pub unsafe fn da_last_mut<T>(xs: *mut Array<T>) -> *mut T {
-    assert!((*xs).count > 0);
-    (*xs).items.add((*xs).count-1)
+pub unsafe fn da_last_mut<T>(xs: *mut Array<T>) -> Option<*mut T> {
+    if (*xs).count > 0 {
+        Some((*xs).items.add((*xs).count-1))
+    } else {
+        None
+    }
 }
 
 pub unsafe fn da_slice<T>(xs: Array<T>) -> *mut [T] {
