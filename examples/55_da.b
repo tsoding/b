@@ -22,8 +22,7 @@ main() {
     CAPACITY = i++;
 
     // Allocating Dynamic Array structure on the stack
-    auto xs_capacity, xs_count, xs_items, da;
-    da = &xs_items;
+    auto da 3;
     da[ITEMS]    = 0;
     da[COUNT]    = 0;
     da[CAPACITY] = 0;
@@ -32,11 +31,11 @@ main() {
     i = 0; while (i < n) da_append(da, (++i)*2);
 
     extrn printf;
-    printf("xs_items    = %p\n",  xs_items);
-    printf("xs_count    = %zu\n", xs_count);
-    printf("xs_capacity = %zu\n", xs_capacity);
+    printf("xs_items    = %p\n",  da[ITEMS]);
+    printf("xs_count    = %zu\n", da[COUNT]);
+    printf("xs_capacity = %zu\n", da[CAPACITY]);
     i = 0; while (i < n) {
-        printf("%zu => %d\n", i, xs_items[i]);
+        printf("%zu => %d\n", i, da[ITEMS][i]);
         ++i;
     }
 }
