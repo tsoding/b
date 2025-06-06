@@ -1,15 +1,32 @@
+foo() {
+    extrn printf;
+    printf("Foo\n");
+}
+
+bar() {
+    extrn printf;
+    printf("Bar\n");
+}
+
+baz() {
+    extrn printf;
+    printf("Baz\n");
+}
+
 main() {
     extrn printf, malloc, exit;
-    auto funs;
 
     auto W;
-    W = 8;
+    W = &0[1];
 
-    funs = malloc(4 * W);
-    funs[0] = &printf;
-    funs[W] = &exit;
+    auto funs, i, n;
+    n = 4;
+    funs = malloc(n * W);
+    i = 0;
+    funs[i++] = &foo;
+    funs[i++] = &bar;
+    funs[i++] = &baz;
+    funs[i++] = &exit;
 
-    // parentheses needed, because stacked postfix not yet supported
-    (funs[0])("Hello, World!\n");
-    (funs[W])(0);
+    i = 0; while (i < n) funs[i++](0);
 }
