@@ -39,7 +39,8 @@ LINUX_TESTS=\
 	$(BUILD)/tests/ternary-assign \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector \
-	$(BUILD)/tests/multiple-postfix
+	$(BUILD)/tests/multiple-postfix \
+	$(BUILD)/tests/rvalue_call
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
@@ -64,7 +65,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/ternary-assign.exe \
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
-	$(BUILD)/tests/multiple-postfix.exe
+	$(BUILD)/tests/multiple-postfix.exe \
+	$(BUILD)/tests/rvalue_call.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
@@ -88,7 +90,8 @@ UXN_TESTS=\
 	$(BUILD)/tests/ternary.rom \
 	$(BUILD)/tests/ternary-assign.rom \
 	$(BUILD)/tests/unary_priority.rom \
-	$(BUILD)/tests/vector.rom
+	$(BUILD)/tests/vector.rom \
+	$(BUILD)/tests/multiple-postfix.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \

@@ -2,6 +2,19 @@ use core::ffi::*;
 use crate::nob::*;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
 
+pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
+    match arg {
+        Arg::RefExternal(name) | Arg::External(name) => {
+            sb_appendf(output, c!("call(\"%s\""), name);
+        }
+        arg => {
+            sb_appendf(output, c!("call("));
+            dump_arg(output, arg);
+        }
+    };
+
+}
+
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
         Arg::External(name)     => sb_appendf(output, c!("%s"), name),
@@ -18,7 +31,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
         sb_appendf(output, c!("%8zu:"), i);
-        match (*body)[i].opcode {
+        let op = (*body)[i];
+        match op.opcode {
             Op::Return {arg} => {
                 sb_appendf(output, c!("    return "));
                 if let Some(arg) = arg {
@@ -74,8 +88,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, rhs);
                 sb_appendf(output, c!("\n"));
             }
-            Op::Funcall{result, name, args} => {
-                sb_appendf(output, c!("    auto[%zu] = call(\"%s\""), result, name);
+            Op::Funcall{result, fun, args} => {
+                sb_appendf(output, c!("    auto[%zu] = "), result);
+                dump_arg_call(fun, output);
                 for i in 0..args.count {
                     sb_appendf(output, c!(", "));
                     dump_arg(output, *args.items.add(i));

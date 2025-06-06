@@ -276,7 +276,7 @@ pub enum Op {
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
-    Funcall        {result: usize, name: *const c_char, args: Array<Arg>},
+    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
@@ -387,7 +387,6 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
         Token::ID => {
             let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-            let name_loc = (*l).loc;
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
@@ -398,14 +397,10 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
 
-            if (*l).token == Token::OParen {
-                Some((compile_function_call(l, c, name, name_loc)?, false))
-            } else {
-                (*l).parse_point = saved_point;
-                match (*var_def).storage {
-                    Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
-                    Storage::External{name} => Some((Arg::External(name), true)),
-                }
+            (*l).parse_point = saved_point;
+            match (*var_def).storage {
+                Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
+                Storage::External{name} => Some((Arg::External(name), true)),
             }
         }
         Token::String => {
@@ -434,6 +429,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         lexer::get_token(l)?;
 
         (arg, is_lvalue) = match (*l).token {
+            Token::OParen => Some((compile_function_call(l, c, arg)?, false)),
             Token::OBracket => {
                 let (offset, _) = compile_expression(l, c)?;
                 get_and_expect_token(l, Token::CBracket)?;
@@ -613,14 +609,7 @@ pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         compile_statement(l, c)?
     }
 }
-
-pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *const c_char, loc: Loc) -> Option<Arg> {
-    let var_def = find_var_deep(&(*c).vars, name);
-    if var_def.is_null() {
-        diagf!(loc, c!("ERROR: could not find function `%s`\n"), name);
-        return None;
-    }
-
+ unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, fun: Arg) -> Option<Arg> {
     let mut args: Array<Arg> = zeroed();
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -639,16 +628,9 @@ pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *cons
         }
     }
 
-    match (*var_def).storage {
-        Storage::External{name} => {
-            let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Funcall {result, name, args}, (*l).loc, c);
-            Some(Arg::AutoVar(result))
-        }
-        Storage::Auto{..} => {
-            missingf!(loc, c!("calling functions from auto variables\n"));
-        }
-    }
+    let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+    push_opcode(Op::Funcall {result, fun, args}, (*l).loc, c);
+    Some(Arg::AutoVar(result))
 }
 
 pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name: *const c_char) {
@@ -937,6 +919,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
+
         if (*l).token == Token::OParen { // Function definition
             declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
