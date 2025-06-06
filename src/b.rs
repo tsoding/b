@@ -811,9 +811,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             let case_loc = (*l).loc;
             lexer::get_token(l);
-            expect_clexes(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
+            expect_tokens(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
             let case_value = (*l).int_number;
-            get_and_expect_clex(l, Token::Colon)?;
+            get_and_expect_token(l, Token::Colon)?;
 
             let addr = (*c).func_body.count;
             push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
