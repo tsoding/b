@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -37,6 +37,7 @@ pub struct Patch {
     pub kind: PatchKind,
     pub label: usize,
     pub addr: u16,
+    pub offset: u16,
 }
 
 #[derive(Clone, Copy)]
@@ -85,11 +86,12 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
             fprintf(stderr(), c!("Label #%ld was never linked (error in the uxn codegen)\n"), patch.label);
             abort();
         }
+        let offset = patch.offset;
         let byte = match patch.kind {
-            PatchKind::UpperAbsolute => ((addr + 0x100) >> 8) & 0xff,
-            PatchKind::LowerAbsolute => (addr + 0x100) & 0xff,
-            PatchKind::UpperRelative => (addr.wrapping_sub(patch.addr).wrapping_sub(2) >> 8) & 0xff,
-            PatchKind::LowerRelative => (addr.wrapping_sub(patch.addr).wrapping_sub(1)) & 0xff,
+            PatchKind::UpperAbsolute => ((addr + 0x100 + offset) >> 8) & 0xff,
+            PatchKind::LowerAbsolute => (addr + 0x100 + offset) & 0xff,
+            PatchKind::UpperRelative => ((addr + offset).wrapping_sub(patch.addr).wrapping_sub(2) >> 8) & 0xff,
+            PatchKind::LowerRelative => ((addr + offset).wrapping_sub(patch.addr).wrapping_sub(1)) & 0xff,
         };
         *(*output).items.add(patch.addr as usize) = byte as c_char;
     }
@@ -115,13 +117,13 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
         }
     }
     write_op(output, UxnOp::JSI);
-    write_label_rel(output, get_or_create_label_by_name(&mut assembler, main_proc), &mut assembler);
+    write_label_rel(output, get_or_create_label_by_name(&mut assembler, main_proc), &mut assembler, 0);
     // break out of the vector we were returned from
     // also put this as the return address for the next vector which might be called
     let vector_return_label = create_label(&mut assembler);
     link_label(&mut assembler, vector_return_label, (*output).count);
     write_op(output, UxnOp::LIT2r);
-    write_label_abs(output, vector_return_label, &mut assembler);
+    write_label_abs(output, vector_return_label, &mut assembler, 0);
     write_op(output, UxnOp::BRK);
 
     generate_funcs(output, da_slice((*c).funcs), &mut assembler);
@@ -342,7 +344,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             Op::ExternalAssign {name, arg} => {
                 load_arg(arg, output, assembler);
                 write_op(output, UxnOp::LIT2);
-                write_label_abs(output, get_or_create_label_by_name(assembler, name), assembler);
+                write_label_abs(output, get_or_create_label_by_name(assembler, name), assembler, 0);
                 write_op(output, UxnOp::STA2);
             }
             Op::Store {index, arg} => {
@@ -353,7 +355,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::LDA2);
                 write_op(output, UxnOp::STA2);
             }
-            Op::Funcall {result, name, args} => {
+            Op::Funcall {result, fun, args} => {
                 if args.count > MAX_ARGS.into() {
                     missingf!(op.loc, c!("Too many function call arguments. We support only %d but %zu were provided\n"), MAX_ARGS, args.count);
                 }
@@ -361,22 +363,22 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     load_arg(*args.items.add(i), output, assembler);
                     write_lit_stz2(output, FIRST_ARG + (i as u8) * 2)
                 }
-                write_op(output, UxnOp::JSI);
-                write_label_rel(output, get_or_create_label_by_name(assembler, name), assembler);
+
+                call_arg(fun, output, assembler);
                 write_lit_ldz2(output, FIRST_ARG);
                 store_auto(output, result);
             }
             Op::Asm {..} => missingf!(op.loc, c!("Inline assembly\n")),
             Op::Jmp {addr} => {
                 write_op(output, UxnOp::JMI);
-                write_label_rel(output, *op_labels.items.add(addr), assembler);
+                write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
             }
             Op::JmpIfNot {addr, arg} => {
                 load_arg(arg, output, assembler);
                 write_lit2(output, 0);
                 write_op(output, UxnOp::EQU2);
                 write_op(output, UxnOp::JCI);
-                write_label_rel(output, *op_labels.items.add(addr), assembler);
+                write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
             }
             Op::Return {arg} => {
                 // Put return value in the FIRST_ARG
@@ -438,32 +440,36 @@ pub unsafe fn write_byte(output: *mut String_Builder, byte: u8) {
     da_append(output, byte as c_char);
 }
 
-pub unsafe fn write_label_rel(output: *mut String_Builder, label: usize, a: *mut Assembler) {
+pub unsafe fn write_label_rel(output: *mut String_Builder, label: usize, a: *mut Assembler, offset: usize) {
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::UpperRelative,
         label: label,
         addr: (*output).count as u16,
+        offset: offset as u16,
     });
     write_byte(output, 0xff);
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::LowerRelative,
         label: label,
         addr: (*output).count as u16,
+        offset: offset as u16,
     });
     write_byte(output, 0xff);
 }
 
-pub unsafe fn write_label_abs(output: *mut String_Builder, label: usize, a: *mut Assembler) {
+pub unsafe fn write_label_abs(output: *mut String_Builder, label: usize, a: *mut Assembler, offset: usize) {
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::UpperAbsolute,
         label: label,
         addr: (*output).count as u16,
+        offset: offset as u16,
     });
     write_byte(output, 0xff);
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::LowerAbsolute,
         label: label,
         addr: (*output).count as u16,
+        offset: offset as u16,
     });
     write_byte(output, 0xff);
 }
@@ -498,6 +504,19 @@ pub unsafe fn write_infinite_loop(output: *mut String_Builder) {
     write_short(output, 0xfffd);
 }
 
+pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder, assembler: *mut Assembler) {
+    match arg {
+        Arg::RefExternal(name) | Arg::External(name) => {
+            write_op(output, UxnOp::JSI);
+            write_label_rel(output, get_or_create_label_by_name(assembler, name), assembler, 0);
+        }
+        arg => {
+            load_arg(arg, output, assembler);
+            write_op(output, UxnOp::JSR2);
+        }
+    };
+}
+
 pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut Assembler) {
     match arg {
         Arg::Deref(index) => {
@@ -510,7 +529,7 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut As
         Arg::External(name) => {
             let label = get_or_create_label_by_name(assembler, name);
             write_op(output, UxnOp::LIT2);
-            write_label_abs(output, label, assembler);
+            write_label_abs(output, label, assembler, 0);
             write_op(output, UxnOp::LDA2);
         }
         Arg::AutoVar(index) => {
@@ -524,7 +543,7 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut As
         }
         Arg::DataOffset(offset) => {
             write_op(output, UxnOp::LIT2);
-            write_label_abs(output, (*assembler).data_section_label, assembler);
+            write_label_abs(output, (*assembler).data_section_label, assembler, 0);
             write_lit2(output, offset as u16);
             write_op(output, UxnOp::ADD2);
         }
@@ -536,7 +555,7 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut As
         Arg::RefExternal(name) => {
             let label = get_or_create_label_by_name(assembler, name);
             write_op(output, UxnOp::LIT2);
-            write_label_abs(output, label, assembler);
+            write_label_abs(output, label, assembler, 0);
         }
     }
 }
@@ -548,7 +567,7 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
     write_op(output, UxnOp::STA2);
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char], assembler: *mut Assembler) {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global], assembler: *mut Assembler) {
     'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
@@ -559,7 +578,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             }
         }
         for j in 0..globals.len() {
-            let global = (*globals)[j];
+            let global = (*globals)[j].name;
             if strcmp(global, name) == 0 {
                 continue 'skip_function_or_global
             }
@@ -645,11 +664,31 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char], assembler: *mut Assembler) {
-    // TODO: if we generate these last, they don't have to be in the .rom file
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global], assembler: *mut Assembler) {
     for i in 0..globals.len() {
-        link_label(assembler, get_or_create_label_by_name(assembler, (*globals)[i]), (*output).count);
-        write_short(output, 0);
+        let global = (*globals)[i];
+        link_label(assembler, get_or_create_label_by_name(assembler, global.name), (*output).count);
+        if global.is_vec {
+            let label = create_label(assembler);
+            write_label_abs(output, label, assembler, 0);
+            link_label(assembler, label, (*output).count);
+        }
+        for j in 0..global.values.count {
+            match *global.values.items.add(j) {
+                ImmediateValue::Literal(lit) => {
+                    write_short(output, lit as u16);
+                }
+                ImmediateValue::Name(name) => {
+                    write_label_abs(output, get_or_create_label_by_name(assembler, name), assembler, 0);
+                }
+                ImmediateValue::DataOffset(offset) => {
+                    write_label_abs(output, (*assembler).data_section_label, assembler, offset);
+                }
+            }
+        }
+        for _ in global.values.count..global.minimum_size {
+            write_short(output, 0);
+        }
     }
 }
 

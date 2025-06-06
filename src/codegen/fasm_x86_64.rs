@@ -1,10 +1,20 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
 use crate::codegen::Os;
+
+pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder) {
+    match arg {
+        Arg::RefExternal(name) | Arg::External(name) => sb_appendf(output, c!("    call _%s\n"), name),
+        arg => {
+            load_arg_to_reg(arg, c!("rax"), output);
+            sb_appendf(output, c!("    call rax\n"))
+        },
+    };
+}
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
@@ -188,7 +198,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     }
                 }
             }
-            Op::Funcall{result, name, args} => {
+            Op::Funcall{result, fun, args} => {
                 match os {
                     Os::Linux => {
                         if args.count > registers.len() {
@@ -204,7 +214,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                                                                    // does not distinguish regular and
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
-                        sb_appendf(output, c!("    call _%s\n"), name);
+                        call_arg(fun, output);
                     }
                     Os::Windows => {
                         let mut i = 0;
@@ -225,7 +235,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         // it must be allocated at the top of the stack after all arguments are pushed
                         // so we can't allocate it at function prologue
                         sb_appendf(output, c!("    sub rsp, 32\n"));
-                        sb_appendf(output, c!("    call _%s\n"), name);
+                        call_arg(fun, output);
                         sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8+32); // deallocate stack args & "shadow space"
                     }
                 }
@@ -261,7 +271,7 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], 
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [*const c_char]) {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global]) {
     'skip: for i in 0..extrns.len() {
         let name = (*extrns)[i];
 
@@ -273,7 +283,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
         }
 
         for j in 0..globals.len() {
-            let global = (*globals)[j];
+            let global = (*globals)[j].name;
             if strcmp(global, name) == 0 {
                 continue 'skip
             }
@@ -283,17 +293,40 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     for i in 0..globals.len() {
-        let name = (*globals)[i];
-        sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
-        sb_appendf(output, c!("_%s: rq 1\n"), name);
+        let global = (*globals)[i];
+        sb_appendf(output, c!("public _%s as '%s'\n"), global.name, global.name);
+        sb_appendf(output, c!("_%s: "), global.name);
+
+        if global.is_vec {
+            sb_appendf(output, c!("dq $+8\n"));
+        }
+
+        if global.values.count > 0 {
+            sb_appendf(output, c!("dq "), global.name);
+            for j in 0..global.values.count {
+                if j > 0 {
+                    sb_appendf(output, c!(","));
+                }
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => sb_appendf(output, c!("0x%X"), lit),
+                    ImmediateValue::Name(name) => sb_appendf(output, c!("_%s"), name),
+                    ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("dat+%zu"), offset),
+                };
+            }
+        }
+
+        if global.values.count < global.minimum_size {
+            sb_appendf(output, c!("\nrq %zu"), global.minimum_size - global.values.count);
+        }
+
+        sb_appendf(output, c!("\n"));
     }
 }
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
-        sb_appendf(output, c!("section \".data\"\n"));
         sb_appendf(output, c!("dat: db "));
         for i in 0..data.len() {
             if i > 0 {
@@ -312,6 +345,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     };
     generate_funcs(output, da_slice((*c).funcs), os);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
+    sb_appendf(output, c!("section \".data\"\n"));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
 }
