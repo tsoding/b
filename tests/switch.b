@@ -18,6 +18,20 @@ test_lookup(a, b) {
   return (-1);
 }
 
+test_fallthrough(x) {
+    extrn printf;
+    switch (x) {
+    case 0: printf("0\n");
+    case 1: printf("1\n");
+    case 2: printf("2\n");
+    case 3: printf("3\n");
+    case 4: printf("4\n");
+    }
+}
+
+/* TODO: maybe this should be a part of the libb at some point?
+ * iirc snake example also uses a similar function
+ */
 unreachable(message) {
   extrn printf, abort;
   printf("UNREACHABLE: %s\n", message);
@@ -32,6 +46,11 @@ main() {
   assert_equal(test_lookup(420,1337), 7331, "(420,1337) => 7331");
   assert_equal(test_lookup(420,69),   -2,   "(420,69)   => -2");
   assert_equal(test_lookup(34,35),    -1,   "(34,35)    => -1");
+
+  printf("------------------------------\n");
+  test_fallthrough(0);
+  printf("------------------------------\n");
+  test_fallthrough(3);
 
   /* According to kbman the syntax of switch-case is `switch rvalue statement`.
    * So bellow are valid cases.
