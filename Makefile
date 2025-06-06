@@ -38,7 +38,8 @@ LINUX_TESTS=\
 	$(BUILD)/tests/ternary-assign \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector \
-	$(BUILD)/tests/multiple-postfix
+	$(BUILD)/tests/multiple-postfix \
+	$(BUILD)/tests/call_stack_args
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
@@ -62,7 +63,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/ternary-assign.exe \
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
-	$(BUILD)/tests/multiple-postfix.exe
+	$(BUILD)/tests/multiple-postfix.exe \
+	$(BUILD)/tests/call_stack_args.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
