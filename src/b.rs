@@ -268,12 +268,6 @@ impl Binop {
 }
 
 #[derive(Clone, Copy)]
-pub enum CallTarget {
-    Name(*const c_char),
-    Arg(Arg),
-}
-
-#[derive(Clone, Copy)]
 pub enum Op {
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
@@ -282,7 +276,7 @@ pub enum Op {
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
-    Funcall        {result: usize, fun: CallTarget, args: Array<Arg>},
+    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
@@ -615,8 +609,7 @@ pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         compile_statement(l, c)?
     }
 }
-
-pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, arg: Arg) -> Option<Arg> {
+ unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, fun: Arg) -> Option<Arg> {
     let mut args: Array<Arg> = zeroed();
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -635,18 +628,9 @@ pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, arg: Arg) -
         }
     }
 
-    match arg {
-        Arg::External(name) | Arg::RefExternal(name) => {
-            let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Funcall {result, fun: CallTarget::Name(name), args}, (*l).loc, c);
-            Some(Arg::AutoVar(result))
-        },
-        _ => {
-            let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Funcall {result, fun: CallTarget::Arg(arg), args}, (*l).loc, c);
-            Some(Arg::AutoVar(result))
-        }
-    }
+    let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+    push_opcode(Op::Funcall {result, fun, args}, (*l).loc, c);
+    Some(Arg::AutoVar(result))
 }
 
 pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name: *const c_char) {

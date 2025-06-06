@@ -1,10 +1,20 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, CallTarget, Func, Compiler, align_bytes};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
 use crate::codegen::Os;
+
+pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder) {
+    match arg {
+        Arg::RefExternal(name) | Arg::External(name) => sb_appendf(output, c!("    call _%s\n"), name),
+        arg => {
+            load_arg_to_reg(arg, c!("rax"), output);
+            sb_appendf(output, c!("    call rax\n"))
+        },
+    };
+}
 
 pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder) {
     match arg {
@@ -204,13 +214,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                                                                    // does not distinguish regular and
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
-                        match fun {
-                            CallTarget::Name(name) => sb_appendf(output, c!("    call _%s\n"), name),
-                            CallTarget::Arg(arg) => {
-                                load_arg_to_reg(arg, c!("rax"), output);
-                                sb_appendf(output, c!("    call rax\n"))
-                            },
-                        };
+                        call_arg(fun, output);
                     }
                     Os::Windows => {
                         let mut i = 0;
@@ -231,13 +235,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         // it must be allocated at the top of the stack after all arguments are pushed
                         // so we can't allocate it at function prologue
                         sb_appendf(output, c!("    sub rsp, 32\n"));
-                        match fun {
-                            CallTarget::Name(name) => sb_appendf(output, c!("    call _%s\n"), name),
-                            CallTarget::Arg(arg) => {
-                                load_arg_to_reg(arg, c!("rax"), output);
-                                sb_appendf(output, c!("    call rax\n"))
-                            },
-                        };
+                        call_arg(fun, output);
                         sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8+32); // deallocate stack args & "shadow space"
                     }
                 }
