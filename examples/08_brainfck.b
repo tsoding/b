@@ -20,15 +20,14 @@
 
 
 STDIN;
-STDOUT;
 BUF_LEN;
 MEMORY_LEN;
 
 main() {
-  extrn malloc, memset, read, dprintf, getchar, atoi;
+  extrn malloc, memset, read, printf, getchar, atoi;
   auto memory, cursor, len, input_buf, stop, addr_buf, W;
 
-  MEMORY_LEN = 30000; STDIN = 0; STDOUT = 1; BUF_LEN = 512;
+  MEMORY_LEN = 30000; STDIN = 0; BUF_LEN = 512;
 
   W      = &0[1];
   cursor = 0;
@@ -47,7 +46,7 @@ main() {
     auto cmdslen; cmdslen = 0;
     auto input_cursor; input_cursor = 0;
 
-    dprintf(STDOUT, "# ");
+    printf("# ");
     cmdslen = read(STDIN, input_buf, BUF_LEN);
     if (cmdslen > 0) {
       *(input_buf + cmdslen - 1) = 0; // removing the extra newline
@@ -85,7 +84,7 @@ main() {
         fullfilled = 1;
       }
       if ((!fullfilled) & (cmd == '.')) {
-        dprintf(STDOUT, "%c", memory[cursor]);
+        printf("%c", memory[cursor]);
         fullfilled = 1;
       }
 
@@ -152,19 +151,19 @@ main() {
       }
 
       if ((!fullfilled) & (cmd == '$') & (cmdslen == 1)) {
-        dprintf(STDOUT, "MEMORY ADDRESS (0-29999): ");
+        printf("MEMORY ADDRESS (0-29999): ");
         auto addr_len, addr; addr_len = read(STDIN, addr_buf, 5);
         if (addr_len > 0) {
           *(addr_buf + addr_len - 1) = 0;
           addr = atoi(addr_buf);
-          dprintf(STDOUT, "MEMORY(+%d) -> %d\n", addr, memory[addr]);
+          printf("MEMORY(+%d) -> %d\n", addr, memory[addr]);
         }
       }
 
       input_cursor += 1;
     }
 
-    dprintf(STDOUT, "\n");
+    printf("\n");
   }
 }
 
@@ -174,5 +173,3 @@ main() {
 // Special commands:
 // - # -> to reset the memory and the cursor
 // - $ -> to inspect a memory address
-
-// TODO: does not work on fasm-x86_64-windows due to using dprintf
