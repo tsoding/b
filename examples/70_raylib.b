@@ -15,8 +15,15 @@ OBJ_X; OBJ_Y; OBJ_DX; OBJ_DY; OBJ_C; SIZE_OF_OBJ;
 OBJS_COUNT;
 OBJS;
 
-COLORS_COUNT;
-COLORS;
+COLORS_COUNT 6;
+COLORS [6]
+    // B originally does not support hex literals actually.
+    0xFF1818FF,
+    0xFF18FF18,
+    0xFFFF1818,
+    0xFFFFFF18,
+    0xFFFF18FF,
+    0xFF18FFFF;
 
 update_obj(obj) {
     auto nx, ny;
@@ -61,17 +68,6 @@ main() {
     W = &0[1];
 
     auto i;
-
-    COLORS_COUNT = 6;
-    COLORS = malloc(W*COLORS_COUNT);
-    i = 0;
-    COLORS[i++] = 0xFF1818FF;   // B originally does not support hex literals actually.
-    COLORS[i++] = 0xFF18FF18;
-    COLORS[i++] = 0xFFFF1818;
-    COLORS[i++] = 0xFFFFFF18;
-    COLORS[i++] = 0xFFFF18FF;
-    COLORS[i++] = 0xFF18FFFF;
-
     i = 0;
     OBJ_X       = i++;
     OBJ_Y       = i++;
