@@ -35,6 +35,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/stack_alloc \
 	$(BUILD)/tests/ternary-side-effect \
 	$(BUILD)/tests/ternary \
+	$(BUILD)/tests/ternary-assign \
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector \
 	$(BUILD)/tests/multiple-postfix \
@@ -59,6 +60,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/stack_alloc.exe \
 	$(BUILD)/tests/ternary-side-effect.exe \
 	$(BUILD)/tests/ternary.exe \
+	$(BUILD)/tests/ternary-assign.exe \
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
 	$(BUILD)/tests/multiple-postfix.exe \
@@ -83,6 +85,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/stack_alloc.rom \
 	$(BUILD)/tests/ternary-side-effect.rom \
 	$(BUILD)/tests/ternary.rom \
+	$(BUILD)/tests/ternary-assign.rom \
 	$(BUILD)/tests/unary_priority.rom \
 	$(BUILD)/tests/vector.rom \
 	$(BUILD)/tests/multiple-postfix.rom \

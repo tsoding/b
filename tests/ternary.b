@@ -1,5 +1,5 @@
 // TODO: broken on uxn
-printn(n) {
+test(n) {
 	extrn printf;
 	printf(
 		"%d:\t%s\n", n,
@@ -13,12 +13,12 @@ printn(n) {
 	);
 }
 main(argc, argv) {
-	printn(0);
-	printn(42);
-	printn(69);
-	printn(96);
-	printn(420);
-	printn(690);
-	printn(1337);
-	printn(42069);
+	test(0);
+	test(42);
+	test(69);
+	test(96);
+	test(420);
+	test(690);
+	test(1337);
+	test(4269);
 }

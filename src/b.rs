@@ -534,8 +534,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
     Some((lhs, lvalue))
 }
 
-#[allow(unused_variables)]
-pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precedence: usize) -> Option<(Arg, bool)> {
+pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
     let (lhs, mut lvalue) = compile_binop_expression(l, c, 0)?;
 
     let mut saved_point = (*l).parse_point;
@@ -543,7 +542,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
 
     while let Some(binop) = Binop::from_assign_token((*l).token) {
         let binop_loc = (*l).loc;
-        let (rhs, _) = compile_assign_expression(l, c, precedence + 1)?;
+        let (rhs, _) = compile_assign_expression(l, c)?;
 
         if !lvalue {
             diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
@@ -573,21 +572,11 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler, precede
         lexer::get_token(l)?;
     }
 
-    (*l).parse_point = saved_point;
-    Some((lhs, lvalue))
-}
-
-pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
-    let (arg, is_lvalue) = compile_assign_expression(l, c, 0)?;
-
-    let saved_point = (*l).parse_point;
-    lexer::get_token(l)?;
-
     if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
         let addr_condition = (*c).func_body.count;
-        push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
+        push_opcode(Op::JmpIfNot{addr: 0, arg: lhs}, (*l).loc, c);
 
         let (if_true, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_true}, (*l).loc, c);
@@ -602,14 +591,18 @@ pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
 
         let addr_after_false = (*c).func_body.count;
-        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg};
+        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg: lhs};
         (*(*c).func_body.items.add(addr_skips_true)).opcode = Op::Jmp      {addr: addr_after_false};
 
         Some((Arg::AutoVar(result), false))
     } else {
         (*l).parse_point = saved_point;
-        Some((arg, is_lvalue))
+        Some((lhs, lvalue))
     }
+}
+
+pub unsafe fn compile_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
+    compile_assign_expression(l, c)
 }
 
 pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
@@ -864,7 +857,6 @@ pub struct Compiler {
 }
 
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
-    scope_push(&mut (*c).vars);          // begin global scope
     'def: loop {
         lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
@@ -876,8 +868,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
-        if (*l).token == Token::OParen { // CallTarget definition
-            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name});
+
+        if (*l).token == Token::OParen { // Function definition
+            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
@@ -932,7 +925,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_token(l, Token::SemiColon)?;
         }
     }
-    scope_pop(&mut (*c).vars);          // end global scope
 
     Some(())
 }
@@ -1021,6 +1013,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut c: Compiler = zeroed();
     c.target = target;
     let mut input: String_Builder = zeroed();
+
+    scope_push(&mut c.vars);          // begin global scope
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
 
@@ -1031,6 +1025,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
         compile_program(&mut l, &mut c)?;
     }
+    scope_pop(&mut c.vars);          // end global scope
 
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
