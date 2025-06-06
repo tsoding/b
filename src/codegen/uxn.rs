@@ -361,7 +361,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     load_arg(*args.items.add(i), output, assembler);
                     write_lit_stz2(output, FIRST_ARG + (i as u8) * 2)
                 }
-                call_arg(fun, op.loc, output, assembler);
+                call_arg(fun, output, assembler);
                 write_lit_ldz2(output, FIRST_ARG);
                 store_auto(output, result);
             }
@@ -497,14 +497,15 @@ pub unsafe fn write_infinite_loop(output: *mut String_Builder) {
     write_short(output, 0xfffd);
 }
 
-pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assembler: *mut Assembler) {
+pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder, assembler: *mut Assembler) {
     match arg {
         Arg::RefExternal(name) | Arg::External(name) => {
             write_op(output, UxnOp::JSI);
             write_label_rel(output, get_or_create_label_by_name(assembler, name), assembler);
-        },
-        _arg => {
-            missingf!(loc, c!("Indirect calls are not yet supported in uxn\n"));
+        }
+        arg => {
+            load_arg(arg, output, assembler);
+            write_op(output, UxnOp::JSR2);
         }
     };
 }
