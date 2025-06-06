@@ -25,9 +25,9 @@ MEMORY_LEN;
 
 main() {
   extrn malloc, memset, read, printf, getchar, atoi, fflush;
-  auto memory, cursor, len, input_buf, stop, addr_buf, W, _IONBF;
+  auto memory, cursor, len, input_buf, stop, addr_buf, W;
 
-  MEMORY_LEN = 30000; STDIN = 0; _IONBF = 2; BUF_LEN = 512;
+  MEMORY_LEN = 30000; STDIN = 0; BUF_LEN = 512;
 
   W      = &0[1];
   cursor = 0;
