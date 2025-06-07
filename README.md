@@ -24,12 +24,12 @@ Compiler for the B Programming Language implemented in [Crust](https://github.co
 - rustc, fasm, clang
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-. "$HOME/.cargo/env" 
-sudo apt update -y
-sudo apt upgrade -y
-sudo apt-get install -y fasm clang 
-sudo apt-get autoremove -y
+$ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+$ . "$HOME/.cargo/env" 
+$ sudo apt update -y
+$ sudo apt upgrade -y
+$ sudo apt-get install -y fasm clang 
+$ sudo apt-get autoremove -y
 ```
 
 ## Quick Start
