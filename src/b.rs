@@ -60,6 +60,17 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, token: Token) -> Option<()> {
     expect_token(l, token)
 }
 
+pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler, token: Token) -> Option<()> {
+    let saved_point = (*l).parse_point;
+    lexer::get_token(l)?;
+    if let None = expect_token(l, token) {
+        (*l).parse_point = saved_point;
+        bump_error_count(c)
+    } else {
+        Some(())
+    }
+}
+
 pub unsafe fn get_and_expect_tokens(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
     lexer::get_token(l)?;
     expect_tokens(l, clexes)
@@ -888,7 +899,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             compile_expression(l, c)?;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
-            get_and_expect_token(l, Token::SemiColon)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             Some(())
         }
     }
