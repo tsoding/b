@@ -81,7 +81,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
@@ -90,16 +90,20 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     sb_appendf(output, c!("    mov x29, sp\n"), name);
     sb_appendf(output, c!("    sub sp, sp, %zu\n"), stack_size);
     assert!(auto_vars_count >= params_count);
-    // TODO: add support for the rest of the parameters.
+    
     const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
-    if params_count > REGISTERS.len() {
-        missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
-    }
     for i in 0..params_count {
-        let reg = (*REGISTERS)[i];
-        let index = i + 1;
-        sb_appendf(output, c!("    str %s, [x29, -%zu]\n"), reg, index*8);
+        let below_index = i + 1;
+        let reg = if i < REGISTERS.len() { (*REGISTERS)[i] } else { c!("x8") };
+
+        if i >= REGISTERS.len() {
+            let above_index = i - REGISTERS.len();
+            sb_appendf(output, c!("    ldr x8, [x29, 2*8 + %zu]\n"), above_index*8);
+        }
+
+        sb_appendf(output, c!("    str %s, [x29, -%zu]\n"), reg, below_index*8);
     }
+
     for i in 0..body.len() {
         sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         let op = (*body)[i];
@@ -245,16 +249,25 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 sb_appendf(output, c!("    str x1, [x0]\n"));
             },
             Op::Funcall {result, fun, args} => {
-                if args.count > REGISTERS.len() {
-                    missingf!(op.loc, c!("Too many function call arguments. We support only %zu but %zu were provided\n"), REGISTERS.len(), args.count);
-                }
-                for i in 0..args.count {
+                let reg_args_count = if args.count <= REGISTERS.len() { args.count } else { REGISTERS.len() };
+                for i in 0..reg_args_count {
                     let reg = (*REGISTERS)[i];
                     load_arg_to_reg(*args.items.add(i), reg, output, op.loc);
                 }
+
+                let stack_args_count = args.count - reg_args_count;
+                let stack_args_size = align_bytes(stack_args_count*8, 16);
+                sb_appendf(output, c!("    sub sp, sp, %zu\n"), stack_args_size);
+                for i in reg_args_count..args.count {
+                    let above_index = i - reg_args_count;
+                    load_arg_to_reg(*args.items.add(i), c!("x8"), output, op.loc);
+                    sb_appendf(output, c!("    str x8, [sp, %zu]\n"), above_index*8);
+                }
+
                 call_arg(fun, op.loc, output);
 
                 sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
+                sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_args_size);
             },
             Op::Asm {args} => {
                 for i in 0..args.count {
