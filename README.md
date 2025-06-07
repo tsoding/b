@@ -36,7 +36,7 @@ sudo apt-get autoremove -y
 
 ```console
 $ make
-$ ./build/b -run ./examples/01_hello_world.b
+$ ./build/b -run ./examples/10_hello_world.b
 ```
 
 ### Uxn
