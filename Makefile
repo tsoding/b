@@ -18,6 +18,7 @@ RSS=\
 
 LINUX_TESTS=\
 	$(BUILD)/tests/args6 \
+	$(BUILD)/tests/argv \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
@@ -44,6 +45,7 @@ LINUX_TESTS=\
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
+	$(BUILD)/tests/argv.exe \
 	$(BUILD)/tests/compare.exe \
 	$(BUILD)/tests/deref_assign.exe \
 	$(BUILD)/tests/divmod.exe \
@@ -70,6 +72,7 @@ MINGW32_TESTS=\
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
+	$(BUILD)/tests/argv.rom \
 	$(BUILD)/tests/compare.rom \
 	$(BUILD)/tests/deref_assign.rom \
 	$(BUILD)/tests/divmod.rom \
@@ -140,7 +143,7 @@ $(BUILD)/tests:
 test-uxn: $(UXN_TESTS)
 
 $(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/libb.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t uxn -o $@ $< ./std/test.b ./std/libb.b ./std/uxn.b
+	$(BUILD)/b -t uxn -o $@ $< ./std/test.b -stdlib
 	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html

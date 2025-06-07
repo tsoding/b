@@ -1093,8 +1093,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
+    let stdlib      = flag_bool(c!("stdlib"), false, c!("Include the B standard library"));
 
-    let mut input_paths: Array<*mut c_char> = zeroed();
+    let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*mut c_char> = zeroed();
     'args: while argc > 0 {
         if !flag_parse(argc, argv) {
@@ -1149,6 +1150,20 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         usage();
         fprintf(stderr(), c!("ERROR: no inputs are provided\n"));
         return None;
+    }
+
+    if *stdlib {
+        da_append(&mut input_paths, c!("std/libb.b"));
+        match target {
+            Target::IR                => (),
+            Target::Uxn               => da_append(&mut input_paths, c!("std/uxn.b")),
+            Target::Fasm_x86_64_Linux => da_append(&mut input_paths, c!("std/fasm_x86_64_linux.b")),
+            _ => {
+                usage();
+                fprintf(stderr(), c!("ERROR: target `%s` has no standard library\n"), *target_name);
+                return None;
+            },
+        }
     }
 
     let mut c: Compiler = zeroed();

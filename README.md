@@ -33,7 +33,7 @@ $ ./build/b -run ./examples/01_hello_world.b
 The compiler supports [Uxn](https://100r.co/site/uxn.html) target. Make sure you have `uxnemu` in your `$PATH` if you want to use `-run` flag.
 
 ```console
-$ ./build/b -t uxn -run ./examples/01_hello_world.b ./std/uxn.b ./std/libb.b
+$ ./build/b -t uxn -run ./examples/10_hello_world.b -stdlib
 ```
 
 Also check out more examples at [./examples/](./examples/).
