@@ -60,6 +60,11 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, token: Token) -> Option<()> {
     expect_token(l, token)
 }
 
+pub unsafe fn get_and_expect_tokens(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
+    lexer::get_token(l)?;
+    expect_tokens(l, clexes)
+}
+
 pub unsafe fn expect_token_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
     expect_token(l, Token::ID)?;
     if strcmp((*l).string, id) != 0 {
@@ -125,6 +130,7 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
+// TODO: Don't need lexer as input anymore if we just use the provided loc for diagf!
 pub unsafe fn declare_var(l: *mut Lexer, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
     let scope = da_last_mut(vars).expect("There should be always at least the global scope");
     let existing_var = find_var_near(scope, name);
@@ -318,6 +324,24 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
     (*t).count
 }
 
+
+pub unsafe fn compile_string(l: *mut Lexer, c: *mut Compiler) -> usize {
+     // TODO: communicate this assumption to the caller of the function
+    assert!((*l).token == Token::String);
+
+    let offset = (*c).data.count;
+    let string_len = strlen((*l).string);
+    da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
+    // TODO: Strings in B are not NULL-terminated.
+    // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
+    // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
+    // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
+    // libc. While the language is still in development we gonna terminate it with 0. We will make it
+    // "spec complaint" later.
+    da_append(&mut (*c).data, 0); // NULL-terminator
+    offset
+}
+
 pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
     lexer::get_token(l)?;
     let arg = match (*l).token {
@@ -404,20 +428,11 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             }
         }
         Token::String => {
-            let offset = (*c).data.count;
-            let string_len = strlen((*l).string);
-            da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
-            // TODO: Strings in B are not NULL-terminated.
-            // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
-            // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
-            // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
-            // libc. While the language is still in development we gonna terminate it with 0. We will make it
-            // "spec complaint" later.
-            da_append(&mut (*c).data, 0); // NULL-terminator
+            let offset = compile_string(l, c);
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
-            diagf!((*l).loc, c!("Expected start of a primary expression by got %s\n"), lexer::display_token((*l).token));
+            diagf!((*l).loc, c!("Expected start of a primary expression but got %s\n"), lexer::display_token((*l).token));
             None
         }
     };
@@ -618,8 +633,7 @@ pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         loop {
             let (expr, _) = compile_expression(l, c)?;
             da_append(&mut args, expr);
-            lexer::get_token(l)?;
-            expect_tokens(l, &[Token::CParen, Token::Comma])?;
+            get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
             match (*l).token {
                 Token::CParen => break,
                 Token::Comma => continue,
@@ -663,29 +677,42 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             scope_pop(&mut (*c).vars);
             Some(())
         }
-        Token::Extrn | Token::Auto => {
-            let extrn = (*l).token == Token::Extrn;
-            'vars: loop {
+        Token::Extrn => {
+            while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                let loc = (*l).loc;
-                let storage = if extrn {
-                    name_declare_if_not_exists(&mut (*c).extrns, name);
-                    Storage::External{name}
-                } else {
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    Storage::Auto{index}
-                };
-                declare_var(l, &mut (*c).vars, name, loc, storage)?;
-                lexer::get_token(l)?;
-                expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
-                match (*l).token {
-                    Token::SemiColon => break 'vars,
-                    Token::Comma => continue 'vars,
-                    _ => unreachable!(),
+                name_declare_if_not_exists(&mut (*c).extrns, name);
+                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::External {name})?;
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+            }
+            Some(())
+        }
+        Token::Auto => {
+            while (*l).token != Token::SemiColon {
+                get_and_expect_token(l, Token::ID)?;
+                // TODO: Automatic variable names should only need function lifetime.
+                //   Could use .arena_labels here but naming would be confusing.
+                //   Rename .arena_labels to indicate function lifetime first?
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::Auto {index})?;
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
+                if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
+                    let size = (*l).int_number as usize;
+                    if size == 0 {
+                        missingf!((*l).loc, c!("It's unclear how to compile automatic vector of size 0\n"));
+                    }
+                    for _ in 0..size {
+                        allocate_auto_var(&mut (*c).auto_vars_ator);
+                    }
+                    // TODO: Here we assume the stack grows down. Should we
+                    //   instead find a way for the target to decide that?
+                    //   See TODO(2025-06-05 17:45:36)
+                    let arg = Arg::RefAutoVar(index + size);
+                    push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
+                    get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-
             Some(())
         }
         Token::If => {
@@ -737,8 +764,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::Return => {
-            lexer::get_token(l)?;
-            expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
+            get_and_expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
                 push_opcode(Op::Return {arg: None}, (*l).loc, c);
             } else if (*l).token == Token::OParen {
@@ -777,8 +803,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     }
                 }
 
-                lexer::get_token(l)?;
-                expect_tokens(l, &[Token::Comma, Token::CParen])?;
+                get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
             }
             get_and_expect_token(l, Token::SemiColon)?;
 
@@ -884,6 +909,21 @@ pub struct Func {
 }
 
 #[derive(Clone, Copy)]
+pub struct Global {
+    name: *const c_char,
+    values: Array<ImmediateValue>,
+    is_vec: bool,
+    minimum_size: usize,
+}
+
+#[derive(Clone, Copy)]
+pub enum ImmediateValue {
+    Name(*const c_char),
+    Literal(u64),
+    DataOffset(usize),
+}
+
+#[derive(Clone, Copy)]
 pub struct Switch {
     pub jmp_addr: usize,
     pub value: Arg,
@@ -901,7 +941,7 @@ pub struct Compiler {
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
-    pub globals: Array<*const c_char>,
+    pub globals: Array<Global>,
     pub arena_names: Arena,
     pub arena_labels: Arena,
     pub target: Target,
@@ -935,8 +975,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
-                    lexer::get_token(l)?;
-                    expect_tokens(l, &[Token::CParen, Token::Comma])?;
+                    get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
                     match (*l).token {
                         Token::CParen => break 'params,
                         Token::Comma => continue 'params,
@@ -971,9 +1010,60 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
-            name_declare_if_not_exists(&mut (*c).globals, name);
             declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
-            get_and_expect_token(l, Token::SemiColon)?;
+
+            let mut global = Global {
+                name,
+                values: zeroed(),
+                is_vec: false,
+                minimum_size: 0,
+            };
+
+            // TODO: This code is ugly
+            // couldn't find a better way to write it while keeping accurate error messages
+            get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+
+            if (*l).token == Token::OBracket {
+                global.is_vec = true;
+                get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
+                if (*l).token == Token::IntLit {
+                    global.minimum_size = (*l).int_number as usize;
+                    get_and_expect_token(l, Token::CBracket)?;
+                }
+                get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+            }
+
+            while (*l).token != Token::SemiColon {
+                let value = match (*l).token {
+                    Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
+                    Token::String => ImmediateValue::DataOffset(compile_string(l, c)),
+                    Token::ID => {
+                        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                        let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
+                        let var = find_var_near(scope, name);
+                        if var.is_null() {
+                            diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
+                            return None;
+                        }
+                        ImmediateValue::Name(name)
+                    }
+                    _ => unreachable!()
+                };
+                da_append(&mut global.values, value);
+
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                if (*l).token == Token::Comma {
+                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                } else {
+                    break;
+                }
+            }
+
+            if !global.is_vec && global.values.count == 0 {
+                da_append(&mut global.values, ImmediateValue::Literal(0));
+            }
+            da_append(&mut (*c).globals, global)
+
         }
     }
 
