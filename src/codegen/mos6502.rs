@@ -1,55 +1,52 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Func, OpWithLocation, Op, Compiler, Binop, Arg};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg};
 use crate::nob::*;
 use crate::missingf;
 use crate::crust::libc::*;
 use crate::Loc;
 
 const ADC_IMM:   u8 = 0x69;
+const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
-const BEQ:       u8 = 0xF0;
 const BNE:       u8 = 0xD0;
 const CLC:       u8 = 0x18;
 const CMP_IMM:   u8 = 0xC9;
+const CMP_ZP:    u8 = 0xC5;
 const CPY_IMM:   u8 = 0xC0;
-const DEY:       u8 = 0x88;
-const INY:       u8 = 0xC8;
-const TAX:       u8 = 0xAA;
-const TXA:       u8 = 0x8A;
-const TAY:       u8 = 0xA8;
-const TYA:       u8 = 0x98;
-const TSX:       u8 = 0xBA;
-const TXS:       u8 = 0x9A;
+const CPY_ZP:    u8 = 0xC4;
+const INX:       u8 = 0xE8;
 const JMP_ABS:   u8 = 0x4C;
 const JMP_IND:   u8 = 0x6C;
 const JSR:       u8 = 0x20;
-const LDA_ABS:   u8 = 0xAD;
+const LDA_IMM:   u8 = 0xA9;
 const LDA_IND_X: u8 = 0xA1;
 const LDA_IND_Y: u8 = 0xB1;
-const LDA_IMM:   u8 = 0xA9;
 const LDA_X:     u8 = 0xBD;
-const LDX_ABS:   u8 = 0xAE;
 const LDX_IMM:   u8 = 0xA2;
-const LDY_ABS:   u8 = 0xAC;
 const LDY_IMM:   u8 = 0xA0;
 const LDY_X:     u8 = 0xBC;
+const PHA:       u8 = 0x48;
+const PLA:       u8 = 0x68;
+const RTS:       u8 = 0x60;
 const SBC_IMM:   u8 = 0xE9;
 const STA_X:     u8 = 0x9D;
-const STA_IND_Y: u8 = 0x91;
 const STA_ZP:    u8 = 0x85;
-const STX_ZP:    u8 = 0x86;
 const STY_ZP:    u8 = 0x84;
-const PHA:       u8 = 0x48;
-const RTS:       u8 = 0x60;
+const TAX:       u8 = 0xAA;
+const TAY:       u8 = 0xA8;
+const TSX:       u8 = 0xBA;
+const TXA:       u8 = 0x8A;
+const TXS:       u8 = 0x9A;
+const TYA:       u8 = 0x98;
 
 // zero page addresses
 const ZP_DEREF_0: u8 = 0;
 const ZP_DEREF_1: u8 = 1;
 const ZP_OP_TMP_0: u8 = 3;
 const ZP_OP_TMP_1: u8 = 4;
-const ZP_STACK_0: u8 = 5;
-const ZP_STACK_1: u8 = 6;
+
+const STACK_PAGE: u16 = 0x0100;
 
 #[derive(Clone, Copy)]
 pub enum RelocationKind {
@@ -129,26 +126,14 @@ pub unsafe fn add_reloc(output: *mut String_Builder, kind: RelocationKind, asm: 
 pub unsafe fn load_auto_var(output: *mut String_Builder, index: usize, asm: *mut Assembler) {
     // save current stack pointer
     write_byte(output, TSX);
-    write_byte(output, STX_ZP);
-    write_byte(output, ZP_STACK_0);
-
-    // index relative to stack pointer
-    write_byte(output, LDY_IMM);
-    write_byte(output, (*asm).frame_sz - index as u8 * 2 - 1);
 
     // load low byte
-    write_byte(output, LDA_IND_Y);
-    write_byte(output, ZP_STACK_0);
-
-    write_byte(output, TAX);
+    write_byte(output, LDA_X);
+    write_word(output, STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2 - 1);
 
     // load high byte
-    write_byte(output, INY);
-    write_byte(output, LDA_IND_Y);
-    write_byte(output, ZP_STACK_0);
-
-    write_byte(output, TAY);
-    write_byte(output, TXA);
+    write_byte(output, LDY_X);
+    write_word(output, STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2);
 }
 
 pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, asm: *mut Assembler) {
@@ -178,9 +163,9 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, asm: *mut Assemble
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
         },
-        Arg::RefAutoVar(index)  => unimplemented!("RefAutoVar"),
-        Arg::RefExternal(name)  => unimplemented!("RefExternal"),
-        Arg::External(name)     => unimplemented!("External"),
+        Arg::RefAutoVar(_index)  => unimplemented!("RefAutoVar"),
+        Arg::RefExternal(_name)  => unimplemented!("RefExternal"),
+        Arg::External(_name)     => unimplemented!("External"),
         Arg::AutoVar(index)     => {
             load_auto_var(output, index, asm);
         },
@@ -204,67 +189,79 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, asm: *mut Assemble
 pub unsafe fn store_auto(output: *mut String_Builder, index: usize, asm: *mut Assembler) {
     // save current stack pointer
     write_byte(output, TSX);
-    write_byte(output, STX_ZP);
-    write_byte(output, ZP_STACK_0);
-
-    // [A;Y] -> [X;A]
-    write_byte(output, TAX);
-    write_byte(output, TYA);
-
-    // index relative to stack pointer
-    write_byte(output, LDY_IMM);
-    write_byte(output, (*asm).frame_sz - index as u8 * 2);
-
-    // save high byte
-    write_byte(output, STA_IND_Y);
-    write_byte(output, ZP_STACK_0);
 
     // save low byte
-    write_byte(output, TXA);
-    write_byte(output, DEY);
-    write_byte(output, STA_IND_Y);
-    write_byte(output, ZP_STACK_0);
+    write_byte(output, STA_X);
+    write_word(output, STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2 - 1);
+
+    // save high byte
+    write_byte(output, TYA);
+    write_byte(output, STA_X);
+    write_word(output, STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2);
 }
 
-pub unsafe fn add_sp(output: *mut String_Builder, bytes: u8) {
-    write_byte(output, TSX);
-    write_byte(output, TXA);
-    write_byte(output, CLC);
-    write_byte(output, ADC_IMM);
-    write_byte(output, bytes);
-    write_byte(output, TAX);
-    write_byte(output, TXS);
+// TODO: can this be done better?
+pub unsafe fn add_sp(output: *mut String_Builder, bytes: u8, asm: *mut Assembler) {
+    (*asm).frame_sz -= bytes;
+    // if bytes < 8 {
+    for _ in 0 .. bytes {
+        write_byte(output, PLA);
+    }
+    // } else {
+    //     write_byte(output, TSX);
+    //     write_byte(output, TXA);
+    //     write_byte(output, CLC);
+    //     write_byte(output, ADC_IMM);
+    //     write_byte(output, bytes);
+    //     write_byte(output, TAX);
+    //     write_byte(output, TXS);
+    // }
 }
-pub unsafe fn sub_sp(output: *mut String_Builder, bytes: u8) {
-    write_byte(output, TSX);
-    write_byte(output, TXA);
-    write_byte(output, CLC);
-    write_byte(output, SBC_IMM);
-    write_byte(output, bytes);
-    write_byte(output, TAX);
-    write_byte(output, TXS);
+// cannot modify Y:A here, as they hold first argument
+pub unsafe fn sub_sp(output: *mut String_Builder, bytes: u8, asm: *mut Assembler) {
+    (*asm).frame_sz += bytes;
+    // if bytes < 8 {
+    for _ in 0 .. bytes {
+        write_byte(output, PHA);
+    }
+    // } else {
+    //     write_byte(output, TSX);
+    //     write_byte(output, TXA);
+    //     write_byte(output, CLC);
+    //     write_byte(output, SBC_IMM);
+    //     write_byte(output, bytes);
+    //     write_byte(output, TAX);
+    //     write_byte(output, TXS);
+    // }
 }
-pub unsafe fn push16(output: *mut String_Builder) {
+pub unsafe fn push16(output: *mut String_Builder, asm: *mut Assembler) {
+    (*asm).frame_sz += 2;
+
     write_byte(output, TAX);
     write_byte(output, TYA);
+    // push high byte first
     write_byte(output, PHA);
     write_byte(output, TXA);
+    // then low
     write_byte(output, PHA);
+}
+pub unsafe fn pop16_discard(output: *mut String_Builder, asm: *mut Assembler) {
+    (*asm).frame_sz -= 2;
+
+    write_byte(output, PLA);
+    write_byte(output, PLA);
 }
 
 pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: u16,
                                 params_count: usize, auto_vars_count: usize,
                                 body: *const [OpWithLocation], output: *mut String_Builder,
                                 asm: *mut Assembler) {
+    (*asm).frame_sz = 0;
     let fun_addr = (*output).count as u16;
     da_append(&mut (*asm).labels, Label {
         name,
         addr: fun_addr,
     });
-
-    printf(c!("TODO: passing arguments not implemented yet."));
-    // for i in 0..params_count {
-    // }
 
     // prepare labels for each op and the end of the function
     let mut op_addresses: Array<usize> = zeroed();
@@ -278,9 +275,35 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
     // TODO: use params_count, auto_vars_count
     assert!(auto_vars_count*2 < 256);
     let stack_size = (auto_vars_count * 2) as u8;
-    sub_sp(output, stack_size);
-    (*asm).frame_sz = stack_size as u8;
+    sub_sp(output, stack_size, asm);
 
+    for i in 0..(params_count as u16) {
+        write_byte(output, TSX);
+        if i == 0 {
+            // low
+            write_byte(output, STA_X);
+            write_word(output, STACK_PAGE + stack_size as u16 - 2*i - 1);
+
+            // high
+            write_byte(output, TYA);
+            write_byte(output, STA_X);
+            write_word(output, STACK_PAGE + stack_size as u16 - 2*i);
+            continue;
+        }
+
+        // low
+        write_byte(output, LDA_X);
+        write_word(output, STACK_PAGE + stack_size as u16 + 2 + 2*i + 1);
+        write_byte(output, STA_X);
+        write_word(output, STACK_PAGE + stack_size as u16 - 2*i - 1);
+
+        // high
+        write_byte(output, LDA_X);
+        write_word(output, STACK_PAGE + stack_size as u16 + 2 + 2*i + 2);
+        write_byte(output, STA_X);
+        write_word(output, STACK_PAGE + stack_size as u16 - 2*i);
+    }
+    
     for i in 0..body.len() {
         let addr_idx = *op_addresses.items.add(i);
         *(*asm).addresses.items.add(addr_idx) = (*output).count as u16; // update op address
@@ -296,7 +319,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
             },
             Op::Negate {result: _, arg: _} => missingf!(name_loc, c!("implement Negate\n")),
             Op::UnaryNot{result: _, arg: _} => missingf!(name_loc, c!("implement UnaryNot\n")),
-            Op::Binop {binop, index: _, lhs, rhs} => {
+            Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
                     Binop::BitOr => missingf!(name_loc, c!("implement BitOr\n")),
                     Binop::BitAnd => missingf!(name_loc, c!("implement BitAnd\n")),
@@ -326,16 +349,56 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                     Binop::Mult => missingf!(name_loc, c!("implement Mult\n")),
                     Binop::Less => missingf!(name_loc, c!("implement Less\n")),
                     Binop::Greater => missingf!(name_loc, c!("implement Greater\n")),
-                    Binop::Equal => missingf!(name_loc, c!("implement Equal\n")),
+                    Binop::Equal => {
+                        load_arg(rhs, output, asm);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_OP_TMP_0);
+                        write_byte(output, STY_ZP);
+                        write_byte(output, ZP_OP_TMP_1);
+                        load_arg(lhs, output, asm);
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, CMP_ZP);
+                        write_byte(output, ZP_OP_TMP_0);
+                        write_byte(output, BNE);
+                        write_byte(output, 5);
+
+                        write_byte(output, CPY_ZP);
+                        write_byte(output, ZP_OP_TMP_1);
+                        write_byte(output, BNE);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+                        write_byte(output, TXA);
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                     Binop::NotEqual => missingf!(name_loc, c!("implement NotEqual\n")),
                     Binop::GreaterEqual => missingf!(name_loc, c!("implement GreaterEqual\n")),
                     Binop::LessEqual => missingf!(name_loc, c!("implement LessEqual\n")),
                 }
+                store_auto(output, index, asm);
             },
-            Op::Funcall{result: _, fun, args} => {
+            Op::Funcall{result, fun, args} => {
+                match fun {
+                    Arg::RefExternal(_) | Arg::External(_) => {},
+                    arg => {
+                        load_arg(arg, output, asm);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_DEREF_0);
+                        write_byte(output, STY_ZP);
+                        write_byte(output, ZP_DEREF_1);
+                    }
+                }
+                
                 for i in (0..args.count).rev() {
                     load_arg(*args.items.add(i), output, asm);
-                    push16(output);
+                    // first arg in Y:A to be compatible with wozmon routines
+                    if i != 0 {
+                        push16(output, asm);
+                    }
                 }
                 match fun {
                     Arg::RefExternal(name) | Arg::External(name) => {
@@ -343,12 +406,6 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                         add_reloc(output, RelocationKind::Label{name}, asm);
                     },
                     arg => {
-                        load_arg(arg, output, asm);
-                        write_byte(output, STA_ZP);
-                        write_byte(output, ZP_DEREF_0);
-                        write_byte(output, STY_ZP);
-                        write_byte(output, ZP_DEREF_1);
-
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
                         write_byte(output, JSR);
                         write_word(output, code_start + (*output).count as u16 + 5);
@@ -358,9 +415,23 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                         write_word(output, 0);
                     },
                 }
+                if args.count > 1 {
+                    write_byte(output, TAX);
+                    // clear stack
+                    for i in 0 .. args.count {
+                        if i == 0 {
+                            continue;
+                        }
+                        pop16_discard(output, asm);
+                    }
+                    write_byte(output, TXA);
+                }
+                store_auto(output, result, asm);
             },
             Op::Asm {args: _} => unreachable!(),
             Op::JmpIfNot{addr, arg} => {
+                load_arg(arg, output, asm);
+
                 write_byte(output, CMP_IMM);
                 write_byte(output, 0);
 
@@ -386,7 +457,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
     let addr_idx = *op_addresses.items.add(body.len());
     *(*asm).addresses.items.add(addr_idx) = (*output).count as u16; // update op address
 
-    add_sp(output, stack_size);
+    add_sp(output, stack_size, asm);
     write_byte(output, RTS);
 }
 
@@ -436,6 +507,68 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, code_start: u16,
     }
 }
 
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char],
+                              funcs: *const [Func], globals: *const [Global], asm: *mut Assembler) {
+    'skip_function_or_global: for i in 0..extrns.len() {
+        // assemble a few "stdlib" functions which can't be programmed in B
+        let name = (*extrns)[i];
+        for j in 0..funcs.len() {
+            let func = (*funcs)[j];
+            if strcmp(func.name, name) == 0 {
+                continue 'skip_function_or_global
+            }
+        }
+        for j in 0..globals.len() {
+            let global = (*globals)[j].name;
+            if strcmp(global, name) == 0 {
+                continue 'skip_function_or_global
+            }
+        }
+        // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it
+        if strcmp(name, c!("char")) == 0 {
+            // ch = char(string, i);
+            // returns the ith character in a string pointed to by string, 0 based
+
+            let fun_addr = (*output).count as u16;
+            da_append(&mut (*asm).labels, Label {
+                name,
+                addr: fun_addr,
+            });
+
+            write_byte(output, TSX);
+            write_byte(output, CLC);
+            write_byte(output, ADC_X);
+            write_word(output, STACK_PAGE + 2 + 1); // low
+
+            // load address to buffer in ZP to dereference, because registers
+            // only 8 bits
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_DEREF_0);
+
+            write_byte(output, TYA);
+            write_byte(output, ADC_X);
+            write_word(output, STACK_PAGE + 2 + 2); // high
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_DEREF_1);
+
+            write_byte(output, LDX_IMM);
+            write_byte(output, 0);
+
+            // A = ((0))
+            write_byte(output, LDA_IND_X);
+            write_byte(output, ZP_DEREF_0);
+
+            // clear Y
+            write_byte(output, LDY_IMM);
+            write_byte(output, 0);
+            write_byte(output, RTS);
+        } else {
+            fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
+            abort();
+        }
+    }
+}
+
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     for i in 0..data.len() {
         write_byte(output, (*data)[i]);
@@ -443,16 +576,12 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 }
 
 pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
-    write_byte(output, LDA_IMM);
-    write_byte(output, 0x01); // stack page
-    write_byte(output, STA_ZP);
-    write_byte(output, ZP_STACK_1);
-
     write_byte(output, JSR);
     add_reloc(output, RelocationKind::Label{name: c!("main")}, asm);
     write_byte(output, JMP_IND);
     write_word(output, 0xFFFC);
 }
+
 
 pub const LOAD_OFFSET: u16 = 0xE000;
 
@@ -462,6 +591,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     generate_entry(output, &mut asm);
 
     generate_funcs(output, code_start, da_slice((*c).funcs), &mut asm);
+    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
 
     let data_start = code_start + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
