@@ -203,19 +203,19 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize, asm: *mut As
 // TODO: can this be done better?
 pub unsafe fn add_sp(output: *mut String_Builder, bytes: u8, asm: *mut Assembler) {
     (*asm).frame_sz -= bytes;
-    // if bytes < 8 {
-    for _ in 0 .. bytes {
-        write_byte(output, PLA);
+    if bytes < 8 {
+        for _ in 0 .. bytes {
+            write_byte(output, PLA);
+        }
+    } else {
+        write_byte(output, TSX);
+        write_byte(output, TXA);
+        write_byte(output, CLC);
+        write_byte(output, ADC_IMM);
+        write_byte(output, bytes);
+        write_byte(output, TAX);
+        write_byte(output, TXS);
     }
-    // } else {
-    //     write_byte(output, TSX);
-    //     write_byte(output, TXA);
-    //     write_byte(output, CLC);
-    //     write_byte(output, ADC_IMM);
-    //     write_byte(output, bytes);
-    //     write_byte(output, TAX);
-    //     write_byte(output, TXS);
-    // }
 }
 // cannot modify Y:A here, as they hold first argument
 pub unsafe fn sub_sp(output: *mut String_Builder, bytes: u8, asm: *mut Assembler) {
@@ -596,6 +596,5 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     let data_start = code_start + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
 
-    // generate_globals(output, da_slice((*c).globals), &mut assembler);
     apply_relocations(output, code_start, data_start, &mut asm);
 }
