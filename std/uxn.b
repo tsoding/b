@@ -57,12 +57,12 @@ _start_with_arguments() {
 }
 
 _start() {
-    extrn stdout, stderr;
+    extrn stdout, stderr; /* override the libb defaults */
+    stdout = 0;
+    stderr = 1;
     extrn main, uxn_dei, uxn_deo2;
     __alloc_ptr = 0x8000;
     _args_items = 0x7f00; /* 128 arguments ought to be enough for everyone */
-    stdout = 0;
-    stderr = 1;
     _prog_name = "-"; /* we don't have access to it */
     *_args_items = _prog_name;
     _args_count = 1;
