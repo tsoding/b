@@ -130,6 +130,7 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
+// TODO: Don't need lexer as input anymore if we just use the provided loc for diagf!
 pub unsafe fn declare_var(l: *mut Lexer, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
     let scope = da_last_mut(vars).expect("There should be always at least the global scope");
     let existing_var = find_var_near(scope, name);
@@ -431,7 +432,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
-            diagf!((*l).loc, c!("Expected start of a primary expression by got %s\n"), lexer::display_token((*l).token));
+            diagf!((*l).loc, c!("Expected start of a primary expression but got %s\n"), lexer::display_token((*l).token));
             None
         }
     };
@@ -676,28 +677,42 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             scope_pop(&mut (*c).vars);
             Some(())
         }
-        Token::Extrn | Token::Auto => {
-            let extrn = (*l).token == Token::Extrn;
-            'vars: loop {
+        Token::Extrn => {
+            while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                let loc = (*l).loc;
-                let storage = if extrn {
-                    name_declare_if_not_exists(&mut (*c).extrns, name);
-                    Storage::External{name}
-                } else {
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    Storage::Auto{index}
-                };
-                declare_var(l, &mut (*c).vars, name, loc, storage)?;
+                name_declare_if_not_exists(&mut (*c).extrns, name);
+                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
-                match (*l).token {
-                    Token::SemiColon => break 'vars,
-                    Token::Comma => continue 'vars,
-                    _ => unreachable!(),
+            }
+            Some(())
+        }
+        Token::Auto => {
+            while (*l).token != Token::SemiColon {
+                get_and_expect_token(l, Token::ID)?;
+                // TODO: Automatic variable names should only need function lifetime.
+                //   Could use .arena_labels here but naming would be confusing.
+                //   Rename .arena_labels to indicate function lifetime first?
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::Auto {index})?;
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
+                if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
+                    let size = (*l).int_number as usize;
+                    if size == 0 {
+                        missingf!((*l).loc, c!("It's unclear how to compile automatic vector of size 0\n"));
+                    }
+                    for _ in 0..size {
+                        allocate_auto_var(&mut (*c).auto_vars_ator);
+                    }
+                    // TODO: Here we assume the stack grows down. Should we
+                    //   instead find a way for the target to decide that?
+                    //   See TODO(2025-06-05 17:45:36)
+                    let arg = Arg::RefAutoVar(index + size);
+                    push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
+                    get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-
             Some(())
         }
         Token::If => {
