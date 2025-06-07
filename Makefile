@@ -139,8 +139,8 @@ $(BUILD)/tests:
 
 test-uxn: $(UXN_TESTS)
 
-$(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t uxn -o $@ $< ./std/test.b ./std/uxn.b
+$(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/libb.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t uxn -o $@ $< ./std/test.b ./std/libb.b ./std/uxn.b
 	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
