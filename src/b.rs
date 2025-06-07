@@ -399,7 +399,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-                return None;
+                return bump_error_count(c).map(|()| (Arg::Bogus, false));
             }
 
             compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
@@ -411,7 +411,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-                return None;
+                return bump_error_count(c).map(|()| (Arg::Bogus, false));
             }
 
             compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
@@ -424,16 +424,12 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
                 diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                return None;
-            }
-
-            let saved_point = (*l).parse_point;
-            lexer::get_token(l)?;
-
-            (*l).parse_point = saved_point;
-            match (*var_def).storage {
-                Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
-                Storage::External{name} => Some((Arg::External(name), true)),
+                bump_error_count(c).map(|()| (Arg::Bogus, true))
+            } else {
+                match (*var_def).storage {
+                    Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
+                    Storage::External{name} => Some((Arg::External(name), true)),
+                }
             }
         }
         Token::String => {
@@ -469,7 +465,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 let loc = (*l).loc;
                 if !is_lvalue {
                     diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-                    return None;
+                    return bump_error_count(c).map(|()| (Arg::Bogus, false));
                 }
 
                 let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
@@ -482,7 +478,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 let loc = (*l).loc;
                 if !is_lvalue {
                     diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-                    return None;
+                    return bump_error_count(c).map(|()| (Arg::Bogus, false));
                 }
 
                 let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
@@ -567,7 +563,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
 
         if !lvalue {
             diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
-            return None;
+            return bump_error_count(c).map(|()| (Arg::Bogus, false));
         }
 
         if let Some(binop) = binop {
@@ -814,7 +810,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         da_append(&mut args, strdup((*l).string));
                     }
                     _ => {
-                        diagf!((*l).loc, c!("ERROR: %s only takes strings"), (*l).string);
+                        diagf!((*l).loc, c!("ERROR: %s only takes strings\n"), (*l).string);
+                        bump_error_count(c)?;
                     }
                 }
 
@@ -826,35 +823,35 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::Case => {
-            let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) else {
-                diagf!((*l).loc, c!("case label outside of switch\n"));
-                return None;
-            };
-
             let case_loc = (*l).loc;
             lexer::get_token(l);
             expect_tokens(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
             let case_value = (*l).int_number;
             get_and_expect_token(l, Token::Colon)?;
 
-            let addr = (*c).func_body.count;
-            push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
-            push_opcode(Op::Binop{
-                binop: Binop::Equal,
-                index: (*switch_frame).cond,
-                lhs: (*switch_frame).value,
-                rhs: Arg::Literal(case_value)
-            }, case_loc, c);
-            push_opcode(Op::JmpIfNot {
-                addr: 0,
-                arg: Arg::AutoVar((*switch_frame).cond)
-            }, case_loc, c);
+            if let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) {
+                let addr = (*c).func_body.count;
+                push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
+                push_opcode(Op::Binop{
+                    binop: Binop::Equal,
+                    index: (*switch_frame).cond,
+                    lhs: (*switch_frame).value,
+                    rhs: Arg::Literal(case_value)
+                }, case_loc, c);
+                push_opcode(Op::JmpIfNot {
+                    addr: 0,
+                    arg: Arg::AutoVar((*switch_frame).cond)
+                }, case_loc, c);
 
-            let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
-            backpatch_jmp(backpatch, addr + 1);
-            (*switch_frame).jmp_addr = addr + 2;
+                let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
+                backpatch_jmp(backpatch, addr + 1);
+                (*switch_frame).jmp_addr = addr + 2;
 
-            Some(())
+                Some(())
+            } else {
+                diagf!(case_loc, c!("ERROR: case label outside of switch\n"));
+                bump_error_count(c)
+            }
         }
         Token::Switch => {
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -967,7 +964,7 @@ pub const MAX_ERROR_COUNT: usize = 100;
 pub unsafe fn bump_error_count(c: *mut Compiler) -> Option<()> {
     (*c).error_count += 1;
     if (*c).error_count >= MAX_ERROR_COUNT {
-        fprintf(stderr(), c!("TOO MANY ERRORS!\n"));
+        fprintf(stderr(), c!("TOO MANY ERRORS! Fix your program!\n"));
         return None
     }
     Some(())
@@ -1017,7 +1014,8 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let existing_label = find_label(&(*c).func_labels, used_label.name);
                 if existing_label.is_null() {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
-                    return None;
+                    bump_error_count(c)?;
+                    continue;
                 }
                 (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
             }
@@ -1069,7 +1067,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         let var = find_var_near(scope, name);
                         if var.is_null() {
                             diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                            return None;
+                            bump_error_count(c)?;
                         }
                         ImmediateValue::Name(name)
                     }
@@ -1195,6 +1193,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     scope_pop(&mut c.vars);          // end global scope
 
     if c.error_count > 0 {
+        fprintf(stderr(), c!("%zu errors encountered\n"), c.error_count);
         return None
     }
 
