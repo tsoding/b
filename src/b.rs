@@ -161,15 +161,15 @@ pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *c
     ptr::null()
 }
 
-pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
-    let existing_label = find_label(labels, name);
+pub unsafe fn define_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
+    let existing_label = find_label(&(*c).func_labels, name);
     if !existing_label.is_null() {
         diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
         diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
-        return None;
+        return bump_error_count(c);
     }
 
-    da_append(labels, Label {name, loc, addr});
+    da_append(&mut (*c).func_labels, Label {name, loc, addr});
     Some(())
 }
 
@@ -868,7 +868,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let addr = (*c).func_body.count;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
-                    define_label(&mut (*c).func_labels, name, name_loc, addr)?;
+                    define_label(c, name, name_loc, addr)?;
                     return Some(());
                 }
             }
