@@ -366,7 +366,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
     let arg = match (*l).token {
         Token::OParen => {
             let result = compile_expression(l, c)?;
-            get_and_expect_token(l, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
             Some(result)
         }
         Token::Not => {
@@ -463,7 +463,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             Token::OParen => Some((compile_function_call(l, c, arg)?, false)),
             Token::OBracket => {
                 let (offset, _) = compile_expression(l, c)?;
-                get_and_expect_token(l, Token::CBracket)?;
+                get_and_expect_token_but_continue(l, c, Token::CBracket)?;
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
                 let word_size = Arg::Literal(target_word_size((*c).target));
@@ -616,7 +616,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
         push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
 
         let addr_false = (*c).func_body.count;
-        get_and_expect_token(l, Token::Colon)?;
+        get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
         let (if_false, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
@@ -738,10 +738,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::If => {
-            get_and_expect_token(l, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (cond, _) = compile_expression(l, c)?;
-            get_and_expect_token(l, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
 
             let addr_condition = (*c).func_body.count;
             push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, (*l).loc, c);
@@ -770,11 +770,11 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::While => {
             let begin = (*c).func_body.count;
-            get_and_expect_token(l, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (arg, _) = compile_expression(l, c)?;
 
-            get_and_expect_token(l, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
             let condition_jump = (*c).func_body.count;
             push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
@@ -791,8 +791,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 push_opcode(Op::Return {arg: None}, (*l).loc, c);
             } else if (*l).token == Token::OParen {
                 let (arg, _) = compile_expression(l, c)?;
-                get_and_expect_token(l, Token::CParen)?;
-                get_and_expect_token(l, Token::SemiColon)?;
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
                 push_opcode(Op::Return {arg: Some(arg)}, (*l).loc, c);
             } else {
                 unreachable!();
@@ -805,12 +805,12 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
-            get_and_expect_token(l, Token::SemiColon)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
             Some(())
         }
         Token::Asm => {
-            get_and_expect_token(l, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
 
             let mut args: Array<*const c_char> = zeroed();
 
@@ -828,7 +828,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                 get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
             }
-            get_and_expect_token(l, Token::SemiColon)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
 
             push_opcode(Op::Asm {args}, (*l).loc, c);
             Some(())
@@ -838,7 +838,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             lexer::get_token(l);
             expect_tokens(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
             let case_value = (*l).int_number;
-            get_and_expect_token(l, Token::Colon)?;
+            get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
             if let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) {
                 let addr = (*c).func_body.count;
@@ -1063,7 +1063,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
                 if (*l).token == Token::IntLit {
                     global.minimum_size = (*l).int_number as usize;
-                    get_and_expect_token(l, Token::CBracket)?;
+                    get_and_expect_token_but_continue(l, c, Token::CBracket)?;
                 }
                 get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
             }
