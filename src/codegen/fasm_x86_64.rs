@@ -28,6 +28,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
         Arg::AutoVar(index)     => sb_appendf(output, c!("    mov %s, [rbp-%zu]\n"), reg, index*8),
         Arg::Literal(value)     => sb_appendf(output, c!("    mov %s, %ld\n"), reg, value),
         Arg::DataOffset(offset) => sb_appendf(output, c!("    mov %s, dat+%zu\n"), reg, offset),
+        Arg::Bogus => unreachable!("bogus-amogus")
     };
 }
 

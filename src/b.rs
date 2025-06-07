@@ -175,6 +175,14 @@ pub unsafe fn define_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr
 
 #[derive(Clone, Copy)]
 pub enum Arg {
+    /// Bogus value of an Arg.
+    ///
+    /// You should always call unreachable!() if you encounterd it in
+    /// the codegens. This value indicates a compilation error and
+    /// encountering it means that the compiler didn't fail the
+    /// compilation before passing the Compiler struct to the
+    /// codegens.
+    Bogus,
     AutoVar(usize),
     Deref(usize),
     /// Reference to the autovar with the specified index
@@ -374,13 +382,14 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot take the address of an rvalue\n"));
-                return None;
+                return bump_error_count(c).map(|()| (Arg::Bogus, false));
             }
 
             match arg {
                 Arg::Deref(index)   =>  Some((Arg::AutoVar(index), false)), // "&*x is identically x"
                 Arg::External(name) =>  Some((Arg::RefExternal(name), false)),
                 Arg::AutoVar(index) =>  Some((Arg::RefAutoVar(index), false)),
+                Arg::Bogus          =>  Some((Arg::Bogus, false)), // Reference of a bogus value is a bogus value
                 Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
             }
         }
@@ -506,6 +515,9 @@ pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut 
         Arg::AutoVar(index) => {
             push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
         }
+        Arg::Bogus => {
+            // Bogus value does not compile to anything
+        }
         Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
     }
 }
@@ -570,6 +582,9 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
                 }
                 Arg::AutoVar(index) => {
                     push_opcode(Op::AutoAssign {index, arg: rhs}, binop_loc, c);
+                }
+                Arg::Bogus => {
+                    // Bogus value does not compile to anything
                 }
                 Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
             }

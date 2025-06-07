@@ -642,6 +642,7 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, assembler: *mut As
             write_op(output, UxnOp::LIT2);
             write_label_abs(output, label, assembler, 0);
         }
+        Arg::Bogus => unreachable!("bogus-amogus"),
     }
 }
 
