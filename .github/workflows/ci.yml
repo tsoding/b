@@ -10,7 +10,6 @@ on:
 
 # TODO: add *-on-windows jobs
 # TODO: add gas-aarch64-linux-on-* jobs
-# TODO: add uxn-on-* jobs
 
 jobs:
   fasm-x86_64-linux-on-linux:
@@ -39,3 +38,17 @@ jobs:
           sudo apt-get install -qq -y clang make fasm mingw-w64 wine64
       - name: Run Tests
         run: make test-mingw32
+  uxn-on-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Install Dependencies
+        run: |
+          git clone https://git.sr.ht/~rabbits/uxn11
+          cd uxn11
+          make cli
+      - name: Run Tests
+        run: PATH=$(realpath uxn11/bin):$PATH make test-uxn
