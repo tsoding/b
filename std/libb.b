@@ -1,8 +1,11 @@
 /* Cross-Target Standard Library */
 
+stdout 1;
+stderr 2;
+
 putchar(c) {
     extrn fputc;
-    fputc(c, 0);
+    fputc(c, stdout);
 }
 
 abort() {
@@ -24,7 +27,7 @@ _fprintn(n, b, fd) {
     fputc(c, fd);
 }
 
-printn(n, b) _fprintn(n, b, 0);
+printn(n, b) _fprintn(n, b, stdout);
 
 /* doesn't support fancy features like padding, but neither did the original in B */
 
@@ -77,7 +80,7 @@ fprintf(fd, string, x1, x2, x3, x4) {
 
 // TODO: More arguments once all targets support them
 printf(string, x1, x2, x3, x4) {
-    fprintf(0, string, x1, x2, x3, x4);
+    fprintf(stdout, string, x1, x2, x3, x4);
 }
 
 // TODO: doesn't skip whitespace, doesn't handle negative numbers
@@ -95,6 +98,3 @@ atoi(s) {
 out:
     return (result);
 }
-
-stdout 1;
-stderr 2;
