@@ -21,7 +21,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang make fasm
+          sudo apt-get install -qq -y clang make fasm
       - name: Run Tests
         run: make test
   fasm-x86_64-windows-on-linux:
@@ -34,6 +34,6 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y clang make fasm mingw-w64 wine64
+          sudo apt-get install -qq -y clang make fasm mingw-w64 wine64
       - name: Run Tests
         run: make test-mingw32
