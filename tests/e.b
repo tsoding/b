@@ -1,4 +1,4 @@
-main() {
+test_main() {
     extrn putchar;
     auto a;
     auto b;

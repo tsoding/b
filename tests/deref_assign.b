@@ -1,4 +1,4 @@
-main() {
+test_main() {
     extrn printf, malloc;
     auto v;
     v = malloc(8);

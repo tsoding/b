@@ -14,7 +14,7 @@ hello() {
     putchar(10);
 }
 
-main() {
+test_main() {
     extrn putchar;
     hello();
     hello();

@@ -38,7 +38,7 @@ unreachable(message) {
   abort();
 }
 
-main() {
+test_main() {
   extrn printf, assert_equal;
 
   assert_equal(test_lookup(69,69),    690,  "(69,69)    => 690");

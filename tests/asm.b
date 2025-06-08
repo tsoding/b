@@ -2,7 +2,7 @@
 //   How should we approach dealing with such tests?
 //   Maybe on top of having a list of common tests we should have the list of
 //   very platform specific tests?
-main() {
+test_main() {
     __asm__(
     "mov rax, 69",
     "mov rsp, rbp",

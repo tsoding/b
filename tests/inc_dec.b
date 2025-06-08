@@ -1,4 +1,4 @@
-main() {
+test_main() {
 	extrn printf;
 	auto x;
 	x = 3;

@@ -1,4 +1,4 @@
-main() {
+test_main() {
     extrn printf;
     // If parsing of binary expressions is implemented correctly the expected
     // output is -4

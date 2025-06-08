@@ -8,7 +8,7 @@ mod(a, b) {
     printf("%d%%%d = %d\n", a, b, a%b);
 }
 
-main() {
+test_main() {
     extrn printf;
     printf("Division:\n");
     div(   1, 100);

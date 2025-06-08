@@ -38,7 +38,7 @@ test3() {
 }
 
 
-main() {
+test_main() {
     test1();
     test2();
     test3();

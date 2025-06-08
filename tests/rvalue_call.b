@@ -13,7 +13,7 @@ baz() {
     printf("Baz\n");
 }
 
-main() {
+test_main() {
     extrn printf, malloc, exit;
 
     auto W;

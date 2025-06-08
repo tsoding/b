@@ -1,4 +1,4 @@
-main() {
+test_main() {
     extrn printf;
     auto fmt;
     // This must be `llu` and not `lu` because on windows `long` is 32-bits

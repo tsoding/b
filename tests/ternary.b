@@ -12,7 +12,7 @@ test(n) {
 		"69..420"
 	);
 }
-main(argc, argv) {
+test_main(argc, argv) {
 	test(0);
 	test(42);
 	test(69);

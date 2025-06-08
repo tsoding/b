@@ -16,7 +16,7 @@ structure(args) {
     args[2] = 3;
 }
 
-main() {
+test_main() {
     auto c, b, a;
     structure(&a);
     extrn printf;

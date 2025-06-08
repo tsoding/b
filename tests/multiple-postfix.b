@@ -1,4 +1,4 @@
-main() {
+test_main() {
     extrn printf, malloc;
     auto arr, W;
     W = &0[1];

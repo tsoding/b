@@ -6,4 +6,4 @@ func(i) {
 	}
 }
 
-main() func(10);
+test_main() func(10);
