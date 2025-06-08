@@ -123,7 +123,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/vector.rom \
 	$(BUILD)/tests/multiple-postfix.rom \
 	$(BUILD)/tests/rvalue_call.rom \
-	$(BUILD)/tests/call_stack_args.exe
+	$(BUILD)/tests/call_stack_args.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
