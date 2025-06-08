@@ -1189,21 +1189,23 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
-                return None;
-            }
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
 
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
                 &mut cmd,
-                c!("as"), c!("-o"), output_obj_path, output_asm_path,
+                gas, c!("-o"), output_obj_path, output_asm_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1213,6 +1215,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
+                    cmd_append! {
+                        &mut cmd,
+                        c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
+                    }
+                }
+
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1349,6 +1358,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                // TODO: document that you may need wine as a system package to cross-run fasm-x86_64-windows
                 if !cfg!(target_os = "windows") {
                     cmd_append! {
                         &mut cmd,
