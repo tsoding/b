@@ -1204,7 +1204,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     scope_pop(&mut c.vars);          // end global scope
 
     if c.error_count > 0 {
-        fprintf(stderr(), c!("%zu errors encountered\n"), c.error_count);
         return None
     }
 
