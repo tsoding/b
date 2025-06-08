@@ -52,7 +52,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         i += 1;
     }
     for j in i..params_count {
-        sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 2)*8);
+        match os {
+            Os::Linux   => sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 2)*8),
+            Os::Windows => sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 6)*8),
+        };
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), (j + 1)*8);
     }
 
