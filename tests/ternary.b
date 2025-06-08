@@ -1,4 +1,3 @@
-// TODO: broken on uxn
 test(n) {
 	extrn printf;
 	printf(
