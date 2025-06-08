@@ -55,6 +55,12 @@ fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
             } else if (c == 'x') {
                 _fprintn(*arg, 16, fd);
             } else if (c == 'd') {
+                if (*arg < 0) {
+                    fputc('-', fd);
+                    *arg = -*arg;
+                }
+                _fprintn(*arg, 10, fd);
+            } else if (c == 'u') {
                 _fprintn(*arg, 10, fd);
             } else if (c == 'o') {
                 _fprintn(*arg, 8, fd);
@@ -66,6 +72,7 @@ fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
                 }
             } else {
                 fputc('%', fd);
+                arg += 2; /* word size */
             }
             arg -= 2; /* word size */
         } else {

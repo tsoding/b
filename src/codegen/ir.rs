@@ -1,6 +1,19 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+
+pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
+    match arg {
+        Arg::RefExternal(name) | Arg::External(name) => {
+            sb_appendf(output, c!("call(\"%s\""), name);
+        }
+        arg => {
+            sb_appendf(output, c!("call("));
+            dump_arg(output, arg);
+        }
+    };
+
+}
 
 pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
@@ -18,7 +31,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
         sb_appendf(output, c!("%8zu:"), i);
-        match (*body)[i].opcode {
+        let op = (*body)[i];
+        match op.opcode {
             Op::Return {arg} => {
                 sb_appendf(output, c!("    return "));
                 if let Some(arg) = arg {
@@ -74,8 +88,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, rhs);
                 sb_appendf(output, c!("\n"));
             }
-            Op::Funcall{result, name, args} => {
-                sb_appendf(output, c!("    auto[%zu] = call(\"%s\""), result, name);
+            Op::Funcall{result, fun, args} => {
+                sb_appendf(output, c!("    auto[%zu] = "), result);
+                dump_arg_call(fun, output);
                 for i in 0..args.count {
                     sb_appendf(output, c!(", "));
                     dump_arg(output, *args.items.add(i));
@@ -119,11 +134,27 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     sb_appendf(output, c!("\n"));
     sb_appendf(output, c!("-- Global Variables --\n\n"));
     for i in 0..globals.len() {
-        sb_appendf(output, c!("    %s\n"), (*globals)[i]);
+        let global = (*globals)[i];
+        sb_appendf(output, c!("%s"), global.name);
+        if global.is_vec {
+            sb_appendf(output, c!("[%zu]"), global.minimum_size);
+        }
+        sb_appendf(output, c!(": "));
+        for j in 0..global.values.count {
+            if j > 0 {
+                sb_appendf(output, c!(", "));
+            }
+            match *global.values.items.add(j) {
+                ImmediateValue::Literal(lit) => sb_appendf(output, c!("%zu"), lit),
+                ImmediateValue::Name(name) => sb_appendf(output, c!("%s"), name),
+                ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
+            };
+        }
+        sb_appendf(output, c!("\n"));
     }
 }
 

@@ -2,8 +2,18 @@ use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, align_bytes};
+use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes};
 use crate::{missingf, Loc};
+
+pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder) {
+    match arg {
+        Arg::RefExternal(name) | Arg::External(name) => sb_appendf(output, c!("    bl %s\n"), name),
+        arg => {
+            load_arg_to_reg(arg, c!("x16"), output, loc);
+            sb_appendf(output, c!("    blr x16\n"))
+        },
+    };
+}
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u64) {
     let mut literal = literal as u64;
@@ -234,7 +244,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 load_arg_to_reg(arg, c!("x1"), output, op.loc);
                 sb_appendf(output, c!("    str x1, [x0]\n"));
             },
-            Op::Funcall {result, name, args} => {
+            Op::Funcall {result, fun, args} => {
                 if args.count > REGISTERS.len() {
                     missingf!(op.loc, c!("Too many function call arguments. We support only %zu but %zu were provided\n"), REGISTERS.len(), args.count);
                 }
@@ -242,7 +252,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     let reg = (*REGISTERS)[i];
                     load_arg_to_reg(*args.items.add(i), reg, output, op.loc);
                 }
-                sb_appendf(output, c!("    bl %s\n"), name);
+                call_arg(fun, op.loc, output);
+
                 sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
             },
             Op::Asm {args} => {
@@ -290,13 +301,34 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [*const c_char]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
     if globals.len() > 0 {
-        sb_appendf(output, c!(".bss\n"));
+        // TODO: consider splitting globals into bss and data sections,
+        // depending on whether it's zero
+        sb_appendf(output, c!(".data\n"));
         for i in 0..globals.len() {
-            let name = (*globals)[i];
-            sb_appendf(output, c!(".global %s\n"), name);
-            sb_appendf(output, c!("%s: .zero 8\n"), name);
+            let global = (*globals)[i];
+            sb_appendf(output, c!(".global %s\n"), global.name);
+            sb_appendf(output, c!("%s:\n"), global.name);
+            if global.is_vec {
+                sb_appendf(output, c!("    .quad .+8\n"), global.name);
+            }
+            for j in 0..global.values.count {
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => {
+                        sb_appendf(output, c!("    .quad %zu\n"), lit);
+                    }
+                    ImmediateValue::Name(name) => {
+                        sb_appendf(output, c!("    .quad %s\n"), name);
+                    }
+                    ImmediateValue::DataOffset(offset) => {
+                        sb_appendf(output, c!("    .quad .dat+%zu\n"), offset);
+                    }
+                }
+            }
+            if global.values.count < global.minimum_size {
+                sb_appendf(output, c!("    .zero %zu\n"), 8*(global.minimum_size - global.values.count));
+            }
         }
     }
 }
