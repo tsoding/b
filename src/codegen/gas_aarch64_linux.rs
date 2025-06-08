@@ -282,8 +282,14 @@ pub unsafe fn generate_block(func_name: *const c_char, index: usize, stack_size:
         TermOp::Branch {if_true_addr, if_false_addr, arg} => {
             load_arg_to_reg(arg, c!("x0"), output, term_op.loc);
             sb_appendf(output, c!("    cmp x0, 0\n"));
-            sb_appendf(output, c!("    beq %s.op_%zu\n"), func_name, if_false_addr);
-            sb_appendf(output, c!("    b %s.op_%zu\n"), func_name, if_true_addr);
+            if if_true_addr == index+1 {
+                sb_appendf(output, c!("    beq %s.op_%zu\n"), func_name, if_false_addr);
+            } else {
+                sb_appendf(output, c!("    bne %s.op_%zu\n"), func_name, if_false_addr);
+                if if_false_addr != index+1 {
+                    sb_appendf(output, c!("    b %s.op_%zu\n"), func_name, if_true_addr);
+                }
+            }
         }
     }
 }

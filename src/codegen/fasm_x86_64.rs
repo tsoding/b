@@ -260,8 +260,15 @@ pub unsafe fn generate_block(index: usize, ops: *const [OpWithLocation], term_op
         TermOp::Branch{if_true_addr, if_false_addr, arg} => {
             load_arg_to_reg(arg, c!("rax"), output);
             sb_appendf(output, c!("    test rax, rax\n"));
-            sb_appendf(output, c!("    jnz .op_%zu\n"), if_true_addr);
-            sb_appendf(output, c!("    jmp .op_%zu\n"), if_false_addr);
+
+            if if_true_addr == index+1 {
+                sb_appendf(output, c!("    jz .op_%zu\n"), if_false_addr);
+            } else {
+                sb_appendf(output, c!("    jnz .op_%zu\n"), if_true_addr);
+                if if_false_addr != index+1 {
+                    sb_appendf(output, c!("    jmp .op_%zu\n"), if_false_addr);
+                }
+            }
         },
         TermOp::Jmp{addr} => {
             if addr != index+1 {
