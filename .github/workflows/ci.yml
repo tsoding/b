@@ -38,7 +38,7 @@ jobs:
           sudo apt-get install -qq -y clang make fasm mingw-w64 wine64
       - name: Run Tests
         run: make test-mingw32
-  gas-x86_64-linux-on-ubuntu:
+  gas-aarch64-linux-on-ubuntu:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -50,7 +50,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -qq -y clang make qemu-user gcc-aarch64-linux-gnu
       - name: Run Tests
-        run: make test
+        run: make test-gas-aarch64-linux
   uxn-on-ubuntu:
     runs-on: ubuntu-latest
     steps:
