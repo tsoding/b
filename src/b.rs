@@ -283,8 +283,12 @@ pub enum Op {
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
+}
+
+#[derive(Clone, Copy)]
+pub enum TermOp {
     Jmp            {addr: usize},
-    JmpIfNot       {addr: usize, arg: Arg},
+    Branch         {if_true_addr: usize, if_false_addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
 
@@ -294,8 +298,14 @@ pub struct OpWithLocation {
     pub loc: Loc,
 }
 
+#[derive(Clone, Copy)]
+pub struct TermOpWithLocation {
+    pub opcode: TermOp,
+    pub loc: Loc,
+}
+
 pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
-    da_append(&mut (*c).func_body, OpWithLocation {opcode, loc});
+    da_append(&mut (*c).func_block, OpWithLocation {opcode, loc});
 }
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
@@ -584,24 +594,29 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
     if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
-        let addr_condition = (*c).func_body.count;
-        push_opcode(Op::JmpIfNot{addr: 0, arg: lhs}, (*l).loc, c);
+        let pre_if_block = (*c).func_body.count;
+        end_block(TermOp::Branch{if_true_addr: 0, if_false_addr: 0, arg: lhs}, (*l).loc, c); // end pre-if block
 
+        let start_if_block = (*c).func_body.count;
         let (if_true, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_true}, (*l).loc, c);
+        let end_if_block = (*c).func_body.count;
+        end_block(TermOp::Jmp{addr: 0}, (*l).loc, c); // end if block
 
-        let addr_skips_true = (*c).func_body.count;
-        push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
-
-        let addr_false = (*c).func_body.count;
         get_and_expect_token(l, Token::Colon)?;
 
+        let start_else_block = (*c).func_body.count;
         let (if_false, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
+        let post_else_block = (*c).func_body.count+1;
+        end_block(TermOp::Jmp{addr: post_else_block}, (*l).loc, c); // end else block
 
-        let addr_after_false = (*c).func_body.count;
-        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg: lhs};
-        (*(*c).func_body.items.add(addr_skips_true)).opcode = Op::Jmp      {addr: addr_after_false};
+        (*(*c).func_body.items.add(end_if_block)).term_op.opcode = TermOp::Jmp {addr: post_else_block};
+        (*(*c).func_body.items.add(pre_if_block)).term_op.opcode = TermOp::Branch {
+            if_true_addr: start_if_block,
+            if_false_addr: start_else_block,
+            arg: lhs
+        };
 
         Some((Arg::AutoVar(result), false))
     } else {
@@ -656,12 +671,16 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
     da_append(names, name)
 }
 
-pub unsafe fn backpatch_jmp(backpatch: *mut OpWithLocation, addr: usize) {
-    match (*backpatch).opcode {
-        Op::Jmp{..}           => (*backpatch).opcode = Op::Jmp { addr },
-        Op::JmpIfNot{arg, ..} => (*backpatch).opcode = Op::JmpIfNot { addr, arg },
-        _                     => unreachable!()
-    }
+pub unsafe fn backpatch_jmp(backpatch: *mut Block, addr: usize) {
+ match (*backpatch).term_op.opcode {
+     TermOp::Jmp{..}                      => (*backpatch).term_op.opcode = TermOp::Jmp { addr },
+     TermOp::Branch{arg, if_true_addr,..} => (*backpatch).term_op.opcode = TermOp::Branch {
+         if_true_addr,
+         if_false_addr: addr,
+         arg,
+     },
+     _ => unreachable!()
+ }
 }
 
 pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
@@ -721,57 +740,75 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let (cond, _) = compile_expression(l, c)?;
             get_and_expect_token(l, Token::CParen)?;
 
-            let addr_condition = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, (*l).loc, c);
+            let pre_if_block = (*c).func_body.count;
+            end_block(TermOp::Branch{if_true_addr: 0, if_false_addr: 0, arg: cond}, (*l).loc, c); // end pre-if block
+            let start_if_block = (*c).func_body.count;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, c)?;
+            let end_if_block = (*c).func_body.count;
 
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
 
             if (*l).token == Token::Else {
-                let addr_skips_else = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
-                let addr_else = (*c).func_body.count;
+                end_block(TermOp::Jmp{addr: 0}, (*l).loc, c); // end if block
+                let start_else_block = (*c).func_body.count;
                 compile_statement(l, c)?;
-                let addr_after_else = (*c).func_body.count;
-                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_else, arg: cond};
-                (*(*c).func_body.items.add(addr_skips_else)).opcode = Op::Jmp      {addr: addr_after_else};
+                let post_else_block = (*c).func_body.count+1;
+                end_block(TermOp::Jmp{addr: post_else_block}, (*l).loc, c); // end else block
+                (*(*c).func_body.items.add(end_if_block)).term_op.opcode = TermOp::Jmp { addr: post_else_block };
+                (*(*c).func_body.items.add(pre_if_block)).term_op.opcode = TermOp::Branch {
+                    if_true_addr: start_if_block,
+                    if_false_addr: start_else_block,
+                    arg: cond
+                };
             } else {
                 (*l).parse_point = saved_point;
-                let addr_after_if = (*c).func_body.count;
-                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_after_if , arg: cond};
+                let post_if_block = (*c).func_body.count+1;
+                end_block(TermOp::Jmp{addr: post_if_block}, (*l).loc, c); // end if block
+                    (*(*c).func_body.items.add(pre_if_block)).term_op.opcode = TermOp::Branch {
+                    if_true_addr: start_if_block,
+                    if_false_addr: post_if_block,
+                    arg: cond
+                };
             }
 
             Some(())
         }
         Token::While => {
-            let begin = (*c).func_body.count;
             get_and_expect_token(l, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
+            let pre_while_block = (*c).func_body.count;
+            let start_condition_block = pre_while_block+1;
+            end_block(TermOp::Jmp {addr: start_condition_block}, (*l).loc, c); // end pre-while block
             let (arg, _) = compile_expression(l, c)?;
 
             get_and_expect_token(l, Token::CParen)?;
-            let condition_jump = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
+            let end_condition_block = (*c).func_body.count;
+            end_block(TermOp::Branch {if_true_addr: 0, if_false_addr: 0, arg}, (*l).loc, c); // end condition block
             (*c).auto_vars_ator.count = saved_auto_vars_count;
 
+            let start_body_block = (*c).func_body.count;
             compile_statement(l, c)?;
-            push_opcode(Op::Jmp{addr: begin}, (*l).loc, c);
-            let end = (*c).func_body.count;
-            (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
+            end_block(TermOp::Jmp{addr: start_condition_block}, (*l).loc, c); // end body block
+            let post_body_block = (*c).func_body.count;
+            (*(*c).func_body.items.add(end_condition_block)).term_op.opcode = TermOp::Branch {
+                if_true_addr: start_body_block,
+                if_false_addr: post_body_block,
+                arg
+            };
             Some(())
         }
         Token::Return => {
             get_and_expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
-                push_opcode(Op::Return {arg: None}, (*l).loc, c);
+                end_block(TermOp::Return {arg: None}, (*l).loc, c);
             } else if (*l).token == Token::OParen {
                 let (arg, _) = compile_expression(l, c)?;
                 get_and_expect_token(l, Token::CParen)?;
                 get_and_expect_token(l, Token::SemiColon)?;
-                push_opcode(Op::Return {arg: Some(arg)}, (*l).loc, c);
+                end_block(TermOp::Return {arg: Some(arg)}, (*l).loc, c);
             } else {
                 unreachable!();
             }
@@ -784,7 +821,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
             get_and_expect_token(l, Token::SemiColon)?;
-            push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+            end_block(TermOp::Jmp {addr: 0}, (*l).loc, c);
             Some(())
         }
         Token::Asm => {
@@ -823,21 +860,22 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_token(l, Token::Colon)?;
 
             let addr = (*c).func_body.count;
-            push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
+            end_block(TermOp::Jmp{addr: addr + 2}, case_loc, c);
             push_opcode(Op::Binop{
                 binop: Binop::Equal,
                 index: (*switch_frame).cond,
                 lhs: (*switch_frame).value,
                 rhs: Arg::Literal(case_value)
             }, case_loc, c);
-            push_opcode(Op::JmpIfNot {
-                addr: 0,
+            end_block(TermOp::Branch {
+                if_true_addr: addr+2,
+                if_false_addr: 0,
                 arg: Arg::AutoVar((*switch_frame).cond)
             }, case_loc, c);
 
             let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
             backpatch_jmp(backpatch, addr + 1);
-            (*switch_frame).jmp_addr = addr + 2;
+            (*switch_frame).jmp_addr = addr + 1;
 
             Some(())
         }
@@ -849,8 +887,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let cond = allocate_auto_var(&mut (*c).auto_vars_ator);
             let jmp_addr = (*c).func_body.count;
             da_append(&mut (*c).switch_stack, Switch {jmp_addr, value, cond});
-            push_opcode(Op::Jmp {addr: 0}, switch_loc, c);
+            end_block(TermOp::Jmp {addr: 0}, switch_loc, c);
             compile_statement(l, c)?;
+            end_block(TermOp::Jmp {addr: (*c).func_body.count+1}, switch_loc, c);
 
             let switch_frame = da_last_mut(&mut (*c).switch_stack).expect("Switch stack was modified by somebody else");
             let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
@@ -865,9 +904,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             if (*l).token == Token::ID {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = (*l).loc;
-                let addr = (*c).func_body.count;
+                let addr = (*c).func_body.count+1;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
+                    end_block(TermOp::Jmp{addr}, (*l).loc, c);
                     define_label(&mut (*c).func_labels, name, name_loc, addr)?;
                     return Some(());
                 }
@@ -899,11 +939,18 @@ pub unsafe fn usage() {
     flag_print_options(stderr());
 }
 
+
+#[derive(Clone, Copy)]
+pub struct Block {
+    ops: Array<OpWithLocation>,
+    term_op: TermOpWithLocation,
+}
+
 #[derive(Clone, Copy)]
 pub struct Func {
     name: *const c_char,
     name_loc: Loc,
-    body: Array<OpWithLocation>,
+    body: Array<Block>,
     params_count: usize,
     auto_vars_count: usize,
 }
@@ -935,7 +982,8 @@ pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
     pub funcs: Array<Func>,
-    pub func_body: Array<OpWithLocation>,
+    pub func_body: Array<Block>,
+    pub func_block: Array<OpWithLocation>,
     pub func_labels: Array<Label>,
     pub func_labels_used: Array<Label>,
     pub switch_stack: Array<Switch>,
@@ -945,6 +993,14 @@ pub struct Compiler {
     pub arena_names: Arena,
     pub arena_labels: Arena,
     pub target: Target,
+}
+
+pub unsafe fn end_block(opcode: TermOp, loc: Loc, c: *mut Compiler) {
+    da_append(&mut (*c).func_body, Block {
+        ops: (*c).func_block,
+        term_op: TermOpWithLocation { opcode, loc },
+    });
+    (*c).func_block = zeroed();
 }
 
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
@@ -993,8 +1049,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
                     return None;
                 }
-                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
+                (*(*c).func_body.items.add(used_label.addr)).term_op.opcode = TermOp::Jmp {addr: (*existing_label).addr};
             }
+            end_block(TermOp::Return { arg: Some(Arg::Literal(0)) }, (*l).loc, c);
             arena::reset(&mut (*c).arena_labels);
 
             da_append(&mut (*c).funcs, Func {
@@ -1382,7 +1439,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(&mut output, &c);
+            // codegen::uxn::generate_program(&mut output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {

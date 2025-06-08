@@ -1,6 +1,7 @@
+#![allow(unused)]
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+use crate::{Op, TermOp, Block, Binop, OpWithLocation, TermOpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -27,19 +28,19 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [Block], output: *mut String_Builder) {
     sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
-        sb_appendf(output, c!("%8zu:"), i);
-        let op = (*body)[i];
+        let block = (*body)[i];
+        sb_appendf(output, c!("%3zu:\n"), i);
+        generate_block(i, da_slice(block.ops), block.term_op, output);
+    }
+}
+
+pub unsafe fn generate_block(index: usize, ops: *const [OpWithLocation], term_op: TermOpWithLocation, output: *mut String_Builder) {
+    for i in 0..ops.len() {
+        let op = (*ops)[i];
         match op.opcode {
-            Op::Return {arg} => {
-                sb_appendf(output, c!("    return "));
-                if let Some(arg) = arg {
-                    dump_arg(output, arg);
-                }
-                sb_appendf(output, c!("\n"));
-            },
             Op::Store{index, arg} => {
                 sb_appendf(output, c!("    store deref[%zu], "), index);
                 dump_arg(output, arg);
@@ -105,15 +106,24 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 sb_appendf(output, c!(")\n"));
             }
+        }
+    }
 
-            Op::JmpIfNot{addr, arg} => {
-                sb_appendf(output, c!("    jmp_if_not %zu:, "), addr);
+    match term_op.opcode {
+        TermOp::Return {arg} => {
+            sb_appendf(output, c!("    return "));
+            if let Some(arg) = arg {
                 dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
             }
-            Op::Jmp{addr} => {
-                sb_appendf(output, c!("    jmp %zu:\n"), addr);
-            }
+            sb_appendf(output, c!("\n"));
+        }
+        TermOp::Branch{if_true_addr, if_false_addr, arg} => {
+            sb_appendf(output, c!("    branch %zu:, %zu:, "), if_true_addr, if_false_addr);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        TermOp::Jmp{addr} => {
+            sb_appendf(output, c!("    jmp %zu:\n"), addr);
         }
     }
 }

@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, align_bytes};
+use crate::{Op, TermOp, Block, Binop, OpWithLocation, TermOpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -31,7 +31,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [Block], output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
@@ -53,17 +53,16 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], %s\n"), (i + 1)*8, reg);
     }
     for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
-        let op = (*body)[i];
+        let block = (*body)[i];
+        generate_block(i, da_slice(block.ops), block.term_op, output, registers, os);
+    }
+}
+
+pub unsafe fn generate_block(index: usize, ops: *const [OpWithLocation], term_op: TermOpWithLocation, output: *mut String_Builder, registers: *const[*const c_char], os: Os) {
+    sb_appendf(output, c!(".op_%zu:\n"), index);
+    for i in 0..ops.len() {
+        let op = (*ops)[i];
         match op.opcode {
-            Op::Return {arg} => {
-                if let Some(arg) = arg {
-                    load_arg_to_reg(arg, c!("rax"), output);
-                }
-                sb_appendf(output, c!("    mov rsp, rbp\n"));
-                sb_appendf(output, c!("    pop rbp\n"));
-                sb_appendf(output, c!("    ret\n"));
-            }
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("    mov rax, [rbp-%zu]\n"), index*8);
                 load_arg_to_reg(arg, c!("rbx"), output);
@@ -247,21 +246,27 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     sb_appendf(output, c!("    %s\n"), arg);
                 }
             }
-            Op::JmpIfNot{addr, arg} => {
-                load_arg_to_reg(arg, c!("rax"), output);
-                sb_appendf(output, c!("    test rax, rax\n"));
-                sb_appendf(output, c!("    jz .op_%zu\n"), addr);
-            },
-            Op::Jmp{addr} => {
-                sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
-            },
         }
     }
-    sb_appendf(output, c!(".op_%zu:\n"), body.len());
-    sb_appendf(output, c!("    mov rax, 0\n"));
-    sb_appendf(output, c!("    mov rsp, rbp\n"));
-    sb_appendf(output, c!("    pop rbp\n"));
-    sb_appendf(output, c!("    ret\n"));
+    match term_op.opcode {
+        TermOp::Return {arg} => {
+            if let Some(arg) = arg {
+                load_arg_to_reg(arg, c!("rax"), output);
+            }
+            sb_appendf(output, c!("    mov rsp, rbp\n"));
+            sb_appendf(output, c!("    pop rbp\n"));
+            sb_appendf(output, c!("    ret\n"));
+        }
+        TermOp::Branch{if_true_addr, if_false_addr, arg} => {
+            load_arg_to_reg(arg, c!("rax"), output);
+            sb_appendf(output, c!("    test rax, rax\n"));
+            sb_appendf(output, c!("    jnz .op_%zu\n"), if_true_addr);
+            sb_appendf(output, c!("    jmp .op_%zu\n"), if_false_addr);
+        },
+        TermOp::Jmp{addr} => {
+            sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
+        },
+    }
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {

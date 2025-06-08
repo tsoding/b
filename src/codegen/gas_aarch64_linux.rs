@@ -2,7 +2,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes};
+use crate::{Compiler, Binop, Op, TermOp, Block, OpWithLocation, TermOpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes};
 use crate::{missingf, Loc};
 
 pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder) {
@@ -81,7 +81,9 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
+
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [Block], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
@@ -91,7 +93,6 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     sb_appendf(output, c!("    sub sp, sp, %zu\n"), stack_size);
     assert!(auto_vars_count >= params_count);
     // TODO: add support for the rest of the parameters.
-    const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
     if params_count > REGISTERS.len() {
         missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), REGISTERS.len(), params_count);
     }
@@ -101,17 +102,16 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         sb_appendf(output, c!("    str %s, [x29, -%zu]\n"), reg, index*8);
     }
     for i in 0..body.len() {
-        sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
-        let op = (*body)[i];
+        let block = (*body)[i];
+        generate_block(name, i, stack_size, da_slice(block.ops), block.term_op, output);
+    }
+}
+
+pub unsafe fn generate_block(func_name: *const c_char, index: usize, stack_size: usize, ops: *const [OpWithLocation], term_op: TermOpWithLocation, output: *mut String_Builder) {
+    sb_appendf(output, c!("%s.op_%zu:\n"), func_name, index);
+    for i in 0..ops.len() {
+        let op = (*ops)[i];
         match op.opcode {
-            Op::Return {arg} => {
-                if let Some(arg) = arg {
-                    load_arg_to_reg(arg, c!("x0"), output, op.loc);
-                }
-                sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
-                sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
-                sb_appendf(output, c!("    ret\n"));
-            }
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
                 sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow
@@ -262,22 +262,28 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                     sb_appendf(output, c!("    %s\n"), arg);
                 }
             }
-
-            Op::Jmp {addr} => {
-                sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
-            },
-            Op::JmpIfNot {addr, arg} => {
-                load_arg_to_reg(arg, c!("x0"), output, op.loc);
-                sb_appendf(output, c!("    cmp x0, 0\n"));
-                sb_appendf(output, c!("    beq %s.op_%zu\n"), name, addr);
-            },
         }
     }
-    sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());
-    sb_appendf(output, c!("    mov x0, 0\n"));
-    sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
-    sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
-    sb_appendf(output, c!("    ret\n"));
+
+    match term_op.opcode {
+        TermOp::Return {arg} => {
+            if let Some(arg) = arg {
+                load_arg_to_reg(arg, c!("x0"), output, term_op.loc);
+            }
+            sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
+            sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
+            sb_appendf(output, c!("    ret\n"));
+        }
+        TermOp::Jmp {addr} => {
+            sb_appendf(output, c!("    b %s.op_%zu\n"), func_name, addr);
+        }
+        TermOp::Branch {if_true_addr, if_false_addr, arg} => {
+            load_arg_to_reg(arg, c!("x0"), output, term_op.loc);
+            sb_appendf(output, c!("    cmp x0, 0\n"));
+            sb_appendf(output, c!("    beq %s.op_%zu\n"), func_name, if_false_addr);
+            sb_appendf(output, c!("    b %s.op_%zu\n"), func_name, if_true_addr);
+        }
+    }
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
