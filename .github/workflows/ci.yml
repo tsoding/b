@@ -9,7 +9,7 @@ on:
       - main
 
 # TODO: add *-on-windows jobs
-# TODO: add gas-aarch64-linux-on-* jobs
+# TODO: build examples on CI
 
 jobs:
   fasm-x86_64-linux-on-ubuntu:
