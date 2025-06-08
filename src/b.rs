@@ -130,12 +130,11 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
-// TODO: Don't need lexer as input anymore if we just use the provided loc for diagf!
-pub unsafe fn declare_var(l: *mut Lexer, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
+pub unsafe fn declare_var(vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
     let scope = da_last_mut(vars).expect("There should be always at least the global scope");
     let existing_var = find_var_near(scope, name);
     if !existing_var.is_null() {
-        diagf!((*l).loc, c!("ERROR: redefinition of variable `%s`\n"), name);
+        diagf!(loc, c!("ERROR: redefinition of variable `%s`\n"), name);
         diagf!((*existing_var).loc, c!("NOTE: the first declaration is located here\n"));
         return None;
     }
@@ -682,7 +681,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                 name_declare_if_not_exists(&mut (*c).extrns, name);
-                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::External {name})?;
+                declare_var(&mut (*c).vars, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
             Some(())
@@ -695,7 +694,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 //   Rename .arena_labels to indicate function lifetime first?
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::Auto {index})?;
+                declare_var(&mut (*c).vars, name, (*l).loc, Storage::Auto {index})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
                 if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
                     let size = (*l).int_number as usize;
@@ -961,7 +960,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         lexer::get_token(l)?;
 
         if (*l).token == Token::OParen { // Function definition
-            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
+            declare_var(&mut (*c).vars, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
@@ -973,7 +972,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                     let name_loc = (*l).loc;
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
+                    declare_var(&mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
                     get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
                     match (*l).token {
@@ -1010,7 +1009,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
-            declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
+            declare_var(&mut (*c).vars, name, name_loc, Storage::External{name})?;
 
             let mut global = Global {
                 name,
