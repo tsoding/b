@@ -77,6 +77,7 @@ pub enum Token {
     MulEq,
     DivEq,
     Question,
+    Hash,
     Colon,
     SemiColon,
     Comma,
@@ -142,6 +143,7 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::MulEq      => c!("`*=`"),
         Token::DivEq      => c!("`/=`"),
         Token::Question   => c!("`?`"),
+        Token::Hash       => c!("`#`"),
         Token::Colon      => c!("`:`"),
         Token::SemiColon  => c!("`;`"),
         Token::Comma      => c!("`,`"),
@@ -168,6 +170,7 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
 // TODO: Some punctuations are not historically accurate. =+ instead of +=, etc.
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("?"), Token::Question),
+    (c!("#"), Token::Hash),
     (c!("{"), Token::OCurly),
     (c!("}"), Token::CCurly),
     (c!("("), Token::OParen),
