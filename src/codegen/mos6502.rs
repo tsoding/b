@@ -29,7 +29,6 @@ const LDY_X:     u8 = 0xBC;
 const PHA:       u8 = 0x48;
 const PLA:       u8 = 0x68;
 const RTS:       u8 = 0x60;
-const SBC_IMM:   u8 = 0xE9;
 const STA_X:     u8 = 0x9D;
 const STA_ZP:    u8 = 0x85;
 const STY_ZP:    u8 = 0x84;
@@ -41,10 +40,15 @@ const TXS:       u8 = 0x9A;
 const TYA:       u8 = 0x98;
 
 // zero page addresses
-const ZP_DEREF_0: u8 = 0;
-const ZP_DEREF_1: u8 = 1;
-const ZP_OP_TMP_0: u8 = 3;
-const ZP_OP_TMP_1: u8 = 4;
+// TODO: Do we really have to use
+// zero page for indirect function calls
+// or derefs?
+const ZP_DEREF_0:     u8 = 0;
+const ZP_DEREF_1:     u8 = 1;
+const ZP_OP_TMP_0:    u8 = 3;
+const ZP_OP_TMP_1:    u8 = 4;
+const ZP_DEREF_FUN_0: u8 = 5;
+const ZP_DEREF_FUN_1: u8 = 6;
 
 const STACK_PAGE: u16 = 0x0100;
 
@@ -183,6 +187,7 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, asm: *mut Assemble
             write_byte(output, LDY_IMM);
             add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, low: false}, asm);
         },
+        Arg::Bogus => unreachable!(),
     };
 }
 
@@ -387,9 +392,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                     arg => {
                         load_arg(arg, output, asm);
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_DEREF_0);
+                        write_byte(output, ZP_DEREF_FUN_0);
                         write_byte(output, STY_ZP);
-                        write_byte(output, ZP_DEREF_1);
+                        write_byte(output, ZP_DEREF_FUN_1);
                     }
                 }
                 
@@ -405,14 +410,14 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                         write_byte(output, JSR);
                         add_reloc(output, RelocationKind::Label{name}, asm);
                     },
-                    arg => {
+                    _ => { // arg already in (*)
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
                         write_byte(output, JSR);
                         write_word(output, code_start + (*output).count as u16 + 5);
                         write_byte(output, JMP_ABS);
                         write_word(output, code_start + (*output).count as u16 + 5);
                         write_byte(output, JMP_IND);
-                        write_word(output, 0);
+                        write_word(output, ZP_DEREF_FUN_0 as u16);
                     },
                 }
                 if args.count > 1 {
