@@ -60,6 +60,11 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, token: Token) -> Option<()> {
     expect_token(l, token)
 }
 
+pub unsafe fn get_and_expect_tokens(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
+    lexer::get_token(l)?;
+    expect_tokens(l, clexes)
+}
+
 pub unsafe fn expect_token_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
     expect_token(l, Token::ID)?;
     if strcmp((*l).string, id) != 0 {
@@ -125,6 +130,7 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
+// TODO: Don't need lexer as input anymore if we just use the provided loc for diagf!
 pub unsafe fn declare_var(l: *mut Lexer, vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
     let scope = da_last_mut(vars).expect("There should be always at least the global scope");
     let existing_var = find_var_near(scope, name);
@@ -276,7 +282,7 @@ pub enum Op {
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
-    Funcall        {result: usize, name: *const c_char, args: Array<Arg>},
+    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
@@ -316,6 +322,24 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
         (*t).max = (*t).count;
     }
     (*t).count
+}
+
+
+pub unsafe fn compile_string(l: *mut Lexer, c: *mut Compiler) -> usize {
+     // TODO: communicate this assumption to the caller of the function
+    assert!((*l).token == Token::String);
+
+    let offset = (*c).data.count;
+    let string_len = strlen((*l).string);
+    da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
+    // TODO: Strings in B are not NULL-terminated.
+    // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
+    // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
+    // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
+    // libc. While the language is still in development we gonna terminate it with 0. We will make it
+    // "spec complaint" later.
+    da_append(&mut (*c).data, 0); // NULL-terminator
+    offset
 }
 
 pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
@@ -387,7 +411,6 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
         Token::ID => {
             let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-            let name_loc = (*l).loc;
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
@@ -398,31 +421,18 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
 
-            if (*l).token == Token::OParen {
-                Some((compile_function_call(l, c, name, name_loc)?, false))
-            } else {
-                (*l).parse_point = saved_point;
-                match (*var_def).storage {
-                    Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
-                    Storage::External{name} => Some((Arg::External(name), true)),
-                }
+            (*l).parse_point = saved_point;
+            match (*var_def).storage {
+                Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
+                Storage::External{name} => Some((Arg::External(name), true)),
             }
         }
         Token::String => {
-            let offset = (*c).data.count;
-            let string_len = strlen((*l).string);
-            da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
-            // TODO: Strings in B are not NULL-terminated.
-            // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
-            // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
-            // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
-            // libc. While the language is still in development we gonna terminate it with 0. We will make it
-            // "spec complaint" later.
-            da_append(&mut (*c).data, 0); // NULL-terminator
+            let offset = compile_string(l, c);
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
-            diagf!((*l).loc, c!("Expected start of a primary expression by got %s\n"), lexer::display_token((*l).token));
+            diagf!((*l).loc, c!("Expected start of a primary expression but got %s\n"), lexer::display_token((*l).token));
             None
         }
     };
@@ -434,6 +444,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         lexer::get_token(l)?;
 
         (arg, is_lvalue) = match (*l).token {
+            Token::OParen => Some((compile_function_call(l, c, arg)?, false)),
             Token::OBracket => {
                 let (offset, _) = compile_expression(l, c)?;
                 get_and_expect_token(l, Token::CBracket)?;
@@ -613,14 +624,7 @@ pub unsafe fn compile_block(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         compile_statement(l, c)?
     }
 }
-
-pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *const c_char, loc: Loc) -> Option<Arg> {
-    let var_def = find_var_deep(&(*c).vars, name);
-    if var_def.is_null() {
-        diagf!(loc, c!("ERROR: could not find function `%s`\n"), name);
-        return None;
-    }
-
+ unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, fun: Arg) -> Option<Arg> {
     let mut args: Array<Arg> = zeroed();
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -629,8 +633,7 @@ pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *cons
         loop {
             let (expr, _) = compile_expression(l, c)?;
             da_append(&mut args, expr);
-            lexer::get_token(l)?;
-            expect_tokens(l, &[Token::CParen, Token::Comma])?;
+            get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
             match (*l).token {
                 Token::CParen => break,
                 Token::Comma => continue,
@@ -639,16 +642,9 @@ pub unsafe fn compile_function_call(l: *mut Lexer, c: *mut Compiler, name: *cons
         }
     }
 
-    match (*var_def).storage {
-        Storage::External{name} => {
-            let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Funcall {result, name, args}, (*l).loc, c);
-            Some(Arg::AutoVar(result))
-        }
-        Storage::Auto{..} => {
-            missingf!(loc, c!("calling functions from auto variables\n"));
-        }
-    }
+    let result = allocate_auto_var(&mut (*c).auto_vars_ator);
+    push_opcode(Op::Funcall {result, fun, args}, (*l).loc, c);
+    Some(Arg::AutoVar(result))
 }
 
 pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name: *const c_char) {
@@ -681,29 +677,42 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             scope_pop(&mut (*c).vars);
             Some(())
         }
-        Token::Extrn | Token::Auto => {
-            let extrn = (*l).token == Token::Extrn;
-            'vars: loop {
+        Token::Extrn => {
+            while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                let loc = (*l).loc;
-                let storage = if extrn {
-                    name_declare_if_not_exists(&mut (*c).extrns, name);
-                    Storage::External{name}
-                } else {
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    Storage::Auto{index}
-                };
-                declare_var(l, &mut (*c).vars, name, loc, storage)?;
-                lexer::get_token(l)?;
-                expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
-                match (*l).token {
-                    Token::SemiColon => break 'vars,
-                    Token::Comma => continue 'vars,
-                    _ => unreachable!(),
+                name_declare_if_not_exists(&mut (*c).extrns, name);
+                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::External {name})?;
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+            }
+            Some(())
+        }
+        Token::Auto => {
+            while (*l).token != Token::SemiColon {
+                get_and_expect_token(l, Token::ID)?;
+                // TODO: Automatic variable names should only need function lifetime.
+                //   Could use .arena_labels here but naming would be confusing.
+                //   Rename .arena_labels to indicate function lifetime first?
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                declare_var(l, &mut (*c).vars, name, (*l).loc, Storage::Auto {index})?;
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
+                if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
+                    let size = (*l).int_number as usize;
+                    if size == 0 {
+                        missingf!((*l).loc, c!("It's unclear how to compile automatic vector of size 0\n"));
+                    }
+                    for _ in 0..size {
+                        allocate_auto_var(&mut (*c).auto_vars_ator);
+                    }
+                    // TODO: Here we assume the stack grows down. Should we
+                    //   instead find a way for the target to decide that?
+                    //   See TODO(2025-06-05 17:45:36)
+                    let arg = Arg::RefAutoVar(index + size);
+                    push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
+                    get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-
             Some(())
         }
         Token::If => {
@@ -755,8 +764,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::Return => {
-            lexer::get_token(l)?;
-            expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
+            get_and_expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
                 push_opcode(Op::Return {arg: None}, (*l).loc, c);
             } else if (*l).token == Token::OParen {
@@ -795,8 +803,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     }
                 }
 
-                lexer::get_token(l)?;
-                expect_tokens(l, &[Token::Comma, Token::CParen])?;
+                get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
             }
             get_and_expect_token(l, Token::SemiColon)?;
 
@@ -902,6 +909,21 @@ pub struct Func {
 }
 
 #[derive(Clone, Copy)]
+pub struct Global {
+    name: *const c_char,
+    values: Array<ImmediateValue>,
+    is_vec: bool,
+    minimum_size: usize,
+}
+
+#[derive(Clone, Copy)]
+pub enum ImmediateValue {
+    Name(*const c_char),
+    Literal(u64),
+    DataOffset(usize),
+}
+
+#[derive(Clone, Copy)]
 pub struct Switch {
     pub jmp_addr: usize,
     pub value: Arg,
@@ -919,7 +941,7 @@ pub struct Compiler {
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
-    pub globals: Array<*const c_char>,
+    pub globals: Array<Global>,
     pub arena_names: Arena,
     pub arena_labels: Arena,
     pub target: Target,
@@ -937,6 +959,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
+
         if (*l).token == Token::OParen { // Function definition
             declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
@@ -952,8 +975,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                     declare_var(l, &mut (*c).vars, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
-                    lexer::get_token(l)?;
-                    expect_tokens(l, &[Token::CParen, Token::Comma])?;
+                    get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
                     match (*l).token {
                         Token::CParen => break 'params,
                         Token::Comma => continue 'params,
@@ -988,9 +1010,60 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
-            name_declare_if_not_exists(&mut (*c).globals, name);
             declare_var(l, &mut (*c).vars, name, name_loc, Storage::External{name})?;
-            get_and_expect_token(l, Token::SemiColon)?;
+
+            let mut global = Global {
+                name,
+                values: zeroed(),
+                is_vec: false,
+                minimum_size: 0,
+            };
+
+            // TODO: This code is ugly
+            // couldn't find a better way to write it while keeping accurate error messages
+            get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+
+            if (*l).token == Token::OBracket {
+                global.is_vec = true;
+                get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
+                if (*l).token == Token::IntLit {
+                    global.minimum_size = (*l).int_number as usize;
+                    get_and_expect_token(l, Token::CBracket)?;
+                }
+                get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+            }
+
+            while (*l).token != Token::SemiColon {
+                let value = match (*l).token {
+                    Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
+                    Token::String => ImmediateValue::DataOffset(compile_string(l, c)),
+                    Token::ID => {
+                        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                        let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
+                        let var = find_var_near(scope, name);
+                        if var.is_null() {
+                            diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
+                            return None;
+                        }
+                        ImmediateValue::Name(name)
+                    }
+                    _ => unreachable!()
+                };
+                da_append(&mut global.values, value);
+
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                if (*l).token == Token::Comma {
+                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                } else {
+                    break;
+                }
+            }
+
+            if !global.is_vec && global.values.count == 0 {
+                da_append(&mut global.values, ImmediateValue::Literal(0));
+            }
+            da_append(&mut (*c).globals, global)
+
         }
     }
 
@@ -1116,21 +1189,23 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
-                return None;
-            }
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
 
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
                 &mut cmd,
-                c!("as"), c!("-o"), output_obj_path, output_asm_path,
+                gas, c!("-o"), output_obj_path, output_asm_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1140,6 +1215,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
+                    cmd_append! {
+                        &mut cmd,
+                        c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
+                    }
+                }
+
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1276,6 +1358,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                // TODO: document that you may need wine as a system package to cross-run fasm-x86_64-windows
                 if !cfg!(target_os = "windows") {
                     cmd_append! {
                         &mut cmd,
