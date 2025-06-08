@@ -79,6 +79,34 @@ pub unsafe fn get_and_expect_token_id(l: *mut Lexer, id: *const c_char) -> Optio
     expect_token_id(l, id)
 }
 
+pub unsafe fn get_parent_dir(sb: *mut String_Builder, path: *const c_char) {
+    let last_slash = strrchr(path, '/' as c_int);
+
+    if last_slash.is_null() {
+        da_append_many(sb, slice::from_raw_parts(path, strlen(path)));
+        false
+    } else {
+        let count = last_slash.sub(path as usize);
+        da_append_many(sb, slice::from_raw_parts(path, count as usize));
+        da_append(sb, '\0' as c_char);
+        true
+    };
+}
+
+pub unsafe fn get_cwd(a: *mut Arena) -> *const c_char {
+    // PATH_MAX = 4096 on linux
+    // i see no way of doing this better without the libc crate
+    let cwd: [c_char; 4096] = zeroed();
+    getcwd(cwd.as_ptr(), cwd.len());
+    arena::strdup(a, cwd.as_ptr())
+}
+
+pub unsafe fn canon_path(a: *mut Arena, path: *const c_char) -> *const c_char {
+    let mut resolved: [c_char; 4096] = zeroed(); // PATH_MAX
+    realpath(path, resolved.as_mut_ptr());
+    arena::strdup(a, resolved.as_ptr())
+}
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub enum Storage {
@@ -948,9 +976,54 @@ pub struct Compiler {
 }
 
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
+    let mut sb: String_Builder = zeroed();
+
     'def: loop {
+        sb.count = 0;
         lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
+
+        if (*l).token == Token::Hash { // Directive definition
+            get_and_expect_token(l, Token::ID);
+            let name = (*l).string;
+
+            if strcmp(name, c!("include")) == 0 {
+                get_and_expect_token(l, Token::String);
+
+                let base_path = (*l).string;
+                get_parent_dir(&mut sb, base_path);
+
+                let cwd = get_cwd(&mut (*c).arena_names);
+
+                // canonicalized allows for "../a/b" or "./a/b" to resolve correctly
+                let parent_path = canon_path(&mut (*c).arena_names, sb.items);
+
+                sb.count = 0;
+                if !read_entire_file(base_path, &mut sb) { return None; }
+                let mut l: Lexer = lexer::new(base_path as *mut c_char, sb.items, sb.items.add(sb.count));
+
+                // Set cwd to the parent path of the current include
+                //
+                // This allows relative nested includes such as:
+                //
+                // ---- ./foo/a.b ----
+                // #include "b.b"
+                // ---- ./foo/b.b ----
+                // b 39;
+                // ----  entry.b  ----
+                // #include "./foo/a.b"
+                //
+                // These should all share the same global context so `scope_push`
+                // is NOT required here, unlike during codegen for each unit
+                chdir(parent_path);
+                compile_program(&mut l, c)?;
+                chdir(cwd);
+                continue;
+            } else {
+                diagf!((*l).loc, c!("ERROR: could not find directive `%s`\n"), name);
+                return None;
+            }
+        }
 
         expect_token(l, Token::ID)?;
 
@@ -1154,17 +1227,23 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut c: Compiler = zeroed();
     c.target = target;
     let mut input: String_Builder = zeroed();
+    let cwd = get_cwd(&mut c.arena_names);
 
     scope_push(&mut c.vars);          // begin global scope
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
+        get_parent_dir(&mut input, input_path);
+
+        // canonicalized allows for "../a/b" or "./a/b" to resolve correctly
+        let parent_path = canon_path(&mut c.arena_names, input.items);
 
         input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
-
         let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
 
+        chdir(parent_path);
         compile_program(&mut l, &mut c)?;
+        chdir(cwd);
     }
     scope_pop(&mut c.vars);          // end global scope
 

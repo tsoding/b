@@ -25,12 +25,16 @@ pub mod libc {
         pub fn stderr() -> *mut FILE;
         pub fn strcmp(s1: *const c_char, s2: *const c_char) -> c_int;
         pub fn strchr(s: *const c_char, c: c_int) -> *const c_char;
+        pub fn strrchr(s: *const c_char, c: c_int) -> *const c_char;
         pub fn strlen(s: *const c_char) -> usize;
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn printf(fmt: *const c_char, ...) -> c_int;
         pub fn fprintf(stream: *mut FILE, fmt: *const c_char, ...) -> c_int;
         pub fn memset(dest: *mut c_void, byte: c_int, size: usize) -> c_int;
+        pub fn chdir(path: *const c_char) -> c_int;
+        pub fn getcwd(buf: *const c_char, len: usize) -> *const c_char;
+        pub fn realpath(path: *const c_char, resolved_path: *mut c_char) -> *mut c_char;
         pub fn isspace(c: c_int) -> c_int;
         pub fn isalpha(c: c_int) -> c_int;
         pub fn isalnum(c: c_int) -> c_int;
