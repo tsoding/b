@@ -41,7 +41,8 @@ LINUX_TESTS=\
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector \
 	$(BUILD)/tests/multiple-postfix \
-	$(BUILD)/tests/rvalue_call
+	$(BUILD)/tests/rvalue_call \
+	$(BUILD)/tests/call_stack_args
 
 GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/args6-gas-aarch64-linux \
@@ -93,7 +94,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
 	$(BUILD)/tests/multiple-postfix.exe \
-	$(BUILD)/tests/rvalue_call.exe
+	$(BUILD)/tests/rvalue_call.exe \
+	$(BUILD)/tests/call_stack_args.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
@@ -119,7 +121,8 @@ UXN_TESTS=\
 	$(BUILD)/tests/unary_priority.rom \
 	$(BUILD)/tests/vector.rom \
 	$(BUILD)/tests/multiple-postfix.rom \
-	$(BUILD)/tests/rvalue_call.rom
+	$(BUILD)/tests/rvalue_call.rom \
+	$(BUILD)/tests/call_stack_args.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
