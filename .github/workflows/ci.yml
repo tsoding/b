@@ -9,7 +9,7 @@ on:
       - main
 
 # TODO: add *-on-windows jobs
-# TODO: add gas-aarch64-linux-on-* jobs
+# TODO: build examples on CI
 
 jobs:
   fasm-x86_64-linux-on-ubuntu:
@@ -38,6 +38,19 @@ jobs:
           sudo apt-get install -qq -y clang make fasm mingw-w64 wine64
       - name: Run Tests
         run: make test-mingw32
+  gas-aarch64-linux-on-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y clang make qemu-user gcc-aarch64-linux-gnu
+      - name: Run Tests
+        run: make test-gas-aarch64-linux
   uxn-on-ubuntu:
     runs-on: ubuntu-latest
     steps:
