@@ -19,6 +19,8 @@ RSS=\
 # Default target Linux tests
 LINUX_TESTS=\
 	$(BUILD)/tests/args6 \
+	$(BUILD)/tests/args11 \
+	$(BUILD)/tests/args11-extrn \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
@@ -46,6 +48,8 @@ LINUX_TESTS=\
 
 GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/args6-gas-aarch64-linux \
+	$(BUILD)/tests/args11-gas-aarch64-linux \
+	$(BUILD)/tests/args11-extrn-gas-aarch64-linux \
 	$(BUILD)/tests/compare-gas-aarch64-linux \
 	$(BUILD)/tests/deref_assign-gas-aarch64-linux \
 	$(BUILD)/tests/divmod-gas-aarch64-linux \
@@ -68,10 +72,13 @@ GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/unary_priority-gas-aarch64-linux \
 	$(BUILD)/tests/vector-gas-aarch64-linux \
 	$(BUILD)/tests/multiple-postfix-gas-aarch64-linux \
-	$(BUILD)/tests/rvalue_call-gas-aarch64-linux
+	$(BUILD)/tests/rvalue_call-gas-aarch64-linux \
+	$(BUILD)/tests/call_stack_args-gas-aarch64-linux
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
+	$(BUILD)/tests/args11.exe \
+	$(BUILD)/tests/args11-extrn.exe \
 	$(BUILD)/tests/compare.exe \
 	$(BUILD)/tests/deref_assign.exe \
 	$(BUILD)/tests/divmod.exe \
@@ -99,6 +106,8 @@ MINGW32_TESTS=\
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
+	$(BUILD)/tests/args11.rom \
+	$(BUILD)/tests/args11-extrn.rom \
 	$(BUILD)/tests/compare.rom \
 	$(BUILD)/tests/deref_assign.rom \
 	$(BUILD)/tests/divmod.rom \
