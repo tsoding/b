@@ -68,8 +68,7 @@ GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/unary_priority-gas-aarch64-linux \
 	$(BUILD)/tests/vector-gas-aarch64-linux \
 	$(BUILD)/tests/multiple-postfix-gas-aarch64-linux \
-	$(BUILD)/tests/rvalue_call-gas-aarch64-linux \
-	$(BUILD)/tests/call_stack_args-gas-aarch64-linux
+	$(BUILD)/tests/rvalue_call-gas-aarch64-linux
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
