@@ -114,12 +114,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
             }
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
-                sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow
-                                                           // supply 1 to the 3rd argument of mneg
-                                                           // as an immediate value without moving
-                                                           // it to a separate register?
-                sb_appendf(output, c!("    mneg x2, x0, x1\n"));
-                sb_appendf(output, c!("    str x2, [x29, -%zu]\n"), result*8);
+                sb_appendf(output, c!("    neg x0, x0\n"));
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
             }
             Op::UnaryNot {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
