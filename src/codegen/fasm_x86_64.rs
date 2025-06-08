@@ -35,6 +35,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
     sb_appendf(output, c!("_%s:\n"), name);
+    sb_appendf(output, c!("    push rbx\n"));
     sb_appendf(output, c!("    push rbp\n"));
     sb_appendf(output, c!("    mov rbp, rsp\n"));
     if stack_size > 0 {
@@ -70,6 +71,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 sb_appendf(output, c!("    mov rsp, rbp\n"));
                 sb_appendf(output, c!("    pop rbp\n"));
+                sb_appendf(output, c!("    pop rbx\n"));
                 sb_appendf(output, c!("    ret\n"));
             }
             Op::Store {index, arg} => {
@@ -276,6 +278,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     sb_appendf(output, c!("    mov rax, 0\n"));
     sb_appendf(output, c!("    mov rsp, rbp\n"));
     sb_appendf(output, c!("    pop rbp\n"));
+    sb_appendf(output, c!("    pop rbx\n"));
     sb_appendf(output, c!("    ret\n"));
 }
 
