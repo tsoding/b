@@ -24,6 +24,7 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
         Arg::Literal(value)     => sb_appendf(output, c!("%ld"), value),
         Arg::AutoVar(index)     => sb_appendf(output, c!("auto[%zu]"), index),
         Arg::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
+        Arg::Bogus              => unreachable!("bogus-amogus")
     };
 }
 

@@ -78,6 +78,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
                 sb_appendf(output, c!("    add %s, %s, %zu\n"), reg, reg, offset);
             }
         }
+        Arg::Bogus => unreachable!("bogus-amogus")
     };
 }
 

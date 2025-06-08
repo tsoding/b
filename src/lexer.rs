@@ -511,6 +511,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         }
         if (*l).string_storage.count > 2 {
             // TODO: maybe we should allow more on targets with 64 bits?
+            // TODO: such error should not terminate the compilation
             diagf!((*l).loc, c!("LEXER ERROR: Character literal contains more than two characters\n"));
             (*l).token = Token::ParseError;
             return None;
