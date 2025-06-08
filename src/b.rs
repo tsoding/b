@@ -1192,6 +1192,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
                 (c!("as"), c!("cc"))
             } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
                 (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
             };
 
@@ -1356,6 +1358,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                // TODO: document that you may need wine as a system package to cross-run fasm-x86_64-windows
                 if !cfg!(target_os = "windows") {
                     cmd_append! {
                         &mut cmd,
