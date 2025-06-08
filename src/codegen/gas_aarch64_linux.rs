@@ -275,7 +275,9 @@ pub unsafe fn generate_block(func_name: *const c_char, index: usize, stack_size:
             sb_appendf(output, c!("    ret\n"));
         }
         TermOp::Jmp {addr} => {
-            sb_appendf(output, c!("    b %s.op_%zu\n"), func_name, addr);
+            if addr != index+1 {
+                sb_appendf(output, c!("    b %s.op_%zu\n"), func_name, addr);
+            }
         }
         TermOp::Branch {if_true_addr, if_false_addr, arg} => {
             load_arg_to_reg(arg, c!("x0"), output, term_op.loc);

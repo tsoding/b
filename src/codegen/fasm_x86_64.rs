@@ -264,7 +264,9 @@ pub unsafe fn generate_block(index: usize, ops: *const [OpWithLocation], term_op
             sb_appendf(output, c!("    jmp .op_%zu\n"), if_false_addr);
         },
         TermOp::Jmp{addr} => {
-            sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
+            if addr != index+1 {
+                sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
+            }
         },
     }
 }
