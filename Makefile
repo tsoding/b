@@ -59,13 +59,15 @@ GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/recursion-gas-aarch64-linux \
 	$(BUILD)/tests/ref-gas-aarch64-linux \
 	$(BUILD)/tests/return-gas-aarch64-linux \
+	$(BUILD)/tests/switch-gas-aarch64-linux \
 	$(BUILD)/tests/stack_alloc-gas-aarch64-linux \
 	$(BUILD)/tests/ternary-side-effect-gas-aarch64-linux \
 	$(BUILD)/tests/ternary-gas-aarch64-linux \
 	$(BUILD)/tests/ternary-assign-gas-aarch64-linux \
 	$(BUILD)/tests/unary_priority-gas-aarch64-linux \
 	$(BUILD)/tests/vector-gas-aarch64-linux \
-	$(BUILD)/tests/multiple-postfix-gas-aarch64-linux
+	$(BUILD)/tests/multiple-postfix-gas-aarch64-linux \
+	$(BUILD)/tests/rvalue_call-gas-aarch64-linux
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
