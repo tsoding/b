@@ -216,15 +216,16 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 // args on the stack are push right to left
                 // so we need to iterate them in reverse
                 let mut push_count = 0;
+                if args.count > reg_args_count && args.count % 2 != 0 {
+                    sb_appendf(output, c!("    push rax\n")); // Align stack
+                    push_count += 1;
+                }
                 for i in (reg_args_count..args.count).rev() {
                     load_arg_to_reg(*args.items.add(i), c!("rax"), output);
                     sb_appendf(output, c!("    push rax\n"));
                     push_count += 1;
                 }
-                if push_count % 2 != 0 {
-                    sb_appendf(output, c!("    push rax\n")); // Align stack
-                    push_count += 1;
-                }
+                assert!(push_count % 2 == 0, "stack is not aligned");
 
                 match os {
                     Os::Linux => {
