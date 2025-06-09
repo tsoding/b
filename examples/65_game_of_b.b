@@ -3,7 +3,6 @@
 
 TRUE;
 FALSE;
-INT_MASK;
 ALIVE_CHAR;
 LOOP_TIME_us;
 NUM_SPEEDS;
@@ -32,6 +31,14 @@ lchar(string, i, char) {
     memset(string + i, char, 1);
 }
 
+int32(array, i) {
+    extrn memcpy;
+    auto val;
+    val = 0;
+    memcpy(&val, array + i, 4);
+    return (val);
+}
+
 init_ncurses() {
     extrn initscr, noecho, cbreak, curs_set, timeout, keypad, stdscr, mousemask, mouseinterval;
     initscr();
@@ -40,7 +47,7 @@ init_ncurses() {
     curs_set(0);
     timeout(0);
     keypad(stdscr, 1);
-    mousemask(0x4, 0); // BUTTON1_CLICKED
+    mousemask(1, 0); // BUTTON1_RELEASED
     mouseinterval(10);
 }
 
@@ -54,7 +61,6 @@ deinit_ncurses() {
 init_globals() {
     TRUE = 1;
     FALSE = 0;
-    INT_MASK = 0xFFFFFFFF;
     ALIVE_CHAR = 'B';
     LOOP_TIME_us = 10000;
     NUM_SPEEDS = 16;
@@ -248,8 +254,8 @@ main() {
         } else if(input == 0x199) { // KEY_MOUSE
             if (getmouse(mouse_event) == 0) { // OK
                 auto x, y;
-                x = (mouse_event[4] & INT_MASK) / 2;
-                y = mouse_event[8] & INT_MASK;
+                x = int32(mouse_event, 4) / 2;
+                y = int32(mouse_event, 8);
                 set_alive(cur_buf, y, x, !is_alive(cur_buf, y, x));
                 redraw = 1;
             }
