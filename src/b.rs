@@ -1439,7 +1439,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Uxn => {
-            // codegen::uxn::generate_program(&mut output, &c);
+            codegen::uxn::generate_program(&mut output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {

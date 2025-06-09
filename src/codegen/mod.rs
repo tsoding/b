@@ -4,7 +4,7 @@ use crate::strcmp;
 pub mod gas_aarch64_linux;
 pub mod fasm_x86_64;
 pub mod ir;
-// pub mod uxn;
+pub mod uxn;
 
 // TODO: add wasm target
 //   Don't touch this TODO! @rexim wants to stream it!

@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+use crate::{Op, Binop, Arg, Func, Global, ImmediateValue, Compiler, Block, TermOp};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -101,6 +101,8 @@ const SP: u8 = 0;
 const BP: u8 = 2;
 const FIRST_ARG: u8 = 4;
 
+const MAX_ARGS: usize = (256 - FIRST_ARG as usize) / 2;
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     let mut assembler: Assembler = zeroed();
     assembler.data_section_label = create_label(&mut assembler);
@@ -140,10 +142,8 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], 
     }
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, assembler: *mut Assembler) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [Block], output: *mut String_Builder, assembler: *mut Assembler) {
     link_label(assembler, get_or_create_label_by_name(assembler, name), (*output).count);
-
-    const MAX_ARGS: usize = (256 - FIRST_ARG as usize) / 2;
 
     if params_count > MAX_ARGS {
         missingf!(name_loc, c!("Too many parameters in function definition. We support only %zu but %zu were provided\n"), MAX_ARGS, params_count);
@@ -175,16 +175,70 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     }
 
     // prepare labels for each op and the end of the function
-    let mut op_labels: Array<usize> = zeroed();
+    let mut block_labels: Array<usize> = zeroed();
     for _ in 0..body.len() {
-        da_append(&mut op_labels, create_label(assembler));
+        da_append(&mut block_labels, create_label(assembler));
     }
-    da_append(&mut op_labels, create_label(assembler));
+    da_append(&mut block_labels, create_label(assembler));
 
     // emit code
     for i in 0..body.len() {
-        link_label(assembler, *op_labels.items.add(i), (*output).count);
-        let op = (*body)[i];
+        link_label(assembler, *block_labels.items.add(i), (*output).count);
+        let block = (*body)[i];
+        generate_block_body(output, block, assembler);
+        match block.term_op.opcode {
+            TermOp::Jmp {addr} => {
+                if addr != i + 1 {
+                    write_op(output, UxnOp::JMI);
+                    write_label_rel(output, *block_labels.items.add(addr), assembler, 0);
+                }
+            }
+            TermOp::Branch {if_true_addr, if_false_addr, arg} => {
+                load_arg(arg, output, assembler);
+                write_lit2(output, 0);
+                write_op(output, UxnOp::EQU2);
+                write_op(output, UxnOp::JCI);
+                write_label_rel(output, *block_labels.items.add(if_false_addr), assembler, 0);
+                if if_true_addr != i + 1 {
+                    write_op(output, UxnOp::JMI);
+                    write_label_rel(output, *block_labels.items.add(if_true_addr), assembler, 0);
+                }
+            }
+            TermOp::Return {arg} => {
+                // Put return value in the FIRST_ARG
+                if let Some(arg) = arg {
+                    load_arg(arg, output, assembler);
+                } else {
+                    write_lit2(output, 0);
+                }
+                write_lit_stz2(output, FIRST_ARG);
+
+                // restore SP from BP
+                write_lit_ldz2(output, BP);
+                write_lit_stz2(output, SP);
+
+                // pop BP from stack
+                write_lit_ldz2(output, SP);
+                write_op(output, UxnOp::LDA2);
+                write_lit_stz2(output, BP);
+                write_lit_ldz2(output, SP);
+                write_lit2(output, 2);
+                write_op(output, UxnOp::ADD2);
+                write_lit_stz2(output, SP);
+
+                // return
+                write_op(output, UxnOp::JMP2r);
+            }
+        }
+    }
+    link_label(assembler, *block_labels.items.add(body.len()), (*output).count);
+
+    free(block_labels.items);
+}
+
+pub unsafe fn generate_block_body(output: *mut String_Builder, block: Block, assembler: *mut Assembler) {
+    for i in 0..block.ops.count {
+        let op = *block.ops.items.add(i);
         match op.opcode {
             Op::UnaryNot {result, arg} => {
                 load_arg(arg, output, assembler);
@@ -454,67 +508,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, result);
             }
             Op::Asm {..} => missingf!(op.loc, c!("Inline assembly\n")),
-            Op::Jmp {addr} => {
-                write_op(output, UxnOp::JMI);
-                write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
-            }
-            Op::JmpIfNot {addr, arg} => {
-                load_arg(arg, output, assembler);
-                write_lit2(output, 0);
-                write_op(output, UxnOp::EQU2);
-                write_op(output, UxnOp::JCI);
-                write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
-            }
-            Op::Return {arg} => {
-                // Put return value in the FIRST_ARG
-                if let Some(arg) = arg {
-                    load_arg(arg, output, assembler);
-                } else {
-                    write_lit2(output, 0);
-                }
-                write_lit_stz2(output, FIRST_ARG);
-
-                // restore SP from BP
-                write_lit_ldz2(output, BP);
-                write_lit_stz2(output, SP);
-
-                // pop BP from stack
-                write_lit_ldz2(output, SP);
-                write_op(output, UxnOp::LDA2);
-                write_lit_stz2(output, BP);
-                write_lit_ldz2(output, SP);
-                write_lit2(output, 2);
-                write_op(output, UxnOp::ADD2);
-                write_lit_stz2(output, SP);
-
-                // return
-                write_op(output, UxnOp::JMP2r);
-            }
         }
     }
-    link_label(assembler, *op_labels.items.add(body.len()), (*output).count);
-
-    free(op_labels.items);
-
-    // return value is 0
-    write_lit2(output, 0);
-    write_lit_stz2(output, FIRST_ARG);
-
-    // restore SP from BP
-    write_lit_ldz2(output, BP);
-    write_lit_stz2(output, SP);
-
-    // pop BP from stack
-    write_lit_ldz2(output, SP);
-    write_op(output, UxnOp::LDA2);
-    write_lit_stz2(output, BP);
-    write_lit_ldz2(output, SP);
-    write_lit2(output, 2);
-    write_op(output, UxnOp::ADD2);
-    write_lit_stz2(output, SP);
-
-    // return
-    write_op(output, UxnOp::JMP2r);
 }
 
 pub unsafe fn write_op(output: *mut String_Builder, op: UxnOp) {
