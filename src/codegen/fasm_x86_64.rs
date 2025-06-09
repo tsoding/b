@@ -218,7 +218,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 if stack_args_count > 0 {
                     sb_appendf(output, c!("    sub rsp, %zu\n"), stack_args_size);
                     for i in 0..stack_args_count {
-                        load_arg_to_reg(*args.items.add(i), c!("rax"), output);
+                        load_arg_to_reg(*args.items.add(reg_args_count + i), c!("rax"), output);
                         sb_appendf(output, c!("    mov [rsp+%zu], rax\n"), i*8);
                     }
                 }
