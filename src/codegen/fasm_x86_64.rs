@@ -207,52 +207,42 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
             }
             Op::Funcall{result, fun, args} => {
+                let reg_args_count = cmp::min(args.count, registers.len());
+                for i in 0..reg_args_count {
+                    let reg = (*registers)[i];
+                    load_arg_to_reg(*args.items.add(i), reg, output);
+                }
+
+                let stack_args_count = args.count - reg_args_count;
+                let stack_args_size = align_bytes(stack_args_count*8, 16);
+                if stack_args_count > 0 {
+                    sb_appendf(output, c!("    sub rsp, %zu\n"), stack_args_size);
+                    for i in 0..stack_args_count {
+                        load_arg_to_reg(*args.items.add(reg_args_count + i), c!("rax"), output);
+                        sb_appendf(output, c!("    mov [rsp+%zu], rax\n"), i*8);
+                    }
+                }
+
                 match os {
                     Os::Linux => {
-                        let mut i = 0;
-                        while i < cmp::min(args.count, registers.len()) {
-                            let reg = (*registers)[i];
-                            load_arg_to_reg(*args.items.add(i), reg, output);
-                            i += 1;
-                        }
-
-                        // args on the stack are push right to left
-                        // so we need to iterate them in reverse
-                        for j in (i..args.count).rev() {
-                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
-                            sb_appendf(output, c!("    push rax\n"));
-                        }
-
                         sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
                                                                    // floating point args via al. Since B
                                                                    // does not distinguish regular and
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
                         call_arg(fun, output);
-                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8); // deallocate stack args
                     }
                     Os::Windows => {
-                        let mut i = 0;
-                        while i < cmp::min(args.count, registers.len()) {
-                            let reg = (*registers)[i];
-                            load_arg_to_reg(*args.items.add(i), reg, output);
-                            i += 1;
-                        }
-
-                        // args on the stack are push right to left
-                        // so we need to iterate them in reverse
-                        for j in (i..args.count).rev() {
-                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
-                            sb_appendf(output, c!("    push rax\n"));
-                        }
-
                         // allocate 32 bytes for "shadow space"
                         // it must be allocated at the top of the stack after all arguments are pushed
                         // so we can't allocate it at function prologue
                         sb_appendf(output, c!("    sub rsp, 32\n"));
                         call_arg(fun, output);
-                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8+32); // deallocate stack args & "shadow space"
+                        sb_appendf(output, c!("    add rsp, 32\n")); // deallocate "shadow space"
                     }
+                }
+                if stack_args_count > 0 {
+                    sb_appendf(output, c!("    add rsp, %zu\n"), stack_args_size);
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
