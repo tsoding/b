@@ -207,61 +207,46 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
             }
             Op::Funcall{result, fun, args} => {
+                let mut i = 0;
+                while i < cmp::min(args.count, registers.len()) {
+                    let reg = (*registers)[i];
+                    load_arg_to_reg(*args.items.add(i), reg, output);
+                    i += 1;
+                }
+
+                // args on the stack are push right to left
+                // so we need to iterate them in reverse
+                let mut push_count = 0;
+                for j in (i..args.count).rev() {
+                    load_arg_to_reg(*args.items.add(j), c!("rax"), output);
+                    sb_appendf(output, c!("    push rax\n"));
+                    push_count += 1;
+                }
+                if push_count % 2 != 0 {
+                    sb_appendf(output, c!("    push rax\n")); // Align stack
+                    push_count += 1;
+                }
+
                 match os {
                     Os::Linux => {
-                        let mut i = 0;
-                        while i < cmp::min(args.count, registers.len()) {
-                            let reg = (*registers)[i];
-                            load_arg_to_reg(*args.items.add(i), reg, output);
-                            i += 1;
-                        }
-
-                        // args on the stack are push right to left
-                        // so we need to iterate them in reverse
-                        let mut push_count = 0;
-                        for j in (i..args.count).rev() {
-                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
-                            sb_appendf(output, c!("    push rax\n"));
-                            push_count += 1;
-                        }
-                        if push_count % 2 != 0 {
-                            sb_appendf(output, c!("    push rax\n")); // Align stack
-                            push_count += 1;
-                        }
-
                         sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
                                                                    // floating point args via al. Since B
                                                                    // does not distinguish regular and
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
                         call_arg(fun, output);
-
-                        if push_count > 0 {
-                            sb_appendf(output, c!("    add rsp, %zu\n"), push_count*8);
-                        }
                     }
                     Os::Windows => {
-                        let mut i = 0;
-                        while i < cmp::min(args.count, registers.len()) {
-                            let reg = (*registers)[i];
-                            load_arg_to_reg(*args.items.add(i), reg, output);
-                            i += 1;
-                        }
-
-                        // args on the stack are push right to left
-                        // so we need to iterate them in reverse
-                        for j in (i..args.count).rev() {
-                            load_arg_to_reg(*args.items.add(j), c!("rax"), output);
-                            sb_appendf(output, c!("    push rax\n"));
-                        }
-
                         // allocate 32 bytes for "shadow space"
                         // it must be allocated at the top of the stack after all arguments are pushed
                         // so we can't allocate it at function prologue
                         sb_appendf(output, c!("    sub rsp, 32\n"));
                         call_arg(fun, output);
-                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8+32); // deallocate stack args & "shadow space"
+                        sb_appendf(output, c!("    add rsp, 32\n")); // deallocate "shadow space"
                     }
+                }
+                if push_count > 0 {
+                    sb_appendf(output, c!("    add rsp, %zu\n"), push_count*8); // deallocate stack args
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
