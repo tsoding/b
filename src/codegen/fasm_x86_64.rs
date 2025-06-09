@@ -213,19 +213,15 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     load_arg_to_reg(*args.items.add(i), reg, output);
                 }
 
-                // args on the stack are push right to left
-                // so we need to iterate them in reverse
-                let mut push_count = 0;
-                if args.count > reg_args_count && args.count % 2 != 0 {
-                    sb_appendf(output, c!("    push rax\n")); // Align stack
-                    push_count += 1;
+                let stack_args_count = args.count - reg_args_count;
+                let stack_args_size = align_bytes(stack_args_count*8, 16);
+                if stack_args_count > 0 {
+                    sb_appendf(output, c!("    sub rsp, %zu\n"), stack_args_size);
+                    for i in 0..stack_args_count {
+                        load_arg_to_reg(*args.items.add(i), c!("rax"), output);
+                        sb_appendf(output, c!("    mov [rsp+%zu], rax\n"), i*8);
+                    }
                 }
-                for i in (reg_args_count..args.count).rev() {
-                    load_arg_to_reg(*args.items.add(i), c!("rax"), output);
-                    sb_appendf(output, c!("    push rax\n"));
-                    push_count += 1;
-                }
-                assert!(push_count % 2 == 0, "stack is not aligned");
 
                 match os {
                     Os::Linux => {
@@ -245,8 +241,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         sb_appendf(output, c!("    add rsp, 32\n")); // deallocate "shadow space"
                     }
                 }
-                if push_count > 0 {
-                    sb_appendf(output, c!("    add rsp, %zu\n"), push_count*8); // deallocate stack args
+                if stack_args_count > 0 {
+                    sb_appendf(output, c!("    add rsp, %zu\n"), stack_args_size);
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
