@@ -35,7 +35,7 @@ int32(array, i) {
     extrn memcpy;
     auto val;
     val = 0;
-    memcpy(&val, array + i, 4);
+    memcpy(&val, array + (i * 4), 4);
     return (val);
 }
 
@@ -254,8 +254,8 @@ main() {
         } else if(input == 0x199) { // KEY_MOUSE
             if (getmouse(mouse_event) == 0) { // OK
                 auto x, y;
-                x = int32(mouse_event, 4) / 2;
-                y = int32(mouse_event, 8);
+                x = int32(mouse_event, 1) / 2;
+                y = int32(mouse_event, 2);
                 set_alive(cur_buf, y, x, !is_alive(cur_buf, y, x));
                 redraw = 1;
             }
