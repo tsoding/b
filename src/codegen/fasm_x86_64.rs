@@ -218,9 +218,15 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
                         // args on the stack are push right to left
                         // so we need to iterate them in reverse
+                        let mut push_count = 0;
                         for j in (i..args.count).rev() {
                             load_arg_to_reg(*args.items.add(j), c!("rax"), output);
                             sb_appendf(output, c!("    push rax\n"));
+                            push_count += 1;
+                        }
+                        if push_count % 2 != 0 {
+                            sb_appendf(output, c!("    push rax\n")); // Align stack
+                            push_count += 1;
                         }
 
                         sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
@@ -229,7 +235,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                                                                    // variadic functions we set al to 0 just
                                                                    // in case.
                         call_arg(fun, output);
-                        sb_appendf(output, c!("    add rsp, %zu\n"), (args.count-i)*8); // deallocate stack args
+
+                        if push_count > 0 {
+                            sb_appendf(output, c!("    add rsp, %zu\n"), push_count*8);
+                        }
                     }
                     Os::Windows => {
                         let mut i = 0;
