@@ -207,18 +207,17 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
             }
             Op::Funcall{result, fun, args} => {
-                let mut i = 0;
-                while i < cmp::min(args.count, registers.len()) {
+                let reg_args_count = cmp::min(args.count, registers.len());
+                for i in 0..reg_args_count {
                     let reg = (*registers)[i];
                     load_arg_to_reg(*args.items.add(i), reg, output);
-                    i += 1;
                 }
 
                 // args on the stack are push right to left
                 // so we need to iterate them in reverse
                 let mut push_count = 0;
-                for j in (i..args.count).rev() {
-                    load_arg_to_reg(*args.items.add(j), c!("rax"), output);
+                for i in (reg_args_count..args.count).rev() {
+                    load_arg_to_reg(*args.items.add(i), c!("rax"), output);
                     sb_appendf(output, c!("    push rax\n"));
                     push_count += 1;
                 }
