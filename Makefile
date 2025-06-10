@@ -10,15 +10,19 @@ RSS=\
 	$(SRC)/flag.rs \
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
+	$(SRC)/fake6502.rs \
 	$(SRC)/codegen/fasm_x86_64.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs
 
+# Default target Linux tests
 LINUX_TESTS=\
 	$(BUILD)/tests/args6 \
 	$(BUILD)/tests/argv \
+	$(BUILD)/tests/args11 \
+	$(BUILD)/tests/args11-extrn \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
@@ -41,11 +45,43 @@ LINUX_TESTS=\
 	$(BUILD)/tests/unary_priority \
 	$(BUILD)/tests/vector \
 	$(BUILD)/tests/multiple-postfix \
-	$(BUILD)/tests/rvalue_call
+	$(BUILD)/tests/rvalue_call \
+	$(BUILD)/tests/call_stack_args
+
+GAS_AARCH64_LINUX_TESTS=\
+	$(BUILD)/tests/args6-gas-aarch64-linux \
+	$(BUILD)/tests/args11-gas-aarch64-linux \
+	$(BUILD)/tests/args11-extrn-gas-aarch64-linux \
+	$(BUILD)/tests/compare-gas-aarch64-linux \
+	$(BUILD)/tests/deref_assign-gas-aarch64-linux \
+	$(BUILD)/tests/divmod-gas-aarch64-linux \
+	$(BUILD)/tests/e-gas-aarch64-linux \
+	$(BUILD)/tests/forward-declare-gas-aarch64-linux \
+	$(BUILD)/tests/goto-gas-aarch64-linux \
+	$(BUILD)/tests/hello-gas-aarch64-linux \
+	$(BUILD)/tests/inc_dec-gas-aarch64-linux \
+	$(BUILD)/tests/lexer-gas-aarch64-linux \
+	$(BUILD)/tests/literals-gas-aarch64-linux \
+	$(BUILD)/tests/minus_2-gas-aarch64-linux \
+	$(BUILD)/tests/recursion-gas-aarch64-linux \
+	$(BUILD)/tests/ref-gas-aarch64-linux \
+	$(BUILD)/tests/return-gas-aarch64-linux \
+	$(BUILD)/tests/switch-gas-aarch64-linux \
+	$(BUILD)/tests/stack_alloc-gas-aarch64-linux \
+	$(BUILD)/tests/ternary-side-effect-gas-aarch64-linux \
+	$(BUILD)/tests/ternary-gas-aarch64-linux \
+	$(BUILD)/tests/ternary-assign-gas-aarch64-linux \
+	$(BUILD)/tests/unary_priority-gas-aarch64-linux \
+	$(BUILD)/tests/vector-gas-aarch64-linux \
+	$(BUILD)/tests/multiple-postfix-gas-aarch64-linux \
+	$(BUILD)/tests/rvalue_call-gas-aarch64-linux \
+	$(BUILD)/tests/call_stack_args-gas-aarch64-linux
 
 MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
 	$(BUILD)/tests/argv.exe \
+	$(BUILD)/tests/args11.exe \
+	$(BUILD)/tests/args11-extrn.exe \
 	$(BUILD)/tests/compare.exe \
 	$(BUILD)/tests/deref_assign.exe \
 	$(BUILD)/tests/divmod.exe \
@@ -68,11 +104,14 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/unary_priority.exe \
 	$(BUILD)/tests/vector.exe \
 	$(BUILD)/tests/multiple-postfix.exe \
-	$(BUILD)/tests/rvalue_call.exe
+	$(BUILD)/tests/rvalue_call.exe \
+	$(BUILD)/tests/call_stack_args.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
 	$(BUILD)/tests/argv.rom \
+	$(BUILD)/tests/args11.rom \
+	$(BUILD)/tests/args11-extrn.rom \
 	$(BUILD)/tests/compare.rom \
 	$(BUILD)/tests/deref_assign.rom \
 	$(BUILD)/tests/divmod.rom \
@@ -95,19 +134,22 @@ UXN_TESTS=\
 	$(BUILD)/tests/unary_priority.rom \
 	$(BUILD)/tests/vector.rom \
 	$(BUILD)/tests/multiple-postfix.rom \
-	$(BUILD)/tests/rvalue_call.rom
+	$(BUILD)/tests/rvalue_call.rom \
+	$(BUILD)/tests/call_stack_args.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
 	$(BUILD)/flag.linux.o \
 	$(BUILD)/libc.linux.o \
-	$(BUILD)/arena.linux.o
+	$(BUILD)/arena.linux.o \
+	$(BUILD)/fake6502.linux.o
 
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
 	$(BUILD)/flag.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
-	$(BUILD)/arena.mingw32.o
+	$(BUILD)/arena.mingw32.o \
+	$(BUILD)/fake6502.linux.o
 
 $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
@@ -132,6 +174,13 @@ test: $(LINUX_TESTS)
 $(BUILD)/tests/%: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
 	$(BUILD)/b -run -o $@ $< ./std/test.b
 
+.PHONY: test-gas-aarch64-linux
+test-gas-aarch64-linux: $(GAS_AARCH64_LINUX_TESTS)
+
+$(BUILD)/tests/%-gas-aarch64-linux: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t gas-aarch64-linux -run -o $@ $< ./std/test.b
+
+.PHONY: test-mingw32
 test-mingw32: $(MINGW32_TESTS)
 
 $(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
@@ -140,6 +189,7 @@ $(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests
 
+.PHONY: test-uxn
 test-uxn: $(UXN_TESTS)
 
 $(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/libb.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
