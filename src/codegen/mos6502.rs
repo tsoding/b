@@ -1,12 +1,13 @@
 // This uses 16-bit words, because addresses in 6502 are 16bits, so otherwise pointers would not work.
 // To emulate 16-bit words using 8-bit registers, we use Y to hold the high byte and A to hold the low byte.
 
-// As 6502 has a fixed stack at $0100-$01FF, we only have 255 bytes available. Machine code is currently loaded at $E000, but can be reconfigured.
+// As 6502 has a fixed stack at $0100-$01FF, we only have 255 bytes available. Machine code is loaded at $E000 by default, but can be reconfigured via LOAD_OFFSET=<offset> "linker flag".
 
 // "Calling convention": first argument in Y:A, remaining args on the stack.
 
 use core::ffi::*;
 use core::mem::zeroed;
+use core::ptr;
 use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg};
 use crate::nob::*;
 use crate::missingf;
@@ -17,7 +18,6 @@ const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
 const BNE:       u8 = 0xD0;
-const BMI:       u8 = 0x30;
 const CLC:       u8 = 0x18;
 const CMP_IMM:   u8 = 0xC9;
 const CMP_ZP:    u8 = 0xC5;
@@ -595,19 +595,46 @@ pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
     write_word(output, 0xFFFC);
 }
 
+pub const DEFAULT_LOAD_OFFSET: u16 = 0xE000;
 
-pub const LOAD_OFFSET: u16 = 0xE000;
+#[derive(Clone, Copy)]
+pub struct Config {
+    pub load_offset: u16,
+}
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
+pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<Config> {
+    let mut config = Config {
+        load_offset: DEFAULT_LOAD_OFFSET,
+    };
+
+    // TODO: some sort of help flag to list all these "linker" flags for mos6502
+    for i in 0..link_flags.len() {
+        let flag = (*link_flags)[i];
+        let mut flag_sv = sv_from_cstr(flag);
+        let load_offset_prefix = sv_from_cstr(c!("LOAD_OFFSET="));
+        if sv_starts_with(flag_sv, load_offset_prefix) {
+            flag_sv.data = flag_sv.data.add(load_offset_prefix.count);
+            flag_sv.count += load_offset_prefix.count;
+            config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
+        } else {
+            fprintf(stderr(), c!("Unknown linker flag: %s\n"), flag);
+            return None
+        }
+    }
+
+    Some(config)
+}
+
+pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, config: Config) -> Option<()> {
     let mut asm: Assembler = zeroed();
-    let code_start = (*output).count as u16 + LOAD_OFFSET;
     generate_entry(output, &mut asm);
 
-    generate_funcs(output, code_start, da_slice((*c).funcs), &mut asm);
+    generate_funcs(output, config.load_offset, da_slice((*c).funcs), &mut asm);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
 
-    let data_start = code_start + (*output).count as u16;
+    let data_start = config.load_offset + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
 
-    apply_relocations(output, code_start, data_start, &mut asm);
+    apply_relocations(output, config.load_offset, data_start, &mut asm);
+    Some(())
 }

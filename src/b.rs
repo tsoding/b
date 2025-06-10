@@ -13,6 +13,7 @@ pub mod crust;
 pub mod arena;
 pub mod codegen;
 pub mod lexer;
+pub mod fake6502;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -1449,7 +1450,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Mos6502 => {
-            codegen::mos6502::generate_program(&mut output, &c);
+            let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
+            codegen::mos6502::generate_program(&mut output, &c, config);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1463,7 +1465,16 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
             if *run {
-                todo!("Emulate it?");
+                fake6502::load_rom_at(output, config.load_offset);
+                fake6502::reset();
+                fake6502::pc = config.load_offset;
+                while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
+                    fake6502::step();
+                    if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
+                        printf(c!("%c"), fake6502::a as c_uint);
+                        fake6502::rts();
+                    }
+                }
             }
         }
         Target::IR => {
