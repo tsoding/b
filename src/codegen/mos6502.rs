@@ -1,3 +1,10 @@
+// This uses 16-bit words, because addresses in 6502 are 16bits, so otherwise pointers would not work.
+// To emulate 16-bit words using 8-bit registers, we use Y to hold the high byte and A to hold the low byte.
+
+// As 6502 has a fixed stack at $0100-$01FF, we only have 255 bytes available. Machine code is currently loaded at $E000, but can be reconfigured.
+
+// "Calling convention": first argument in Y:A, remaining args on the stack.
+
 use core::ffi::*;
 use core::mem::zeroed;
 use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg};
@@ -10,6 +17,7 @@ const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
 const BNE:       u8 = 0xD0;
+const BMI:       u8 = 0x30;
 const CLC:       u8 = 0x18;
 const CMP_IMM:   u8 = 0xC9;
 const CMP_ZP:    u8 = 0xC5;
@@ -140,7 +148,7 @@ pub unsafe fn load_auto_var(output: *mut String_Builder, index: usize, asm: *mut
     write_word(output, STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2);
 }
 
-pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, asm: *mut Assembler) {
+pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mut Assembler) {
     match arg {
         Arg::Deref(index) => {
             load_auto_var(output, index, asm);
@@ -167,9 +175,9 @@ pub unsafe fn load_arg(arg: Arg, output: *mut String_Builder, asm: *mut Assemble
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
         },
-        Arg::RefAutoVar(_index)  => unimplemented!("RefAutoVar"),
-        Arg::RefExternal(_name)  => unimplemented!("RefExternal"),
-        Arg::External(_name)     => unimplemented!("External"),
+        Arg::RefAutoVar(_index)  => missingf!(loc, c!("RefAutoVar\n")),
+        Arg::RefExternal(_name)  => missingf!(loc, c!("RefExternal\n")),
+        Arg::External(_name)     => missingf!(loc, c!("External\n")),
         Arg::AutoVar(index)     => {
             load_auto_var(output, index, asm);
         },
@@ -308,18 +316,18 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
         write_byte(output, STA_X);
         write_word(output, STACK_PAGE + stack_size as u16 - 2*i);
     }
-    
+
     for i in 0..body.len() {
         let addr_idx = *op_addresses.items.add(i);
         *(*asm).addresses.items.add(addr_idx) = (*output).count as u16; // update op address
-        
+
         let op = (*body)[i];
         match op.opcode {
             Op::Return {arg: _} => missingf!(name_loc, c!("implement Return\n\n")),
             Op::Store {index: _, arg: _} => missingf!(name_loc, c!("implement Store")),
             Op::ExternalAssign{name: _, arg: _} => missingf!(name_loc, c!("implement ExternalAssign\n")),
             Op::AutoAssign{index, arg} => {
-                load_arg(arg, output, asm);
+                load_arg(arg, op.loc, output, asm);
                 store_auto(output, index, asm);
             },
             Op::Negate {result: _, arg: _} => missingf!(name_loc, c!("implement Negate\n")),
@@ -331,12 +339,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                     Binop::BitShl => missingf!(name_loc, c!("implement BitShl\n")),
                     Binop::BitShr => missingf!(name_loc, c!("implement BitShr\n")),
                     Binop::Plus => {
-                        load_arg(rhs, output, asm);
+                        load_arg(rhs, op.loc, output, asm);
                         write_byte(output, STA_ZP);
                         write_byte(output, ZP_OP_TMP_0);
                         write_byte(output, STY_ZP);
                         write_byte(output, ZP_OP_TMP_1);
-                        load_arg(lhs, output, asm);
+                        load_arg(lhs, op.loc, output, asm);
 
                         write_byte(output, CLC);
                         write_byte(output, ADC_ZP);
@@ -355,12 +363,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                     Binop::Less => missingf!(name_loc, c!("implement Less\n")),
                     Binop::Greater => missingf!(name_loc, c!("implement Greater\n")),
                     Binop::Equal => {
-                        load_arg(rhs, output, asm);
+                        load_arg(rhs, op.loc, output, asm);
                         write_byte(output, STA_ZP);
                         write_byte(output, ZP_OP_TMP_0);
                         write_byte(output, STY_ZP);
                         write_byte(output, ZP_OP_TMP_1);
-                        load_arg(lhs, output, asm);
+                        load_arg(lhs, op.loc, output, asm);
 
                         write_byte(output, LDX_IMM);
                         write_byte(output, 0);
@@ -390,16 +398,16 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                 match fun {
                     Arg::RefExternal(_) | Arg::External(_) => {},
                     arg => {
-                        load_arg(arg, output, asm);
+                        load_arg(arg, op.loc, output, asm);
                         write_byte(output, STA_ZP);
                         write_byte(output, ZP_DEREF_FUN_0);
                         write_byte(output, STY_ZP);
                         write_byte(output, ZP_DEREF_FUN_1);
                     }
                 }
-                
+
                 for i in (0..args.count).rev() {
-                    load_arg(*args.items.add(i), output, asm);
+                    load_arg(*args.items.add(i), op.loc, output, asm);
                     // first arg in Y:A to be compatible with wozmon routines
                     if i != 0 {
                         push16(output, asm);
@@ -435,7 +443,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
             },
             Op::Asm {args: _} => unreachable!(),
             Op::JmpIfNot{addr, arg} => {
-                load_arg(arg, output, asm);
+                load_arg(arg, op.loc, output, asm);
 
                 write_byte(output, CMP_IMM);
                 write_byte(output, 0);
