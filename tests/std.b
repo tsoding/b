@@ -1,5 +1,5 @@
-// This test is meant to be run with *only* the B standard library.
-// It won't work with libc because there we don't have char and lchar.
+// This test is meant to be run with the B standard library.
+// Compile with `-stdlib -L -nostdlib` to use libb and not libc.
 
 copy(dst, src) {
     extrn char, lchar;

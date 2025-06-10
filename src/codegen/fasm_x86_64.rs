@@ -34,6 +34,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     sb_appendf(output, c!("public _%s as '%s'\n"), name, name);
+    // If you modify the prologue see TODO(Tue Jun 10 12:30:15 BST 2025)
     sb_appendf(output, c!("_%s:\n"), name);
     sb_appendf(output, c!("    push rbp\n"));
     sb_appendf(output, c!("    mov rbp, rsp\n"));

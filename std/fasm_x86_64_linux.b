@@ -20,8 +20,13 @@ exit(code) {
     __asm__("mov rax, 60", "syscall");
 }
 
+// TODO(Tue Jun 10 12:30:15 BST 2025): This is very sensitive to the stack layout
+//   above rbp. If there are any changes to the prologue inserted by the compiler,
+//   this will break easily. Would be better to have some king of __attribute__((naked))
+//   situation to not generate a prologue/epilogue; or to just write this in assembly directly.
+// TODO: Should this be in a separate brt0? Would allow using libb and libc together,
+//   at the cost of needing to also link brt0 in manually when compiling without libc.
 _start() {
-    // argc and argv from the caller's stack
     auto argc, argv;
     __asm__(
         "mov rax, [rbp+8]",  // argc
