@@ -13,6 +13,7 @@ pub mod crust;
 pub mod arena;
 pub mod codegen;
 pub mod lexer;
+pub mod fake6502;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -1446,6 +1447,34 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     }
                 }
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            }
+        }
+        Target::Mos6502 => {
+            let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
+            codegen::mos6502::generate_program(&mut output, &c, config);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let input_path = *input_paths.items;
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.6502"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), effective_output_path);
+            if *run {
+                fake6502::load_rom_at(output, config.load_offset);
+                fake6502::reset();
+                fake6502::pc = config.load_offset;
+                while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
+                    fake6502::step();
+                    if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
+                        printf(c!("%c"), fake6502::a as c_uint);
+                        fake6502::rts();
+                    }
+                }
             }
         }
         Target::IR => {
