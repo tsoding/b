@@ -1,5 +1,6 @@
 // This test is meant to be run with the B standard library.
 // Compile with `-stdlib -L -nostdlib` to use libb and not libc.
+// TODO: Integrate this into the testing workflow for targets that have libb.
 
 copy(dst, src) {
     extrn char, lchar;
