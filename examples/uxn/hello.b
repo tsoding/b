@@ -1,5 +1,5 @@
 /*
-Doesn't need the standard library (std/uxn.b) to work,
+Doesn't need the standard library (libb/uxn.b) to work,
 shows how to communicate with a varvara device
 */
 

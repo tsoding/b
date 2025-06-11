@@ -1,5 +1,5 @@
-/* IMPORTANT! Implies no standard library. Do not link with ./std/uxn.b.
- * Because the entry point from ./std/uxn.b conflicts with the entry point
+/* IMPORTANT! Implies no standard library. Do not link with ./libb/uxn.b.
+ * Because the entry point from ./libb/uxn.b conflicts with the entry point
  * of this program.
  * TODO: do we want to do anything about this?
  */
