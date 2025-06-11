@@ -75,4 +75,4 @@ jobs:
       - name: Run Tests
         run: |
           make
-          ./build/b -run -t 6502 ./examples/10_hello_world.b
+          ./build/b -run -t 6502 ./examples/10_hello_world.b ./std/6502.b
