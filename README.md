@@ -17,7 +17,6 @@ Compiler for the B Programming Language implemented in [Crust](https://github.co
 
 - [Rust](https://www.rust-lang.org/) - the compiler is written in it;
 - [fasm](https://flatassembler.net/) - used as the compiler backend;
-- [clang](https://clang.llvm.org/) - for linking with the C runtime;
 
 ## Quick Start
 
