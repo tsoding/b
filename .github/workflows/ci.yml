@@ -65,3 +65,14 @@ jobs:
           make cli
       - name: Run Tests
         run: PATH=$(realpath uxn11/bin):$PATH make test-uxn
+  mos6502-on-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Run Tests
+        run: |
+          make
+          ./build/b -run -t 6502 ./examples/10_hello_world.b
