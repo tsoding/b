@@ -341,13 +341,13 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
         // low
         write_byte(output, LDA_X);
-        write_word(output, STACK_PAGE + stack_size as u16 + 2 + 2*i + 1);
+        write_word(output, STACK_PAGE + stack_size as u16 + 2*i + 1);
         write_byte(output, STA_X);
         write_word(output, STACK_PAGE + stack_size as u16 - 2*i - 1);
 
         // high
         write_byte(output, LDA_X);
-        write_word(output, STACK_PAGE + stack_size as u16 + 2 + 2*i + 2);
+        write_word(output, STACK_PAGE + stack_size as u16 + 2*i + 2);
         write_byte(output, STA_X);
         write_word(output, STACK_PAGE + stack_size as u16 - 2*i);
     }
@@ -487,7 +487,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         write_byte(output, LDX_IMM);
                         write_byte(output, 1);
 
-                        write_byte(output, SEC); // clear carry
+                        write_byte(output, SEC); // set carry
                         // sub low byte
                         write_byte(output, SBC_ZP);
                         write_byte(output, ZP_TMP_0);
@@ -501,7 +501,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         write_byte(output, BMI);
                         write_byte(output, 1);
 
-                        write_byte(output, INX);
+                        write_byte(output, DEX);
 
                         write_byte(output, TXA);
                         // zero extend result
@@ -612,13 +612,20 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     let addr_idx = *op_addresses.items.add(body.len());
     *(*asm).addresses.items.add(addr_idx) = (*output).count as u16; // update op address
 
-    add_sp(output, stack_size, asm);
+    if stack_size > 0 {
+        // seriously... we don't have enough registers to save A to...
+        write_byte(output, STA_ZP);
+        write_byte(output, ZP_RHS_L);
+        add_sp(output, stack_size, asm);
+        write_byte(output, LDA_ZP);
+        write_byte(output, ZP_RHS_L);
+    }
     write_byte(output, RTS);
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], asm: *mut Assembler) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, asm);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, asm);
     }
 }
 
