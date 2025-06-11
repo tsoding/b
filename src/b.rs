@@ -13,6 +13,7 @@ pub mod crust;
 pub mod arena;
 pub mod codegen;
 pub mod lexer;
+pub mod fake6502;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -58,6 +59,17 @@ pub unsafe fn expect_token(l: *mut Lexer, token: Token) -> Option<()> {
 pub unsafe fn get_and_expect_token(l: *mut Lexer, token: Token) -> Option<()> {
     lexer::get_token(l)?;
     expect_token(l, token)
+}
+
+pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler, token: Token) -> Option<()> {
+    let saved_point = (*l).parse_point;
+    lexer::get_token(l)?;
+    if let None = expect_token(l, token) {
+        (*l).parse_point = saved_point;
+        bump_error_count(c)
+    } else {
+        Some(())
+    }
 }
 
 pub unsafe fn get_and_expect_tokens(l: *mut Lexer, clexes: *const [Token]) -> Option<()> {
@@ -130,13 +142,13 @@ pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char)
     ptr::null()
 }
 
-pub unsafe fn declare_var(vars: *mut Array<Array<Var>>, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
-    let scope = da_last_mut(vars).expect("There should be always at least the global scope");
+pub unsafe fn declare_var(c: *mut Compiler, name: *const c_char, loc: Loc, storage: Storage) -> Option<()> {
+    let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
     let existing_var = find_var_near(scope, name);
     if !existing_var.is_null() {
         diagf!(loc, c!("ERROR: redefinition of variable `%s`\n"), name);
         diagf!((*existing_var).loc, c!("NOTE: the first declaration is located here\n"));
-        return None;
+        return bump_error_count(c);
     }
 
     da_append(scope, Var {name, loc, storage});
@@ -160,20 +172,28 @@ pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *c
     ptr::null()
 }
 
-pub unsafe fn define_label(labels: *mut Array<Label>, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
-    let existing_label = find_label(labels, name);
+pub unsafe fn define_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
+    let existing_label = find_label(&(*c).func_labels, name);
     if !existing_label.is_null() {
         diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
         diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
-        return None;
+        return bump_error_count(c);
     }
 
-    da_append(labels, Label {name, loc, addr});
+    da_append(&mut (*c).func_labels, Label {name, loc, addr});
     Some(())
 }
 
 #[derive(Clone, Copy)]
 pub enum Arg {
+    /// Bogus value of an Arg.
+    ///
+    /// You should always call unreachable!() if you encounterd it in
+    /// the codegens. This value indicates a compilation error and
+    /// encountering it means that the compiler didn't fail the
+    /// compilation before passing the Compiler struct to the
+    /// codegens.
+    Bogus,
     AutoVar(usize),
     Deref(usize),
     /// Reference to the autovar with the specified index
@@ -346,7 +366,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
     let arg = match (*l).token {
         Token::OParen => {
             let result = compile_expression(l, c)?;
-            get_and_expect_token(l, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
             Some(result)
         }
         Token::Not => {
@@ -373,13 +393,14 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot take the address of an rvalue\n"));
-                return None;
+                return bump_error_count(c).map(|()| (Arg::Bogus, false));
             }
 
             match arg {
                 Arg::Deref(index)   =>  Some((Arg::AutoVar(index), false)), // "&*x is identically x"
                 Arg::External(name) =>  Some((Arg::RefExternal(name), false)),
                 Arg::AutoVar(index) =>  Some((Arg::RefAutoVar(index), false)),
+                Arg::Bogus          =>  Some((Arg::Bogus, false)), // Reference of a bogus value is a bogus value
                 Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
             }
         }
@@ -389,7 +410,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-                return None;
+                return bump_error_count(c).map(|()| (Arg::Bogus, false));
             }
 
             compile_binop(arg, Arg::Literal(1), Binop::Plus, loc, c);
@@ -401,7 +422,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             if !is_lvalue {
                 diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-                return None;
+                return bump_error_count(c).map(|()| (Arg::Bogus, false));
             }
 
             compile_binop(arg, Arg::Literal(1), Binop::Minus, loc, c);
@@ -414,16 +435,12 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
                 diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                return None;
-            }
-
-            let saved_point = (*l).parse_point;
-            lexer::get_token(l)?;
-
-            (*l).parse_point = saved_point;
-            match (*var_def).storage {
-                Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
-                Storage::External{name} => Some((Arg::External(name), true)),
+                bump_error_count(c).map(|()| (Arg::Bogus, true))
+            } else {
+                match (*var_def).storage {
+                    Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
+                    Storage::External{name} => Some((Arg::External(name), true)),
+                }
             }
         }
         Token::String => {
@@ -446,7 +463,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             Token::OParen => Some((compile_function_call(l, c, arg)?, false)),
             Token::OBracket => {
                 let (offset, _) = compile_expression(l, c)?;
-                get_and_expect_token(l, Token::CBracket)?;
+                get_and_expect_token_but_continue(l, c, Token::CBracket)?;
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
                 let word_size = Arg::Literal(target_word_size((*c).target));
@@ -459,7 +476,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 let loc = (*l).loc;
                 if !is_lvalue {
                     diagf!(loc, c!("ERROR: cannot increment an rvalue\n"));
-                    return None;
+                    return bump_error_count(c).map(|()| (Arg::Bogus, false));
                 }
 
                 let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
@@ -472,7 +489,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 let loc = (*l).loc;
                 if !is_lvalue {
                     diagf!(loc, c!("ERROR: cannot decrement an rvalue\n"));
-                    return None;
+                    return bump_error_count(c).map(|()| (Arg::Bogus, false));
                 }
 
                 let pre = allocate_auto_var(&mut (*c).auto_vars_ator);
@@ -504,6 +521,9 @@ pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut 
         }
         Arg::AutoVar(index) => {
             push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
+        }
+        Arg::Bogus => {
+            // Bogus value does not compile to anything
         }
         Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
     }
@@ -554,7 +574,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
 
         if !lvalue {
             diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
-            return None;
+            return bump_error_count(c).map(|()| (Arg::Bogus, false));
         }
 
         if let Some(binop) = binop {
@@ -569,6 +589,9 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
                 }
                 Arg::AutoVar(index) => {
                     push_opcode(Op::AutoAssign {index, arg: rhs}, binop_loc, c);
+                }
+                Arg::Bogus => {
+                    // Bogus value does not compile to anything
                 }
                 Arg::Literal(_) | Arg::DataOffset(_) | Arg::RefAutoVar(_) | Arg::RefExternal(_) => unreachable!(),
             }
@@ -593,7 +616,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
         push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
 
         let addr_false = (*c).func_body.count;
-        get_and_expect_token(l, Token::Colon)?;
+        get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
         let (if_false, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
@@ -681,7 +704,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                 name_declare_if_not_exists(&mut (*c).extrns, name);
-                declare_var(&mut (*c).vars, name, (*l).loc, Storage::External {name})?;
+                declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
             Some(())
@@ -694,7 +717,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 //   Rename .arena_labels to indicate function lifetime first?
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                declare_var(&mut (*c).vars, name, (*l).loc, Storage::Auto {index})?;
+                declare_var(c, name, (*l).loc, Storage::Auto {index})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
                 if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
                     let size = (*l).int_number as usize;
@@ -715,10 +738,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::If => {
-            get_and_expect_token(l, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (cond, _) = compile_expression(l, c)?;
-            get_and_expect_token(l, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
 
             let addr_condition = (*c).func_body.count;
             push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, (*l).loc, c);
@@ -747,11 +770,11 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::While => {
             let begin = (*c).func_body.count;
-            get_and_expect_token(l, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             let (arg, _) = compile_expression(l, c)?;
 
-            get_and_expect_token(l, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
             let condition_jump = (*c).func_body.count;
             push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
             (*c).auto_vars_ator.count = saved_auto_vars_count;
@@ -768,8 +791,8 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 push_opcode(Op::Return {arg: None}, (*l).loc, c);
             } else if (*l).token == Token::OParen {
                 let (arg, _) = compile_expression(l, c)?;
-                get_and_expect_token(l, Token::CParen)?;
-                get_and_expect_token(l, Token::SemiColon)?;
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
                 push_opcode(Op::Return {arg: Some(arg)}, (*l).loc, c);
             } else {
                 unreachable!();
@@ -782,12 +805,12 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
-            get_and_expect_token(l, Token::SemiColon)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
             Some(())
         }
         Token::Asm => {
-            get_and_expect_token(l, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
 
             let mut args: Array<*const c_char> = zeroed();
 
@@ -798,47 +821,48 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         da_append(&mut args, strdup((*l).string));
                     }
                     _ => {
-                        diagf!((*l).loc, c!("ERROR: %s only takes strings"), (*l).string);
+                        diagf!((*l).loc, c!("ERROR: %s only takes strings\n"), (*l).string);
+                        bump_error_count(c)?;
                     }
                 }
 
                 get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
             }
-            get_and_expect_token(l, Token::SemiColon)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
 
             push_opcode(Op::Asm {args}, (*l).loc, c);
             Some(())
         }
         Token::Case => {
-            let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) else {
-                diagf!((*l).loc, c!("case label outside of switch\n"));
-                return None;
-            };
-
             let case_loc = (*l).loc;
             lexer::get_token(l);
             expect_tokens(l, &[Token::IntLit, Token::CharLit])?; // TODO: String ??!
             let case_value = (*l).int_number;
-            get_and_expect_token(l, Token::Colon)?;
+            get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
-            let addr = (*c).func_body.count;
-            push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
-            push_opcode(Op::Binop{
-                binop: Binop::Equal,
-                index: (*switch_frame).cond,
-                lhs: (*switch_frame).value,
-                rhs: Arg::Literal(case_value)
-            }, case_loc, c);
-            push_opcode(Op::JmpIfNot {
-                addr: 0,
-                arg: Arg::AutoVar((*switch_frame).cond)
-            }, case_loc, c);
+            if let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) {
+                let addr = (*c).func_body.count;
+                push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
+                push_opcode(Op::Binop{
+                    binop: Binop::Equal,
+                    index: (*switch_frame).cond,
+                    lhs: (*switch_frame).value,
+                    rhs: Arg::Literal(case_value)
+                }, case_loc, c);
+                push_opcode(Op::JmpIfNot {
+                    addr: 0,
+                    arg: Arg::AutoVar((*switch_frame).cond)
+                }, case_loc, c);
 
-            let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
-            backpatch_jmp(backpatch, addr + 1);
-            (*switch_frame).jmp_addr = addr + 2;
+                let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
+                backpatch_jmp(backpatch, addr + 1);
+                (*switch_frame).jmp_addr = addr + 2;
 
-            Some(())
+                Some(())
+            } else {
+                diagf!(case_loc, c!("ERROR: case label outside of switch\n"));
+                bump_error_count(c)
+            }
         }
         Token::Switch => {
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -867,7 +891,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let addr = (*c).func_body.count;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
-                    define_label(&mut (*c).func_labels, name, name_loc, addr)?;
+                    define_label(c, name, name_loc, addr)?;
                     return Some(());
                 }
             }
@@ -875,7 +899,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
             compile_expression(l, c)?;
             (*c).auto_vars_ator.count = saved_auto_vars_count;
-            get_and_expect_token(l, Token::SemiColon)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             Some(())
         }
     }
@@ -944,6 +968,17 @@ pub struct Compiler {
     pub arena_names: Arena,
     pub arena_labels: Arena,
     pub target: Target,
+    pub error_count: usize,
+}
+
+pub const MAX_ERROR_COUNT: usize = 100;
+pub unsafe fn bump_error_count(c: *mut Compiler) -> Option<()> {
+    (*c).error_count += 1;
+    if (*c).error_count >= MAX_ERROR_COUNT {
+        fprintf(stderr(), c!("TOO MANY ERRORS! Fix your program!\n"));
+        return None
+    }
+    Some(())
 }
 
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
@@ -960,7 +995,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         lexer::get_token(l)?;
 
         if (*l).token == Token::OParen { // Function definition
-            declare_var(&mut (*c).vars, name, name_loc, Storage::External{name})?;
+            declare_var(c, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
@@ -972,7 +1007,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                     let name_loc = (*l).loc;
                     let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    declare_var(&mut (*c).vars, name, name_loc, Storage::Auto{index})?;
+                    declare_var(c, name, name_loc, Storage::Auto{index})?;
                     params_count += 1;
                     get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
                     match (*l).token {
@@ -990,7 +1025,8 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let existing_label = find_label(&(*c).func_labels, used_label.name);
                 if existing_label.is_null() {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
-                    return None;
+                    bump_error_count(c)?;
+                    continue;
                 }
                 (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
             }
@@ -1009,7 +1045,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
-            declare_var(&mut (*c).vars, name, name_loc, Storage::External{name})?;
+            declare_var(c, name, name_loc, Storage::External{name})?;
 
             let mut global = Global {
                 name,
@@ -1027,7 +1063,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
                 if (*l).token == Token::IntLit {
                     global.minimum_size = (*l).int_number as usize;
-                    get_and_expect_token(l, Token::CBracket)?;
+                    get_and_expect_token_but_continue(l, c, Token::CBracket)?;
                 }
                 get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
             }
@@ -1042,7 +1078,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         let var = find_var_near(scope, name);
                         if var.is_null() {
                             diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                            return None;
+                            bump_error_count(c)?;
                         }
                         ImmediateValue::Name(name)
                     }
@@ -1167,6 +1203,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
     scope_pop(&mut c.vars);          // end global scope
 
+    if c.error_count > 0 {
+        return None
+    }
+
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     match target {
@@ -1188,21 +1228,23 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
 
-            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of aarch64 linux is not supported for now\n"));
-                return None;
-            }
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
 
             let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
             cmd_append! {
                 &mut cmd,
-                c!("as"), c!("-o"), output_obj_path, output_asm_path,
+                gas, c!("-o"), output_obj_path, output_asm_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1212,6 +1254,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
+                    cmd_append! {
+                        &mut cmd,
+                        c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
+                    }
+                }
+
                 // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
                 let run_path: *const c_char;
                 if (strchr(effective_output_path, '/' as c_int)).is_null() {
@@ -1348,6 +1397,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
+                // TODO: document that you may need wine as a system package to cross-run fasm-x86_64-windows
                 if !cfg!(target_os = "windows") {
                     cmd_append! {
                         &mut cmd,
@@ -1398,6 +1448,34 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             }
         }
+        Target::Mos6502 => {
+            let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
+            codegen::mos6502::generate_program(&mut output, &c, config);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let input_path = *input_paths.items;
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.6502"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("Generated %s\n"), effective_output_path);
+            if *run {
+                fake6502::load_rom_at(output, config.load_offset);
+                fake6502::reset();
+                fake6502::pc = config.load_offset;
+                while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
+                    fake6502::step();
+                    if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
+                        printf(c!("%c"), fake6502::a as c_uint);
+                        fake6502::rts();
+                    }
+                }
+            }
+        }
         Target::IR => {
             codegen::ir::generate_program(&mut output, &c);
 
@@ -1419,17 +1497,3 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
     Some(())
 }
-
-// TODO: Continue compilation for as long as possible
-//   even if you encounter semantical errors like unknown variables, functions, etc.
-//   If we couldn't find some names just report the error, generate some bogus IR, and
-//   continue compiling.
-//
-//   Every time an error occurs during the compilation we should increment some sort of error counter within
-//   struct Compiler and at the end of the compilation if the counter is greater than 0, fail the compilation
-//   without even trying to generate any assembly. We could also define some maximum error count after which
-//   the compilation fails instantaneously because of "too many errors" (similar to how Go compiler does this).
-//
-//   This idea might be extended to syntactical errors like missing semicolons. We could
-//   probably just assume the semicolons where we expect them, report the error and continue
-//   parsing and compiling.
