@@ -8,19 +8,20 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, Loc};
 use crate::nob::*;
-use crate::missingf;
+use crate::{missingf, diagf};
 use crate::crust::libc::*;
-use crate::Loc;
 
 const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
+const AND_ZP:    u8 = 0x25;
 const ASL_ZP:    u8 = 0x06;
 const BCC:       u8 = 0x90;
 const BMI:       u8 = 0x30;
 const BNE:       u8 = 0xD0;
+const BPL:       u8 = 0x10;
 const CLC:       u8 = 0x18;
 const CMP_IMM:   u8 = 0xC9;
 const CMP_ZP:    u8 = 0xC5;
@@ -218,14 +219,16 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             load_auto_var(output, index, asm);
         },
         Arg::Literal(value) => {
-            assert!(value < 65536);
+            if value >= 65536 {
+                diagf!(loc, c!("WARNING: contant `%d` out of range for 16 bits\n"), value);
+            }
             write_byte(output, LDA_IMM);
             write_byte(output, value as u8);
             write_byte(output, LDY_IMM);
             write_byte(output, (value >> 8) as u8);
         },
         Arg::DataOffset(offset) => {
-            assert!(offset < 65536);
+            assert!(offset < 65536, "data offset out of range");
             write_byte(output, LDA_IMM);
             add_reloc(output, RelocationKind::DataOffset{off: offset as u16, low: true}, asm);
             write_byte(output, LDY_IMM);
@@ -401,7 +404,18 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
                     Binop::BitOr => missingf!(op.loc, c!("implement BitOr\n")),
-                    Binop::BitAnd => missingf!(op.loc, c!("implement BitAnd\n")),
+                    Binop::BitAnd => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, AND_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, AND_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::BitShl => missingf!(op.loc, c!("implement BitShl\n")),
                     Binop::BitShr => missingf!(op.loc, c!("implement BitShr\n")),
                     Binop::Plus => {
@@ -748,9 +762,16 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
 
-            // clear Y
+            // sign extend Y
             write_byte(output, LDY_IMM);
             write_byte(output, 0);
+
+            write_byte(output, CMP_IMM);
+            write_byte(output, 0);
+            write_byte(output, BPL);
+            write_byte(output, 1);
+            write_byte(output, DEY);
+
             write_byte(output, RTS);
         } else {
             fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
