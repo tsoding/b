@@ -67,7 +67,6 @@ pub enum RelocationKind {
     }, // address from Assembler.addresses
     AddressRel {
         idx: usize,
-        add: u16
     }, // address from Assembler.addresses
     DataOffset {
         off: u16,
@@ -105,6 +104,7 @@ pub struct Assembler {
     pub relocs: Array<Relocation>,
     pub labels: Array<Label>,
     pub addresses: Array<u16>,
+    pub code_start: u16, // load address of code section
     pub frame_sz: u8, // current stack frame size in bytes, because 6502 has no base register
 }
 
@@ -265,8 +265,17 @@ pub unsafe fn pop16_discard(output: *mut String_Builder, asm: *mut Assembler) {
     write_byte(output, PLA);
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: u16,
-                                params_count: usize, auto_vars_count: usize,
+// load lhs in Y:A, rhs in TMP_0:TMP_1
+pub unsafe fn load_two_args(output: *mut String_Builder, lhs: Arg, rhs: Arg, op: OpWithLocation, asm: *mut Assembler) {
+    load_arg(rhs, op.loc, output, asm);
+    write_byte(output, STA_ZP);
+    write_byte(output, ZP_TMP_0);
+    write_byte(output, STY_ZP);
+    write_byte(output, ZP_TMP_1);
+    load_arg(lhs, op.loc, output, asm);
+}
+
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize,
                                 body: *const [OpWithLocation], output: *mut String_Builder,
                                 asm: *mut Assembler) {
     (*asm).frame_sz = 0;
@@ -339,12 +348,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                     Binop::BitShl => missingf!(name_loc, c!("implement BitShl\n")),
                     Binop::BitShr => missingf!(name_loc, c!("implement BitShr\n")),
                     Binop::Plus => {
-                        load_arg(rhs, op.loc, output, asm);
-                        write_byte(output, STA_ZP);
-                        write_byte(output, ZP_OP_TMP_0);
-                        write_byte(output, STY_ZP);
-                        write_byte(output, ZP_OP_TMP_1);
-                        load_arg(lhs, op.loc, output, asm);
+                        load_two_args(output, lhs, rhs, op, asm);
 
                         write_byte(output, CLC);
                         write_byte(output, ADC_ZP);
@@ -421,9 +425,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                     _ => { // arg already in (*)
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
                         write_byte(output, JSR);
-                        write_word(output, code_start + (*output).count as u16 + 5);
+                        write_word(output, (*asm).code_start + (*output).count as u16 + 5);
                         write_byte(output, JMP_ABS);
-                        write_word(output, code_start + (*output).count as u16 + 5);
+                        write_word(output, (*asm).code_start + (*output).count as u16 + 5);
                         write_byte(output, JMP_IND);
                         write_word(output, ZP_DEREF_FUN_0 as u16);
                     },
@@ -474,47 +478,44 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
     write_byte(output, RTS);
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, code_start: u16,
-                             funcs: *const [Func], asm: *mut Assembler) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], asm: *mut Assembler) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, code_start, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, asm);
+        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, asm);
     }
 }
 
-pub unsafe fn apply_relocations(output: *mut String_Builder, code_start: u16,
-                                data_start: u16, asm: *mut Assembler) {
+pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, asm: *mut Assembler) {
     'reloc_loop: for i in 0..(*asm).relocs.count {
         let reloc = *(*asm).relocs.items.add(i);
-        let taddr = reloc.addr;
+        let caddr = reloc.addr;
         match reloc.kind {
             RelocationKind::DataOffset{off, low} => {
                 if low {
-                    write_byte_at(output, (data_start + off) as u8, taddr);
+                    write_byte_at(output, (data_start + off) as u8, caddr);
                 } else {
-                    write_byte_at(output, ((data_start + off) >> 8) as u8, taddr);
+                    write_byte_at(output, ((data_start + off) >> 8) as u8, caddr);
                 }
             },
             RelocationKind::Label{name} => {
                 for i in 0..(*asm).labels.count {
                     let label = *(*asm).labels.items.add(i);
                     if strcmp(label.name, name) == 0 {
-                        write_word_at(output, code_start + label.addr, taddr);
+                        write_word_at(output, (*asm).code_start + label.addr, caddr);
                         continue 'reloc_loop;
                     }
                 }
                 printf(c!("linking failed. could not find label `%s'\n"), name);
                 unreachable!();
             },
-            RelocationKind::AddressRel{idx, add} => {
+            RelocationKind::AddressRel{idx} => {
                 let jaddr = *(*asm).addresses.items.add(idx);
-                printf(c!("idx=%d,jaddr=%d\n"), idx as c_int, jaddr as c_int);
-                let rel: i16 = jaddr as i16 - (taddr + add) as i16;
+                let rel: i16 = jaddr as i16 - (caddr + 1) as i16;
                 assert!(rel < 128 && rel >= -128);
-                write_byte_at(output, rel as u8, taddr);
+                write_byte_at(output, rel as u8, caddr);
             },
             RelocationKind::AddressAbs{idx} => {
-                let saddr = *(*asm).addresses.items.add(idx) + code_start;
-                write_word_at(output, saddr, taddr);
+                let saddr = *(*asm).addresses.items.add(idx) + (*asm).code_start;
+                write_word_at(output, saddr, caddr);
             },
         }
     }
@@ -633,13 +634,14 @@ pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) ->
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, config: Config) -> Option<()> {
     let mut asm: Assembler = zeroed();
     generate_entry(output, &mut asm);
+    asm.code_start = config.load_offset;
 
-    generate_funcs(output, config.load_offset, da_slice((*c).funcs), &mut asm);
+    generate_funcs(output, da_slice((*c).funcs), &mut asm);
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
 
     let data_start = config.load_offset + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
 
-    apply_relocations(output, config.load_offset, data_start, &mut asm);
+    apply_relocations(output, data_start, &mut asm);
     Some(())
 }
