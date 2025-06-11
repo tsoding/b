@@ -1467,13 +1467,21 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 fake6502::load_rom_at(output, config.load_offset);
                 fake6502::reset();
                 fake6502::pc = config.load_offset;
-                while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
+
+                // set reset to #0000 to exit on reset
+                fake6502::MEMORY[0xFFFC] = 0;
+                fake6502::MEMORY[0xFFFD] = 0;
+
+                while fake6502::pc != 0 { // The convetion is stop executing when pc == #0000
                     fake6502::step();
                     if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
                         printf(c!("%c"), fake6502::a as c_uint);
                         fake6502::rts();
                     }
                 }
+                // print exit code (in Y:A)
+                printf(c!("Exited with code %u\n"),
+                       ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
             }
         }
         Target::IR => {

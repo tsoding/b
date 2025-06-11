@@ -591,6 +591,11 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
     write_byte(output, JSR);
     add_reloc(output, RelocationKind::Label{name: c!("main")}, asm);
+
+    // exit code 0
+    write_byte(output, LDA_IMM);
+    write_byte(output, 0);
+
     write_byte(output, JMP_IND);
     write_word(output, 0xFFFC);
 }
