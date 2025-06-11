@@ -1,5 +1,7 @@
 use core::mem::zeroed;
 use crate::nob::*;
+use core::ffi::*;
+use crate::printf;
 
 static mut MEMORY: [u8; 1<<16] = unsafe { zeroed() };
 
@@ -17,6 +19,18 @@ pub unsafe extern "C" fn read6502(address: u16) -> u8 {
 #[no_mangle]
 pub unsafe extern "C" fn write6502(address: u16, value: u8) {
     MEMORY[address as usize] = value;
+}
+
+pub unsafe fn extrn_functions() {
+    match pc {
+        0xFFEF => { // Wozmon ECHO
+                    // Char is in the `a` register.
+            printf(c!("%c"), a as c_uint);
+            rts();
+
+        }
+        _ => {}
+    }
 }
 
 extern "C" {

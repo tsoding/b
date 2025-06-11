@@ -36,7 +36,7 @@ pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("fasm-x86_64-linux"),   target: Target::Fasm_x86_64_Linux   },
     Target_Name { name: c!("gas-aarch64-linux"),   target: Target::Gas_AArch64_Linux   },
     Target_Name { name: c!("uxn"),                 target: Target::Uxn                 },
-    Target_Name { name: c!("6502"),                target: Target::Mos6502             },
+    Target_Name { name: c!("m6502-unknown-apple1"), target: Target::Mos6502             },
     Target_Name { name: c!("ir"),                  target: Target::IR                  },
 ];
 

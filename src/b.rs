@@ -1469,10 +1469,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 fake6502::pc = config.load_offset;
                 while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
                     fake6502::step();
-                    if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
-                        printf(c!("%c"), fake6502::a as c_uint);
-                        fake6502::rts();
-                    }
+                    fake6502::extrn_functions(); 
                 }
             }
         }
