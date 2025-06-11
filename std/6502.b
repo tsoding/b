@@ -1,3 +1,11 @@
+putchar(c) {
+    0xFFEF(c);
+}
+
+malloc() {
+    return(0x0200);
+}
+
 // TODO: add other arguments
 printf(str) {
     extrn char;
@@ -7,9 +15,9 @@ printf(str) {
     c = char(str, i);
     while (c) {
         if (c == '\n') {
-            0xFFEF(0xD); // \r
+            putchar(0xD); // \r
         }
-        0xFFEF(c); // ECHO
+        putchar(c); // ECHO
         i++;
         c = char(str, i);
     }
