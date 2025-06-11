@@ -137,7 +137,7 @@ $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
 
 $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
-	$(CC) -fPIC -g -c $< -o $@
+	$(CC) -fPIC -g -c $< -o $@ $(LDFLAGS)
 
 # Cross-compilation on Linux to Windows using mingw32-w64
 # Invoked on demand by `make ./build/b.exe`
