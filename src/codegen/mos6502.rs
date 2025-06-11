@@ -19,7 +19,6 @@ const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
 const ASL_ZP:    u8 = 0x06;
 const BCC:       u8 = 0x90;
-const BEQ:       u8 = 0xF0;
 const BMI:       u8 = 0x30;
 const BNE:       u8 = 0xD0;
 const CLC:       u8 = 0x18;
@@ -27,7 +26,8 @@ const CMP_IMM:   u8 = 0xC9;
 const CMP_ZP:    u8 = 0xC5;
 const CPY_IMM:   u8 = 0xC0;
 const CPY_ZP:    u8 = 0xC4;
-const INC_A:     u8 = 0x1A;
+const DEX:       u8 = 0xCA;
+const DEY:       u8 = 0x88;
 const INX:       u8 = 0xE8;
 const JMP_ABS:   u8 = 0x4C;
 const JMP_IND:   u8 = 0x6C;
@@ -47,6 +47,7 @@ const RTS:       u8 = 0x60;
 const ROL_ZP:    u8 = 0x26;
 const SBC_ZP:    u8 = 0xE5;
 const SEC:       u8 = 0x38;
+const STA_IND_Y: u8 = 0x91;
 const STA_X:     u8 = 0x9D;
 const STA_ZP:    u8 = 0x85;
 const STY_ZP:    u8 = 0x84;
@@ -61,16 +62,18 @@ const TYA:       u8 = 0x98;
 // TODO: Do we really have to use
 // zero page for indirect function calls
 // or derefs?
-const ZP_DEREF_0:     u8 = 0;
-const ZP_DEREF_1:     u8 = 1;
-const ZP_TMP_0:       u8 = 2;
-const ZP_TMP_1:       u8 = 3;
-const ZP_TMP_2:       u8 = 4;
-const ZP_TMP_3:       u8 = 5;
-const ZP_TMP_4:       u8 = 6;
-const ZP_TMP_5:       u8 = 7;
-const ZP_DEREF_FUN_0: u8 = 8; // can't be the same as ZP_DEREF,
-const ZP_DEREF_FUN_1: u8 = 9; // as we use this before argument loading
+const ZP_DEREF_0:       u8 = 0;
+const ZP_DEREF_1:       u8 = 1;
+const ZP_DEREF_STORE_0: u8 = 2;
+const ZP_DEREF_STORE_1: u8 = 3;
+const ZP_RHS_L:         u8 = 4;
+const ZP_RHS_H:         u8 = 5;
+const ZP_TMP_0:         u8 = 6;
+const ZP_TMP_1:         u8 = 7;
+const ZP_TMP_2:         u8 = 8;
+const ZP_TMP_3:         u8 = 9;
+const ZP_DEREF_FUN_0:   u8 = 10; // can't be the same as ZP_DEREF,
+const ZP_DEREF_FUN_1:   u8 = 11; // as we use this before argument loading
 
 const STACK_PAGE: u16 = 0x0100;
 
@@ -291,17 +294,17 @@ pub unsafe fn pop16_discard(output: *mut String_Builder, asm: *mut Assembler) {
     write_byte(output, PLA);
 }
 
-// load lhs in Y:A, rhs in TMP_0:TMP_1
+// load lhs in Y:A, rhs in RHS_L:RHS_H
 pub unsafe fn load_two_args(output: *mut String_Builder, lhs: Arg, rhs: Arg, op: OpWithLocation, asm: *mut Assembler) {
     load_arg(rhs, op.loc, output, asm);
     write_byte(output, STA_ZP);
-    write_byte(output, ZP_TMP_0);
+    write_byte(output, ZP_RHS_L);
     write_byte(output, STY_ZP);
-    write_byte(output, ZP_TMP_1);
+    write_byte(output, ZP_RHS_H);
     load_arg(lhs, op.loc, output, asm);
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize,
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize,
                                 body: *const [OpWithLocation], output: *mut String_Builder,
                                 asm: *mut Assembler) {
     (*asm).frame_sz = 0;
@@ -358,8 +361,36 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
         let op = (*body)[i];
         match op.opcode {
-            Op::Return {arg: _} => missingf!(op.loc, c!("implement Return\n\n")),
-            Op::Store {index: _, arg: _} => missingf!(op.loc, c!("implement Store")),
+            Op::Return {arg} => {
+                if let Some(arg) = arg {
+                    load_arg(arg, op.loc, output, asm);
+                }
+
+                // jump to ret statement
+                write_byte(output, JMP_ABS);
+                add_reloc(output, RelocationKind::AddressAbs
+                          {idx: *op_addresses.items.add(body.len())}, asm);
+            },
+            Op::Store {index, arg} => {
+                load_auto_var(output, index, asm);
+                write_byte(output, STA_ZP);
+                write_byte(output, ZP_DEREF_STORE_0);
+                write_byte(output, STY_ZP);
+                write_byte(output, ZP_DEREF_STORE_1);
+
+                load_arg(arg, op.loc, output, asm);
+                write_byte(output, TAX);
+                write_byte(output, TYA);
+
+                write_byte(output, LDY_IMM);
+                write_byte(output, 1);
+                write_byte(output, STA_IND_Y); // high
+                write_byte(output, ZP_DEREF_STORE_0);
+                write_byte(output, DEY);
+                write_byte(output, TXA);
+                write_byte(output, STA_IND_Y); // low
+                write_byte(output, ZP_DEREF_STORE_0);
+            },
             Op::ExternalAssign{name: _, arg: _} => missingf!(op.loc, c!("implement ExternalAssign\n")),
             Op::AutoAssign{index, arg} => {
                 load_arg(arg, op.loc, output, asm);
@@ -378,11 +409,11 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
                         write_byte(output, CLC);
                         write_byte(output, ADC_ZP);
-                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ZP_RHS_L);
                         write_byte(output, TAX);
                         write_byte(output, TYA);
                         write_byte(output, ADC_ZP);
-                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, ZP_RHS_H);
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
@@ -404,18 +435,18 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         // from here on: unsigned multiplication
                         // store lhs
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_TMP_2);
+                        write_byte(output, ZP_TMP_0);
                         write_byte(output, STY_ZP);
-                        write_byte(output, ZP_TMP_3);
+                        write_byte(output, ZP_TMP_1);
 
                         // store Y:A in ZP, because shifting and adding is easier
                         // without all the register switching
                         write_byte(output, LDA_IMM);
                         write_byte(output, 0);
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, ZP_TMP_2);
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_TMP_5);
+                        write_byte(output, ZP_TMP_3);
 
                         let loop_start = create_address_label_here(output, asm);
                         let cont = create_address_label(asm);
@@ -423,11 +454,11 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
                         // if both zero [-> A = 0], we are finished
                         write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ZP_RHS_L);
                         write_byte(output, BNE);
                         add_reloc(output, RelocationKind::AddressRel{idx: cont}, asm);
                         write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, ZP_RHS_H);
                         write_byte(output, BNE);
                         add_reloc(output, RelocationKind::AddressRel{idx: cont}, asm);
 
@@ -438,14 +469,14 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
                         // shift left current accumulater between single adds
                         write_byte(output, ASL_ZP);
-                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, ZP_TMP_2);
                         write_byte(output, ROL_ZP);
-                        write_byte(output, ZP_TMP_5);
+                        write_byte(output, ZP_TMP_3);
 
                         write_byte(output, ASL_ZP);
-                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ZP_RHS_L);
                         write_byte(output, ROL_ZP);
-                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, ZP_RHS_H);
 
                         // if bit is 0, do not add anything
                         write_byte(output, BCC);
@@ -454,18 +485,18 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         // bit is 1 here, we have to add entire lhs to acc
                         write_byte(output, CLC);
                         write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_TMP_4); // acc, low
+                        write_byte(output, ZP_TMP_2); // acc, low
                         write_byte(output, ADC_ZP);
-                        write_byte(output, ZP_TMP_2); // lhs, low
+                        write_byte(output, ZP_TMP_0); // lhs, low
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_TMP_4); // acc, low
+                        write_byte(output, ZP_TMP_2); // acc, low
 
                         write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_TMP_5); // acc, high
+                        write_byte(output, ZP_TMP_3); // acc, high
                         write_byte(output, ADC_ZP);
-                        write_byte(output, ZP_TMP_3); // lhs, high
+                        write_byte(output, ZP_TMP_1); // lhs, high
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_TMP_5); // acc, high
+                        write_byte(output, ZP_TMP_3); // acc, high
 
                         // continue loop
                         write_byte(output, JMP_ABS);
@@ -474,9 +505,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
                         // move back in Y:A
                         write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, ZP_TMP_2);
                         write_byte(output, LDY_ZP);
-                        write_byte(output, ZP_TMP_5);
+                        write_byte(output, ZP_TMP_3);
 
                         // missingf!(op.loc, c!("implement Mult\n"))
                     },
@@ -490,11 +521,11 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         write_byte(output, SEC); // set carry
                         // sub low byte
                         write_byte(output, SBC_ZP);
-                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ZP_RHS_L);
                         // sub high byte
                         write_byte(output, TYA);
                         write_byte(output, SBC_ZP);
-                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, ZP_RHS_H);
                         // high result in A, N flag if less.
 
                         // if less skip, we already have X=1
@@ -516,12 +547,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         write_byte(output, 0);
 
                         write_byte(output, CMP_ZP);
-                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ZP_RHS_L);
                         write_byte(output, BNE);
                         write_byte(output, 5);
 
                         write_byte(output, CPY_ZP);
-                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, ZP_RHS_H);
                         write_byte(output, BNE);
                         write_byte(output, 1);
 
