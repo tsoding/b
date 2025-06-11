@@ -149,10 +149,10 @@ MINGW32_OBJS=\
 	$(BUILD)/fake6502.linux.o
 
 $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) -C link-args="$(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
+	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
 
 $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
-	clang -fPIC -g -c $< -o $@
+	$(CC) -fPIC -g -c $< -o $@ $(LDFLAGS)
 
 # Cross-compilation on Linux to Windows using mingw32-w64
 # Invoked on demand by `make ./build/b.exe`
