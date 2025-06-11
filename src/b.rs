@@ -1125,6 +1125,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
+    let assembly_only = flag_bool(c!("S"), false, c!("Generate assembly code only"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
@@ -1227,7 +1228,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
-
+                        
+            if *assembly_only { return Some(()); }
+            
             let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
                 (c!("as"), c!("cc"))
             } else {
@@ -1301,7 +1304,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
-
+                        
+            if *assembly_only { return Some(()); }
+            
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
                 fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
@@ -1372,7 +1377,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), output_asm_path);
-
+                        
+            if *assembly_only { return Some(()); }
+            
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
             } else {
@@ -1434,6 +1441,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
+                                    
+            if *assembly_only { return Some(()); }
+            
             if *run {
                 cmd_append! {
                     &mut cmd,
@@ -1463,6 +1473,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
+                                    
+            if *assembly_only { return Some(()); }
+            
             if *run {
                 fake6502::load_rom_at(output, config.load_offset);
                 fake6502::reset();
@@ -1490,6 +1503,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("Generated %s\n"), effective_output_path);
+                        
+            if *assembly_only { return Some(()); }
+            
             if *run {
                 todo!("Interpret the IR?");
             }
