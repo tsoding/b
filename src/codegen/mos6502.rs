@@ -17,12 +17,17 @@ use crate::Loc;
 const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
+const ASL_ZP:    u8 = 0x06;
+const BCC:       u8 = 0x90;
+const BEQ:       u8 = 0xF0;
+const BMI:       u8 = 0x30;
 const BNE:       u8 = 0xD0;
 const CLC:       u8 = 0x18;
 const CMP_IMM:   u8 = 0xC9;
 const CMP_ZP:    u8 = 0xC5;
 const CPY_IMM:   u8 = 0xC0;
 const CPY_ZP:    u8 = 0xC4;
+const INC_A:     u8 = 0x1A;
 const INX:       u8 = 0xE8;
 const JMP_ABS:   u8 = 0x4C;
 const JMP_IND:   u8 = 0x6C;
@@ -31,12 +36,17 @@ const LDA_IMM:   u8 = 0xA9;
 const LDA_IND_X: u8 = 0xA1;
 const LDA_IND_Y: u8 = 0xB1;
 const LDA_X:     u8 = 0xBD;
+const LDA_ZP:    u8 = 0xA5;
 const LDX_IMM:   u8 = 0xA2;
 const LDY_IMM:   u8 = 0xA0;
 const LDY_X:     u8 = 0xBC;
+const LDY_ZP:    u8 = 0xA4;
 const PHA:       u8 = 0x48;
 const PLA:       u8 = 0x68;
 const RTS:       u8 = 0x60;
+const ROL_ZP:    u8 = 0x26;
+const SBC_ZP:    u8 = 0xE5;
+const SEC:       u8 = 0x38;
 const STA_X:     u8 = 0x9D;
 const STA_ZP:    u8 = 0x85;
 const STY_ZP:    u8 = 0x84;
@@ -53,10 +63,14 @@ const TYA:       u8 = 0x98;
 // or derefs?
 const ZP_DEREF_0:     u8 = 0;
 const ZP_DEREF_1:     u8 = 1;
-const ZP_OP_TMP_0:    u8 = 3;
-const ZP_OP_TMP_1:    u8 = 4;
-const ZP_DEREF_FUN_0: u8 = 5;
-const ZP_DEREF_FUN_1: u8 = 6;
+const ZP_TMP_0:       u8 = 2;
+const ZP_TMP_1:       u8 = 3;
+const ZP_TMP_2:       u8 = 4;
+const ZP_TMP_3:       u8 = 5;
+const ZP_TMP_4:       u8 = 6;
+const ZP_TMP_5:       u8 = 7;
+const ZP_DEREF_FUN_0: u8 = 8; // can't be the same as ZP_DEREF,
+const ZP_DEREF_FUN_1: u8 = 9; // as we use this before argument loading
 
 const STACK_PAGE: u16 = 0x0100;
 
@@ -133,6 +147,25 @@ pub unsafe fn add_reloc(output: *mut String_Builder, kind: RelocationKind, asm: 
     } else {
         write_byte(output, 0);
     }
+}
+
+pub unsafe fn create_address_label(asm: *mut Assembler) -> usize {
+    let idx = (*asm).addresses.count;
+    da_append(&mut (*asm).addresses, 0);
+    idx
+}
+pub unsafe fn create_address_label_here(output: *const String_Builder, asm: *mut Assembler) -> usize {
+    let label = create_address_label(asm);
+    link_address_label_here(label, output, asm);
+    label
+}
+
+// TODO: inform the caller, that `addr' is relative to code_start
+pub unsafe fn link_address_label(label: usize, addr: u16, asm: *mut Assembler) {
+    *(*asm).addresses.items.add(label) = addr;
+}
+pub unsafe fn link_address_label_here(label: usize, output: *const String_Builder, asm: *mut Assembler) {
+    *(*asm).addresses.items.add(label) = (*output).count as u16;
 }
 
 pub unsafe fn load_auto_var(output: *mut String_Builder, index: usize, asm: *mut Assembler) {
@@ -231,21 +264,14 @@ pub unsafe fn add_sp(output: *mut String_Builder, bytes: u8, asm: *mut Assembler
     }
 }
 // cannot modify Y:A here, as they hold first argument
+// TODO: look, if this can be done without a loop, like in `add_sp` without modifying
+// Y:A. Either save them temporarily or write the first arg to stack before decrementing
+// SP
 pub unsafe fn sub_sp(output: *mut String_Builder, bytes: u8, asm: *mut Assembler) {
     (*asm).frame_sz += bytes;
-    // if bytes < 8 {
     for _ in 0 .. bytes {
         write_byte(output, PHA);
     }
-    // } else {
-    //     write_byte(output, TSX);
-    //     write_byte(output, TXA);
-    //     write_byte(output, CLC);
-    //     write_byte(output, SBC_IMM);
-    //     write_byte(output, bytes);
-    //     write_byte(output, TAX);
-    //     write_byte(output, TXS);
-    // }
 }
 pub unsafe fn push16(output: *mut String_Builder, asm: *mut Assembler) {
     (*asm).frame_sz += 2;
@@ -332,58 +358,170 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
         let op = (*body)[i];
         match op.opcode {
-            Op::Return {arg: _} => missingf!(name_loc, c!("implement Return\n\n")),
-            Op::Store {index: _, arg: _} => missingf!(name_loc, c!("implement Store")),
-            Op::ExternalAssign{name: _, arg: _} => missingf!(name_loc, c!("implement ExternalAssign\n")),
+            Op::Return {arg: _} => missingf!(op.loc, c!("implement Return\n\n")),
+            Op::Store {index: _, arg: _} => missingf!(op.loc, c!("implement Store")),
+            Op::ExternalAssign{name: _, arg: _} => missingf!(op.loc, c!("implement ExternalAssign\n")),
             Op::AutoAssign{index, arg} => {
                 load_arg(arg, op.loc, output, asm);
                 store_auto(output, index, asm);
             },
-            Op::Negate {result: _, arg: _} => missingf!(name_loc, c!("implement Negate\n")),
-            Op::UnaryNot{result: _, arg: _} => missingf!(name_loc, c!("implement UnaryNot\n")),
+            Op::Negate {result: _, arg: _} => missingf!(op.loc, c!("implement Negate\n")),
+            Op::UnaryNot{result: _, arg: _} => missingf!(op.loc, c!("implement UnaryNot\n")),
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
-                    Binop::BitOr => missingf!(name_loc, c!("implement BitOr\n")),
-                    Binop::BitAnd => missingf!(name_loc, c!("implement BitAnd\n")),
-                    Binop::BitShl => missingf!(name_loc, c!("implement BitShl\n")),
-                    Binop::BitShr => missingf!(name_loc, c!("implement BitShr\n")),
+                    Binop::BitOr => missingf!(op.loc, c!("implement BitOr\n")),
+                    Binop::BitAnd => missingf!(op.loc, c!("implement BitAnd\n")),
+                    Binop::BitShl => missingf!(op.loc, c!("implement BitShl\n")),
+                    Binop::BitShr => missingf!(op.loc, c!("implement BitShr\n")),
                     Binop::Plus => {
                         load_two_args(output, lhs, rhs, op, asm);
 
                         write_byte(output, CLC);
                         write_byte(output, ADC_ZP);
-                        write_byte(output, ZP_OP_TMP_0);
+                        write_byte(output, ZP_TMP_0);
                         write_byte(output, TAX);
                         write_byte(output, TYA);
                         write_byte(output, ADC_ZP);
-                        write_byte(output, ZP_OP_TMP_1);
+                        write_byte(output, ZP_TMP_1);
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::Minus  => missingf!(name_loc, c!("implement Minus\n")),
-                    Binop::Mod => missingf!(name_loc, c!("implement Mod\n")),
-                    Binop::Div => missingf!(name_loc, c!("implement Div\n")),
-                    Binop::Mult => missingf!(name_loc, c!("implement Mult\n")),
-                    Binop::Less => missingf!(name_loc, c!("implement Less\n")),
-                    Binop::Greater => missingf!(name_loc, c!("implement Greater\n")),
-                    Binop::Equal => {
-                        load_arg(rhs, op.loc, output, asm);
+                    Binop::Minus  => missingf!(op.loc, c!("implement Minus\n")),
+                    Binop::Mod => missingf!(op.loc, c!("implement Mod\n")),
+                    Binop::Div => missingf!(op.loc, c!("implement Div\n")),
+                    Binop::Mult => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        // TODO: maybe move this to an intrinsic function,
+                        // because it is rather long. Consider this, if we run
+                        // out of memory at some point.
+
+                        // shift-and-add/long multiplication
+                        // see: https://en.wikipedia.org/wiki/Multiplication_algorithm
+
+                        // TODO: this should be signed, save and restore signes before.
+
+                        // from here on: unsigned multiplication
+                        // store lhs
                         write_byte(output, STA_ZP);
-                        write_byte(output, ZP_OP_TMP_0);
+                        write_byte(output, ZP_TMP_2);
                         write_byte(output, STY_ZP);
-                        write_byte(output, ZP_OP_TMP_1);
-                        load_arg(lhs, op.loc, output, asm);
+                        write_byte(output, ZP_TMP_3);
+
+                        // store Y:A in ZP, because shifting and adding is easier
+                        // without all the register switching
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_5);
+
+                        let loop_start = create_address_label_here(output, asm);
+                        let cont = create_address_label(asm);
+                        let finished = create_address_label(asm);
+
+                        // if both zero [-> A = 0], we are finished
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, BNE);
+                        add_reloc(output, RelocationKind::AddressRel{idx: cont}, asm);
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, BNE);
+                        add_reloc(output, RelocationKind::AddressRel{idx: cont}, asm);
+
+                        write_byte(output, JMP_ABS);
+                        add_reloc(output, RelocationKind::AddressAbs{idx: finished}, asm);
+
+                        link_address_label_here(cont, output, asm);
+
+                        // shift left current accumulater between single adds
+                        write_byte(output, ASL_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, ROL_ZP);
+                        write_byte(output, ZP_TMP_5);
+
+                        write_byte(output, ASL_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ROL_ZP);
+                        write_byte(output, ZP_TMP_1);
+
+                        // if bit is 0, do not add anything
+                        write_byte(output, BCC);
+                        add_reloc(output, RelocationKind::AddressRel{idx: loop_start}, asm);
+
+                        // bit is 1 here, we have to add entire lhs to acc
+                        write_byte(output, CLC);
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_4); // acc, low
+                        write_byte(output, ADC_ZP);
+                        write_byte(output, ZP_TMP_2); // lhs, low
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_4); // acc, low
+
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_5); // acc, high
+                        write_byte(output, ADC_ZP);
+                        write_byte(output, ZP_TMP_3); // lhs, high
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_5); // acc, high
+
+                        // continue loop
+                        write_byte(output, JMP_ABS);
+                        add_reloc(output, RelocationKind::AddressAbs{idx: loop_start}, asm);
+                        link_address_label_here(finished, output, asm);
+
+                        // move back in Y:A
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, LDY_ZP);
+                        write_byte(output, ZP_TMP_5);
+
+                        // missingf!(op.loc, c!("implement Mult\n"))
+                    },
+                    Binop::Less => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        write_byte(output, SEC); // clear carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_1);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=1
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::Greater => missingf!(op.loc, c!("implement Greater\n")),
+                    Binop::Equal => {
+                        load_two_args(output, lhs, rhs, op, asm);
 
                         write_byte(output, LDX_IMM);
                         write_byte(output, 0);
 
                         write_byte(output, CMP_ZP);
-                        write_byte(output, ZP_OP_TMP_0);
+                        write_byte(output, ZP_TMP_0);
                         write_byte(output, BNE);
                         write_byte(output, 5);
 
                         write_byte(output, CPY_ZP);
-                        write_byte(output, ZP_OP_TMP_1);
+                        write_byte(output, ZP_TMP_1);
                         write_byte(output, BNE);
                         write_byte(output, 1);
 
@@ -392,9 +530,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::NotEqual => missingf!(name_loc, c!("implement NotEqual\n")),
-                    Binop::GreaterEqual => missingf!(name_loc, c!("implement GreaterEqual\n")),
-                    Binop::LessEqual => missingf!(name_loc, c!("implement LessEqual\n")),
+                    Binop::NotEqual => missingf!(op.loc, c!("implement NotEqual\n")),
+                    Binop::GreaterEqual => missingf!(op.loc, c!("implement GreaterEqual\n")),
+                    Binop::LessEqual => missingf!(op.loc, c!("implement LessEqual\n")),
                 }
                 store_auto(output, index, asm);
             },
@@ -422,7 +560,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                         write_byte(output, JSR);
                         add_reloc(output, RelocationKind::Label{name}, asm);
                     },
-                    _ => { // arg already in (*)
+                    _ => { // function pointer already loaded in ZP_DEREF_FUN
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
                         write_byte(output, JSR);
                         write_word(output, (*asm).code_start + (*output).count as u16 + 5);
