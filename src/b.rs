@@ -697,7 +697,7 @@ pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array
             }
             _ => {
                 diagf!((*l).loc, c!("ERROR: %s only takes strings\n"), (*l).string);
-                return bump_error_count(c);
+                bump_error_count(c)?;
             }
         }
         get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
