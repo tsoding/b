@@ -1,11 +1,7 @@
-/* Based on exanples/60_game_of_life.b */
+/* https://en.wikipedia.org/wiki/Langton%27s_ant */
 width;
 height;
-W;
-board1;
-board2;
 board;
-next;
 x;
 y;
 r;
@@ -37,7 +33,7 @@ print() {
 	yn = 0; while (yn < height) {
 		printf("#");
 		xn = 0; while (xn < width) {
-			printf(get(*board, xn,yn) ? "██" : "  ");
+			printf(get(board, xn,yn) ? "██" : "  ");
 			xn += 1;
 		}
 		printf("#\n");
@@ -53,10 +49,10 @@ print() {
 
 step() {
 	extrn printf;
-
-	if (get(*board, x, y)) r++; else r--;
-
-	set(*board, x, y, !get(*board, x, y));
+	auto c;
+	c = get(board, x, y);
+	if (c) r++; else r--;
+	set(board, x, y, !c);
 	switch mod(r, 4) {
 	case 0: y++; goto out;
 	case 1: x++; goto out;
@@ -64,12 +60,6 @@ step() {
 	case 3: x--; goto out;
 	}
 out:
-
-	set(*board, x, y, !get(*board, x, y));
-	auto tmp;
-	tmp = board;
-	board = next;
-	next = tmp;
 }
 
 main() {
@@ -79,12 +69,8 @@ main() {
 	height = 15;
 	size = width*height*(&0[1]);
 
-	board1 = malloc(size);
-	board2 = malloc(size);
-	memset(board1, 0, size);
-	memset(board2,  0, size);
-	board = &board1;
-	next = &board2;
+	board = malloc(size);
+	memset(board, 0, size);
 
 	r = 0;
 	x = 15;
@@ -94,7 +80,7 @@ main() {
 		print();
 		step();
 		printf("%c[%dA", 27, height+2);
-        // TODO: does not work on Windows
+		/* TODO: does not work on Windows */
 		usleep(1500);
 	}
 }
