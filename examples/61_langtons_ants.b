@@ -53,18 +53,14 @@ print() {
 
 step() {
 	extrn printf;
-	
+
 	if (get(*board, x, y) == 1) {
 		r++;
 	} else {
 		r--;
 	}
 
-	if (r > 3) {
-		r = 0;
-	} else if (r < 0){
-		r = 3;
-	}
+	r = mod(r, 4);
 
 	set(*board, x, y, !get(*board, x, y));
 	if (r == 0) {
@@ -100,6 +96,7 @@ main() {
 	board = &board1;
 	next = &board2;
 
+	r = 0;
 	x = 15;
 	y = 7;
 
