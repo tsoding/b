@@ -1129,7 +1129,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
 
-    let mut input_paths: Array<*mut c_char> = zeroed();
+    let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*mut c_char> = zeroed();
     'args: while argc > 0 {
         if !flag_parse(argc, argv) {
