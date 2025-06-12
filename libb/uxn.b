@@ -166,3 +166,15 @@ _start() {
         exit(main(_args_count, _args_items));
     }
 }
+
+strlen(s) {
+    auto n;
+    n = 0;
+    while (*s++) n++;
+    return (n);
+}
+
+toupper(c) {
+    if ('a' <= c && c <= 'z') return (c - 'a' + 'A');
+    return (c);
+}

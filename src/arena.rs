@@ -23,4 +23,6 @@ extern "C" {
     pub fn snapshot(a: *mut Arena) -> Arena_Mark;
     #[link_name = "arena_rewind"]
     pub fn rewind(a: *mut Arena, m: Arena_Mark) -> c_void;
+    #[link_name = "arena_sprintf"]
+    pub fn sprintf(a: *mut Arena, format: *const c_char, ...) -> *mut c_char;
 }
