@@ -26,6 +26,8 @@ pub mod libc {
         pub fn strcmp(s1: *const c_char, s2: *const c_char) -> c_int;
         pub fn strchr(s: *const c_char, c: c_int) -> *const c_char;
         pub fn strlen(s: *const c_char) -> usize;
+        pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
+
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn printf(fmt: *const c_char, ...) -> c_int;

@@ -78,6 +78,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
                 sb_appendf(output, c!("    add %s, %s, %zu\n"), reg, reg, offset);
             }
         }
+        Arg::Bogus => unreachable!("bogus-amogus")
     };
 }
 
@@ -90,7 +91,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     sb_appendf(output, c!("    mov x29, sp\n"), name);
     sb_appendf(output, c!("    sub sp, sp, %zu\n"), stack_size);
     assert!(auto_vars_count >= params_count);
-    
+
     const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
     for i in 0..params_count {
         let below_index = i + 1;
@@ -118,12 +119,8 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             }
             Op::Negate {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
-                sb_appendf(output, c!("    mov x1, 1\n")); // TODO: is it possible to somehow
-                                                           // supply 1 to the 3rd argument of mneg
-                                                           // as an immediate value without moving
-                                                           // it to a separate register?
-                sb_appendf(output, c!("    mneg x2, x0, x1\n"));
-                sb_appendf(output, c!("    str x2, [x29, -%zu]\n"), result*8);
+                sb_appendf(output, c!("    neg x0, x0\n"));
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
             }
             Op::UnaryNot {result, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
