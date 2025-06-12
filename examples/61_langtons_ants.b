@@ -33,7 +33,15 @@ print() {
 	yn = 0; while (yn < height) {
 		printf("#");
 		xn = 0; while (xn < width) {
-			printf(get(board, xn,yn) ? "██" : "  ");
+			if ((xn == mod(x, width)) & (yn == mod(y, height))) {
+				printf("▒▒");
+			} else {
+				if (get(board, xn,yn)) {
+					printf("██");
+				} else {
+					printf("  ");
+				}
+			}
 			xn += 1;
 		}
 		printf("#\n");
@@ -81,6 +89,6 @@ main() {
 		step();
 		printf("%c[%dA", 27, height+2);
 		/* TODO: does not work on Windows */
-		usleep(1500);
+		usleep(50000);
 	}
 }
