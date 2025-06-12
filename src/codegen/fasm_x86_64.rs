@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, align_bytes};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::codegen::Os;
@@ -270,7 +270,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
-    sb_appendf(output, c!("section \".text\" executable\n"));
     for i in 0..funcs.len() {
         generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
     }
@@ -295,6 +294,17 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
         }
 
         sb_appendf(output, c!("extrn '%s' as _%s\n"), name, name);
+    }
+}
+
+pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+    for i in 0..asm_funcs.len() {
+        let asm_func = (*asm_funcs)[i];
+        sb_appendf(output, c!("public _%s as '%s'\n"), asm_func.name, asm_func.name);
+        sb_appendf(output, c!("_%s:\n"), asm_func.name);
+        for j in 0..asm_func.body.count {
+            sb_appendf(output, c!("    %s\n"), *asm_func.body.items.add(j));
+        }
     }
 }
 
@@ -348,7 +358,9 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
         Os::Linux   => sb_appendf(output, c!("format ELF64\n")),
         Os::Windows => sb_appendf(output, c!("format MS64 COFF\n")),
     };
+    sb_appendf(output, c!("section \".text\" executable\n"));
     generate_funcs(output, da_slice((*c).funcs), os);
+    generate_asm_funcs(output, da_slice((*c).asm_funcs));
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
     sb_appendf(output, c!("section \".data\"\n"));
     generate_data_section(output, da_slice((*c).data));
