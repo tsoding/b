@@ -1139,6 +1139,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
+    let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*mut c_char> = zeroed();
@@ -1194,12 +1195,36 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut c: Compiler = zeroed();
     c.target = target;
 
-    // TODO: should be probably a list libb paths which we sequentually probe to find which one exists
-    //   And of course we should also enable the user to append additional paths via the command line.
-    let libb_path = c!("./libb");
-    include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
-    include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s"), libb_path, *target_name));
+    if !*nostdlib {
+        // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
+        //   And of course we should also enable the user to append additional paths via the command line.
+        //   Paths to potentially check by default:
+        //   - Current working directory (like right now)
+        //   - Directory where the b executable resides
+        //   - Some system paths like /usr/include/libb on Linux? (Not 100% sure about this one)
+        //   - Some sort of instalation prefix? (Requires making build system more complicated)
+        //
+        //     - rexim (2025-06-12 20:56:08)
+        let libb_path = c!("./libb");
+        let libb_path_exist = file_exists(libb_path);
+        if libb_path_exist < 0 { return None; }
+        if libb_path_exist == 0 {
+            fprintf(stderr(), c!("ERROR: no standard library found at %s. Consider compiling with -%s flag.\n"), libb_path, flag_name(nostdlib));
+            return None;
+        }
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s.b"), libb_path, *target_name));
+    }
 
+    // Logging what files are actually being compiled so nothing is hidden from the user.
+    // TODO: There should be some sort of -q mode which suppress all the logging like this.
+    //   Including the logging from external tools like fasm, but this is already a bit harder.
+    //   May require some stdout redirecting capabilities of nob.h.
+    //   -q mode might be important for behavioral testing in a style of https://github.com/tsoding/rere.py.
+    //   I do not plan to actually use rere.py in this project since I don't want to depend on yet another language.
+    //   But I do plan to have similar testing tool written in Crust.
+    //
+    //     - rexim (2025-06-12 20:18:02)
     printf(c!("INFO: Compiling files "));
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
@@ -1265,6 +1290,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1338,6 +1369,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 &mut cmd,
                 c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
             }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
             for i in 0..(*linker).count {
                 cmd_append!{
                     &mut cmd,
@@ -1408,6 +1445,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
             }
             for i in 0..(*linker).count {
                 cmd_append!{
