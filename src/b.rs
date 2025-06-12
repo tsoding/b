@@ -1209,7 +1209,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         let libb_path_exist = file_exists(libb_path);
         if libb_path_exist < 0 { return None; }
         if libb_path_exist == 0 {
-            fprintf(stderr(), c!("ERROR: no standard library found at %s. Consider compiling with -%s flag.\n"), libb_path, flag_name(nostdlib));
+            fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }
         include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
