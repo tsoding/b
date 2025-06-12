@@ -27,6 +27,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/divmod \
 	$(BUILD)/tests/e \
 	$(BUILD)/tests/forward-declare \
+	$(BUILD)/tests/globals \
 	$(BUILD)/tests/goto \
 	$(BUILD)/tests/hello \
 	$(BUILD)/tests/inc_dec \
@@ -59,6 +60,7 @@ GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/divmod-gas-aarch64-linux \
 	$(BUILD)/tests/e-gas-aarch64-linux \
 	$(BUILD)/tests/forward-declare-gas-aarch64-linux \
+	$(BUILD)/tests/globals-gas-aarch64-linux \
 	$(BUILD)/tests/goto-gas-aarch64-linux \
 	$(BUILD)/tests/hello-gas-aarch64-linux \
 	$(BUILD)/tests/inc_dec-gas-aarch64-linux \
@@ -88,6 +90,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/divmod.exe \
 	$(BUILD)/tests/e.exe \
 	$(BUILD)/tests/forward-declare.exe \
+	$(BUILD)/tests/globals.exe \
 	$(BUILD)/tests/goto.exe \
 	$(BUILD)/tests/hello.exe \
 	$(BUILD)/tests/inc_dec.exe \
@@ -118,6 +121,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/divmod.rom \
 	$(BUILD)/tests/e.rom \
 	$(BUILD)/tests/forward-declare.rom \
+	$(BUILD)/tests/globals.rom \
 	$(BUILD)/tests/goto.rom \
 	$(BUILD)/tests/hello.rom \
 	$(BUILD)/tests/inc_dec.rom \
