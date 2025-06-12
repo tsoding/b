@@ -54,26 +54,16 @@ print() {
 step() {
 	extrn printf;
 
-	if (get(*board, x, y) == 1) {
-		r++;
-	} else {
-		r--;
-	}
-
-	r = mod(r, 4);
+	if (get(*board, x, y)) r++; else r--;
 
 	set(*board, x, y, !get(*board, x, y));
-	if (r == 0) {
-		y++;
-	} else if (r == 1) {
-		x++;
-	} else if (r == 2) {
-		y--;
-	} else if (r == 3) {
-		x--;
+	switch mod(r, 4) {
+	case 0: y++; goto out;
+	case 1: x++; goto out;
+	case 2: y--; goto out;
+	case 3: x--; goto out;
 	}
-
-
+out:
 
 	set(*board, x, y, !get(*board, x, y));
 	auto tmp;
