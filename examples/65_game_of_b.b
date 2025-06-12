@@ -18,19 +18,6 @@ world_win;
 info_panel;
 speeds;
 
-char(string, i) {
-    extrn memcpy;
-    auto char;
-    char = 0;
-    memcpy(&char, string + i, 1);
-    return (char);
-}
-
-lchar(string, i, char) {
-    extrn memset;
-    memset(string + i, char, 1);
-}
-
 int32(array, i) {
     extrn memcpy;
     auto val;
@@ -65,7 +52,7 @@ init_globals() {
     LOOP_TIME_us = 10000;
     NUM_SPEEDS = 16;
 
-    extrn getmaxx, getmaxy, stdscr, malloc;
+    extrn getmaxx, getmaxy, stdscr, malloc, lchar, char;
     x_size = getmaxx(stdscr) / 2;
     y_size = getmaxy(stdscr);
     x_chars = x_size * 2;
@@ -118,10 +105,12 @@ init_info() {
 }
 
 is_alive(buf, y, x) {
+    extrn lchar, char;
     return (char(buf, (y * x_size) + x) != 0);
 }
 
 set_alive(buf, y, x, alive) {
+    extrn lchar, char;
     lchar(buf, (y * x_size) + x, alive);
 }
 
@@ -205,7 +194,7 @@ main() {
     init_info();
     reset_world();
 
-    extrn malloc, usleep, getch, show_panel, hide_panel, getmouse;
+    extrn malloc, usleep, getch, show_panel, hide_panel, getmouse, char;
     auto input, redraw, update_in, show_info, stopped, speed_index, mouse_event;
     input = -1;
     redraw = 1;
