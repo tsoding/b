@@ -1,5 +1,3 @@
-// TODO: Run with platform-specific tests
-
 add __asm__(
     "add rdi, rsi",
     "mov rax, rdi",

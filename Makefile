@@ -22,6 +22,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/args6 \
 	$(BUILD)/tests/args11 \
 	$(BUILD)/tests/args11-extrn \
+	$(BUILD)/tests/asm_func \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
@@ -83,6 +84,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
 	$(BUILD)/tests/args11.exe \
 	$(BUILD)/tests/args11-extrn.exe \
+	$(BUILD)/tests/asm_func.exe \
 	$(BUILD)/tests/compare.exe \
 	$(BUILD)/tests/deref_assign.exe \
 	$(BUILD)/tests/divmod.exe \
