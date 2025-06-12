@@ -1105,6 +1105,13 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     Some(())
 }
 
+pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
+    let path_exists = file_exists(path);
+    if path_exists < 0 { return None; }
+    if path_exists > 0 { da_append(input_paths, path); }
+    Some(())
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
@@ -1168,14 +1175,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    if input_paths.count == 0 {
-        usage();
-        fprintf(stderr(), c!("ERROR: no input is provided\n"));
-        return None;
-    }
-
-    da_append(&mut input_paths, c!("./libb/all.b"));
-
     let Some(target) = target_by_name(*target_name) else {
         usage();
         fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
@@ -1190,6 +1189,21 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let mut c: Compiler = zeroed();
     c.target = target;
+
+    // TODO: should be probably a list libb paths which we sequentually probe to find which one exists
+    //   And of course we should also enable the user to append additional paths via the command line.
+    let libb_path = c!("./libb");
+    include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
+    include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s"), libb_path, *target_name));
+
+    printf(c!("INFO: Compiling files "));
+    for i in 0..input_paths.count {
+        let input_path = *input_paths.items.add(i);
+        if i > 0 { printf(c!(" ")); }
+        printf(c!("%s"), input_path);
+    }
+    printf(c!("\n"));
+
     let mut input: String_Builder = zeroed();
 
     scope_push(&mut c.vars);          // begin global scope
@@ -1228,7 +1242,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), output_asm_path);
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
                 (c!("as"), c!("cc"))
@@ -1302,7 +1316,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), output_asm_path);
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
@@ -1373,7 +1387,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), output_asm_path);
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
@@ -1435,7 +1449,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 cmd_append! {
                     &mut cmd,
@@ -1464,7 +1478,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 fake6502::load_rom_at(output, config.load_offset);
                 fake6502::reset();
@@ -1491,7 +1505,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 todo!("Interpret the IR?");
             }
