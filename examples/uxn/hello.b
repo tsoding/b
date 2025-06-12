@@ -1,6 +1,6 @@
 /*
-Doesn't need the standard library (std/uxn.b) to work,
-shows how to communicate with a varvara device
+Implies -nostdlib.
+Shows how to communicate with a varvara device
 */
 
 str "Hello world\n";

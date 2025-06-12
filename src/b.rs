@@ -688,21 +688,27 @@ pub unsafe fn backpatch_jmp(backpatch: *mut OpWithLocation, addr: usize) {
 
 pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array<*const c_char>) -> Option<()> {
     get_and_expect_token_but_continue(l, c, Token::OParen)?;
-    while (*l).token != Token::CParen {
-        lexer::get_token(l)?;
-        match (*l).token {
-            Token::String => {
-                // TODO: Allocate assembly code in a suitable arena?
-                da_append(args, strdup((*l).string));
+    let saved_point = (*l).parse_point;
+    lexer::get_token(l)?;
+    if (*l).token != Token::CParen {
+        (*l).parse_point = saved_point;
+        loop {
+            get_and_expect_token(l, Token::String)?;
+            match (*l).token {
+                Token::String => da_append(args, arena::strdup(&mut (*c).arena_names, (*l).string)),
+                _             => unreachable!(),
             }
-            _ => {
-                diagf!((*l).loc, c!("ERROR: %s only takes strings\n"), (*l).string);
-                bump_error_count(c)?;
+
+            get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
+            match (*l).token {
+                Token::Comma  => {}
+                Token::CParen => break,
+                _             => unreachable!(),
             }
         }
-        get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
     }
-    get_and_expect_token_but_continue(l, c, Token::SemiColon)
+    get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
+    Some(())
 }
 
 pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
@@ -1116,6 +1122,13 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     Some(())
 }
 
+pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
+    let path_exists = file_exists(path);
+    if path_exists < 0 { return None; }
+    if path_exists > 0 { da_append(input_paths, path); }
+    Some(())
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
@@ -1139,8 +1152,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
+    let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
 
-    let mut input_paths: Array<*mut c_char> = zeroed();
+    let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*mut c_char> = zeroed();
     'args: while argc > 0 {
         if !flag_parse(argc, argv) {
@@ -1179,12 +1193,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    if input_paths.count == 0 {
-        usage();
-        fprintf(stderr(), c!("ERROR: no input is provided\n"));
-        return None;
-    }
-
     let Some(target) = target_by_name(*target_name) else {
         usage();
         fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
@@ -1199,6 +1207,45 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let mut c: Compiler = zeroed();
     c.target = target;
+
+    if !*nostdlib {
+        // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
+        //   And of course we should also enable the user to append additional paths via the command line.
+        //   Paths to potentially check by default:
+        //   - Current working directory (like right now)
+        //   - Directory where the b executable resides
+        //   - Some system paths like /usr/include/libb on Linux? (Not 100% sure about this one)
+        //   - Some sort of instalation prefix? (Requires making build system more complicated)
+        //
+        //     - rexim (2025-06-12 20:56:08)
+        let libb_path = c!("./libb");
+        let libb_path_exist = file_exists(libb_path);
+        if libb_path_exist < 0 { return None; }
+        if libb_path_exist == 0 {
+            fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
+            return None;
+        }
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s.b"), libb_path, *target_name));
+    }
+
+    // Logging what files are actually being compiled so nothing is hidden from the user.
+    // TODO: There should be some sort of -q mode which suppress all the logging like this.
+    //   Including the logging from external tools like fasm, but this is already a bit harder.
+    //   May require some stdout redirecting capabilities of nob.h.
+    //   -q mode might be important for behavioral testing in a style of https://github.com/tsoding/rere.py.
+    //   I do not plan to actually use rere.py in this project since I don't want to depend on yet another language.
+    //   But I do plan to have similar testing tool written in Crust.
+    //
+    //     - rexim (2025-06-12 20:18:02)
+    printf(c!("INFO: Compiling files "));
+    for i in 0..input_paths.count {
+        let input_path = *input_paths.items.add(i);
+        if i > 0 { printf(c!(" ")); }
+        printf(c!("%s"), input_path);
+    }
+    printf(c!("\n"));
+
     let mut input: String_Builder = zeroed();
 
     scope_push(&mut c.vars);          // begin global scope
@@ -1237,7 +1284,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), output_asm_path);
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
                 (c!("as"), c!("cc"))
@@ -1256,6 +1303,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1311,7 +1364,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), output_asm_path);
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
@@ -1328,6 +1381,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1382,7 +1441,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), output_asm_path);
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
@@ -1399,6 +1458,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
             }
             for i in 0..(*linker).count {
                 cmd_append!{
@@ -1444,7 +1509,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 cmd_append! {
                     &mut cmd,
@@ -1473,7 +1538,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 fake6502::load_rom_at(output, config.load_offset);
                 fake6502::reset();
@@ -1500,7 +1565,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("Generated %s\n"), effective_output_path);
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 todo!("Interpret the IR?");
             }
