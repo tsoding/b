@@ -45,8 +45,11 @@ LINUX_TESTS=\
 	$(BUILD)/tests/vector \
 	$(BUILD)/tests/multiple-postfix \
 	$(BUILD)/tests/rvalue_call \
-	$(BUILD)/tests/call_stack_args
+	$(BUILD)/tests/call_stack_args \
+	$(BUILD)/tests/upper
 
+# TODO: ./tests/upper.b does not work on gas-aarch64-linux due to missing implementations of char() and lchar(). See ./libb/gas-aarch64-linux.b
+#	$(BUILD)/tests/upper-gas-aarch64-linux
 GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/args6-gas-aarch64-linux \
 	$(BUILD)/tests/args11-gas-aarch64-linux \
@@ -103,7 +106,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/vector.exe \
 	$(BUILD)/tests/multiple-postfix.exe \
 	$(BUILD)/tests/rvalue_call.exe \
-	$(BUILD)/tests/call_stack_args.exe
+	$(BUILD)/tests/call_stack_args.exe \
+	$(BUILD)/tests/upper.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
@@ -132,7 +136,8 @@ UXN_TESTS=\
 	$(BUILD)/tests/vector.rom \
 	$(BUILD)/tests/multiple-postfix.rom \
 	$(BUILD)/tests/rvalue_call.rom \
-	$(BUILD)/tests/call_stack_args.rom
+	$(BUILD)/tests/call_stack_args.rom \
+	$(BUILD)/tests/upper.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
@@ -189,8 +194,8 @@ $(BUILD)/tests:
 .PHONY: test-uxn
 test-uxn: $(UXN_TESTS)
 
-$(BUILD)/tests/%.rom: ./tests/%.b ./libb/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t uxn -o $@ $< ./libb/uxn.b
+$(BUILD)/tests/%.rom: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t uxn -o $@ $<
 	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html

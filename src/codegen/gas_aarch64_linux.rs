@@ -91,7 +91,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     sb_appendf(output, c!("    mov x29, sp\n"), name);
     sb_appendf(output, c!("    sub sp, sp, %zu\n"), stack_size);
     assert!(auto_vars_count >= params_count);
-    
+
     const REGISTERS: *const[*const c_char] = &[c!("x0"), c!("x1"), c!("x2"), c!("x3"), c!("x4"), c!("x5"), c!("x6"), c!("x7")];
     for i in 0..params_count {
         let below_index = i + 1;
