@@ -275,7 +275,7 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], 
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global]) {
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global], asm_funcs: *const [AsmFunc]) {
     'skip: for i in 0..extrns.len() {
         let name = (*extrns)[i];
 
@@ -289,6 +289,13 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
         for j in 0..globals.len() {
             let global = (*globals)[j].name;
             if strcmp(global, name) == 0 {
+                continue 'skip
+            }
+        }
+
+        for j in 0..asm_funcs.len() {
+            let asm_func = (*asm_funcs)[j].name;
+            if strcmp(asm_func, name) == 0 {
                 continue 'skip
             }
         }
@@ -361,7 +368,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     sb_appendf(output, c!("section \".text\" executable\n"));
     generate_funcs(output, da_slice((*c).funcs), os);
     generate_asm_funcs(output, da_slice((*c).asm_funcs));
-    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals));
+    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), da_slice((*c).asm_funcs));
     sb_appendf(output, c!("section \".data\"\n"));
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals));
