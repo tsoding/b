@@ -1174,6 +1174,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None;
     }
 
+    da_append(&mut input_paths, c!("./libb/all.b"));
+
     let Some(target) = target_by_name(*target_name) else {
         usage();
         fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);

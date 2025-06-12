@@ -168,20 +168,20 @@ $(BUILD):
 .PHONY: test
 test: $(LINUX_TESTS)
 
-$(BUILD)/tests/%: ./tests/%.b ./libb/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -run -o $@ $< ./libb/test.b
+$(BUILD)/tests/%: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -run -o $@ $<
 
 .PHONY: test-gas-aarch64-linux
 test-gas-aarch64-linux: $(GAS_AARCH64_LINUX_TESTS)
 
-$(BUILD)/tests/%-gas-aarch64-linux: ./tests/%.b ./libb/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t gas-aarch64-linux -run -o $@ $< ./libb/test.b
+$(BUILD)/tests/%-gas-aarch64-linux: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t gas-aarch64-linux -run -o $@ $<
 
 .PHONY: test-mingw32
 test-mingw32: $(MINGW32_TESTS)
 
-$(BUILD)/tests/%.exe: ./tests/%.b ./libb/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t fasm-x86_64-windows -run -o $@ $< ./libb/test.b
+$(BUILD)/tests/%.exe: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t fasm-x86_64-windows -run -o $@ $<
 
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests
@@ -189,8 +189,8 @@ $(BUILD)/tests:
 .PHONY: test-uxn
 test-uxn: $(UXN_TESTS)
 
-$(BUILD)/tests/%.rom: ./tests/%.b ./libb/test.b ./libb/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t uxn -o $@ $< ./libb/test.b ./libb/uxn.b
+$(BUILD)/tests/%.rom: ./tests/%.b ./libb/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t uxn -o $@ $< ./libb/uxn.b
 	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
