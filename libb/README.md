@@ -10,6 +10,8 @@ If you don't want to link with libb (and libc on the platforms where it's availa
 
 Loosely based on `8.0 Library Functions` from [kbman][kbman]. May contain additional historically inaccurate things.
 
+<!-- TODO: document the main(argc, argv) functionality that is provided by libb -->
+
 | Signature                    | Description                                                                                                      |
 |------------------------------|------------------------------------------------------------------------------------------------------------------|
 | `c = char(string, i);`       | The i-th character of the string is returned;                                                                    |
