@@ -75,4 +75,4 @@ jobs:
       - name: Run Tests
         run: |
           make
-          ./build/b -run -t 6502 ./examples/hello_world.b ./libb/6502.b
+          ./build/b -run -nostdlib -t 6502 ./examples/hello_world.b ./libb/6502.b
