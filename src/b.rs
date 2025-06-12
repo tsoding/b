@@ -692,6 +692,7 @@ pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array
         lexer::get_token(l)?;
         match (*l).token {
             Token::String => {
+                // TODO: Allocate assembly code in a suitable arena?
                 da_append(args, strdup((*l).string));
             }
             _ => {
