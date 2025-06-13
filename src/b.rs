@@ -612,24 +612,20 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
     if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
-        let addr_condition = (*c).func_body.count;
-        push_opcode(Op::JmpIfNot{addr: 0, arg: lhs}, (*l).loc, c);
+        let else_label = allocate_label_index(c);
+        push_opcode(Op::JmpIfNotLabel{label: else_label, arg: lhs}, (*l).loc, c);
 
         let (if_true, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_true}, (*l).loc, c);
+        let out_label = allocate_label_index(c);
+        push_opcode(Op::JmpLabel{label: out_label}, (*l).loc, c);
 
-        let addr_skips_true = (*c).func_body.count;
-        push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
-
-        let addr_false = (*c).func_body.count;
         get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
+        push_opcode(Op::Label{label: else_label}, (*l).loc, c);
         let (if_false, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
-
-        let addr_after_false = (*c).func_body.count;
-        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg: lhs};
-        (*(*c).func_body.items.add(addr_skips_true)).opcode = Op::Jmp      {addr: addr_after_false};
+        push_opcode(Op::Label{label: out_label}, (*l).loc, c);
 
         Some((Arg::AutoVar(result), false))
     } else {
