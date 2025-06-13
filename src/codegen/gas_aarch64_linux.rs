@@ -281,6 +281,9 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("    cmp x0, 0\n"));
                 sb_appendf(output, c!("    beq %s.op_%zu\n"), name, addr);
             },
+            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR")),
         }
     }
     sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());

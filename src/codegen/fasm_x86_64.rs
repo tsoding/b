@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, align_bytes};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, missingf, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::codegen::Os;
@@ -260,6 +260,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             Op::Jmp{addr} => {
                 sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
             },
+            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR")),
         }
     }
     sb_appendf(output, c!(".op_%zu:\n"), body.len());

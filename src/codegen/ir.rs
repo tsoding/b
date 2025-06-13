@@ -1,6 +1,7 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+use crate::crust::libc::*;
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, missingf};
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -115,6 +116,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             Op::Jmp{addr} => {
                 sb_appendf(output, c!("    jmp %zu:\n"), addr);
             }
+            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR")),
         }
     }
 }

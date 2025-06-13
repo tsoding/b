@@ -304,6 +304,9 @@ pub enum Op {
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
+    Label          {index: usize},
+    JmpLabel       {index: usize},
+    JmpIfNotLabel  {index: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
 

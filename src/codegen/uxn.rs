@@ -490,6 +490,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 // return
                 write_op(output, UxnOp::JMP2r);
             }
+            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR")),
         }
     }
     link_label(assembler, *op_labels.items.add(body.len()), (*output).count);
