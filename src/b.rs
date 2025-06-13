@@ -745,31 +745,26 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::If => {
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
-            let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let (cond, _) = compile_expression(l, c)?;
+                let saved_auto_vars_count = (*c).auto_vars_ator.count;
+                   let (cond, _) = compile_expression(l, c)?;
+                   let else_label = allocate_label_index(c);
+                   push_opcode(Op::JmpIfNotLabel{label: else_label, arg: cond}, (*l).loc, c);
+                (*c).auto_vars_ator.count = saved_auto_vars_count;
             get_and_expect_token_but_continue(l, c, Token::CParen)?;
-
-            let addr_condition = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, (*l).loc, c);
-            (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, c)?;
 
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
-
             if (*l).token == Token::Else {
-                let addr_skips_else = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
-                let addr_else = (*c).func_body.count;
-                compile_statement(l, c)?;
-                let addr_after_else = (*c).func_body.count;
-                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_else, arg: cond};
-                (*(*c).func_body.items.add(addr_skips_else)).opcode = Op::Jmp      {addr: addr_after_else};
+                let out_label = allocate_label_index(c);
+                push_opcode(Op::JmpLabel{label: out_label}, (*l).loc, c);
+                push_opcode(Op::Label{label: else_label}, (*l).loc, c);
+                    compile_statement(l, c)?;
+                push_opcode(Op::Label{label: out_label}, (*l).loc, c);
             } else {
                 (*l).parse_point = saved_point;
-                let addr_after_if = (*c).func_body.count;
-                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_after_if , arg: cond};
+                push_opcode(Op::Label{label: else_label}, (*l).loc, c);
             }
 
             Some(())
