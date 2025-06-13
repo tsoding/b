@@ -156,13 +156,13 @@ pub unsafe fn declare_var(c: *mut Compiler, name: *const c_char, loc: Loc, stora
 }
 
 #[derive(Clone, Copy)]
-pub struct Label {
+pub struct GotoLabel {
     name: *const c_char,
     loc: Loc,
     addr: usize,
 }
 
-pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *const Label {
+pub unsafe fn find_label(labels: *const Array<GotoLabel>, name: *const c_char) -> *const GotoLabel {
     for i in 0..(*labels).count {
         let label = (*labels).items.add(i);
         if strcmp((*label).name, name) == 0 {
@@ -172,15 +172,15 @@ pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *c
     ptr::null()
 }
 
-pub unsafe fn define_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
-    let existing_label = find_label(&(*c).func_labels, name);
+pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
+    let existing_label = find_label(&(*c).func_goto_labels, name);
     if !existing_label.is_null() {
         diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
         diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
         return bump_error_count(c);
     }
 
-    da_append(&mut (*c).func_labels, Label {name, loc, addr});
+    da_append(&mut (*c).func_goto_labels, GotoLabel {name, loc, addr});
     Some(())
 }
 
@@ -804,7 +804,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
-            da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
+            da_append(&mut (*c).func_goto_labels_used, GotoLabel {name, loc, addr});
             get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
             Some(())
@@ -895,7 +895,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let addr = (*c).func_body.count;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
-                    define_label(c, name, name_loc, addr)?;
+                    define_goto_label(c, name, name_loc, addr)?;
                     return Some(());
                 }
             }
@@ -963,8 +963,8 @@ pub struct Compiler {
     pub auto_vars_ator: AutoVarsAtor,
     pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
-    pub func_labels: Array<Label>,
-    pub func_labels_used: Array<Label>,
+    pub func_goto_labels: Array<GotoLabel>,
+    pub func_goto_labels_used: Array<GotoLabel>,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
@@ -1024,9 +1024,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             compile_statement(l, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
-            for i in 0..(*c).func_labels_used.count {
-                let used_label = *(*c).func_labels_used.items.add(i);
-                let existing_label = find_label(&(*c).func_labels, used_label.name);
+            for i in 0..(*c).func_goto_labels_used.count {
+                let used_label = *(*c).func_goto_labels_used.items.add(i);
+                let existing_label = find_label(&(*c).func_goto_labels, used_label.name);
                 if existing_label.is_null() {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
                     bump_error_count(c)?;
@@ -1044,8 +1044,8 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 auto_vars_count: (*c).auto_vars_ator.max,
             });
             (*c).func_body = zeroed();
-            (*c).func_labels.count = 0;
-            (*c).func_labels_used.count = 0;
+            (*c).func_goto_labels.count = 0;
+            (*c).func_goto_labels_used.count = 0;
             (*c).auto_vars_ator = zeroed();
         } else { // Variable definition
             (*l).parse_point = saved_point;
