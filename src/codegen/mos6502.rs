@@ -465,9 +465,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                 write_byte(output, JMP_ABS);
                 add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
             },
-            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR")),
-            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR")),
-            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR")),
+            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR\n")),
+            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR\n")),
+            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR\n")),
         }
     }
     let addr_idx = *op_addresses.items.add(body.len());

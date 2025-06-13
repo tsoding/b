@@ -304,9 +304,9 @@ pub enum Op {
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
     JmpIfNot       {addr: usize, arg: Arg},
-    Label          {index: usize},
-    JmpLabel       {index: usize},
-    JmpIfNotLabel  {index: usize, arg: Arg},
+    Label          {label: usize},
+    JmpLabel       {label: usize},
+    JmpIfNotLabel  {label: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
 
@@ -336,6 +336,12 @@ pub struct AutoVarsAtor {
     pub count: usize,
     /// Maximum allocated autovars throughout the function body
     pub max: usize,
+}
+
+pub unsafe fn allocate_label_index(c: *mut Compiler) -> usize {
+    let index = (*c).op_label_count;
+    (*c).op_label_count += 1;
+    index
 }
 
 pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
@@ -769,20 +775,22 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::While => {
-            let begin = (*c).func_body.count;
+            let cond_label = allocate_label_index(c);
+            push_opcode(Op::Label {label: cond_label}, (*l).loc, c);
+
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
-            let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let (arg, _) = compile_expression(l, c)?;
-
+                let saved_auto_vars_count = (*c).auto_vars_ator.count;
+                    let (arg, _) = compile_expression(l, c)?;
+                (*c).auto_vars_ator.count = saved_auto_vars_count;
             get_and_expect_token_but_continue(l, c, Token::CParen)?;
-            let condition_jump = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
-            (*c).auto_vars_ator.count = saved_auto_vars_count;
 
-            compile_statement(l, c)?;
-            push_opcode(Op::Jmp{addr: begin}, (*l).loc, c);
-            let end = (*c).func_body.count;
-            (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
+            let out_label = allocate_label_index(c);
+            push_opcode(Op::JmpIfNotLabel{label: out_label, arg}, (*l).loc, c);
+
+                compile_statement(l, c)?;
+
+            push_opcode(Op::JmpLabel{label: cond_label}, (*l).loc, c);
+            push_opcode(Op::Label {label: out_label}, (*l).loc, c);
             Some(())
         }
         Token::Return => {
