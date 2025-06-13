@@ -34,6 +34,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         sb_appendf(output, c!("%8zu:"), i);
         let op = (*body)[i];
         match op.opcode {
+            Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return {arg} => {
                 sb_appendf(output, c!("    return "));
                 if let Some(arg) = arg {
@@ -107,14 +108,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!(")\n"));
             }
 
-            Op::JmpIfNot{addr, arg} => {
-                sb_appendf(output, c!("    jmp_if_not %zu:, "), addr);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::Jmp{addr} => {
-                sb_appendf(output, c!("    jmp %zu:\n"), addr);
-            }
             Op::Label {label} => {
                 sb_appendf(output, c!("    label[%zu]\n"), label);
             }

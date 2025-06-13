@@ -197,7 +197,7 @@ pub enum Arg {
     ///
     /// You should always call unreachable!() if you encounterd it in
     /// the codegens. This value indicates a compilation error and
-    /// encountering it means that the compiler didn't fail the
+    /// encountering it means that the compiler fails the
     /// compilation before passing the Compiler struct to the
     /// codegens.
     Bogus,
@@ -301,6 +301,7 @@ impl Binop {
 
 #[derive(Clone, Copy)]
 pub enum Op {
+    Bogus,
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
     Asm            {args: Array<*const c_char>},
@@ -309,8 +310,8 @@ pub enum Op {
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
-    Jmp            {addr: usize},
-    JmpIfNot       {addr: usize, arg: Arg},
+    // Jmp            {addr: usize},
+    // JmpIfNot       {addr: usize, arg: Arg},
     Label          {label: usize},
     JmpLabel       {label: usize},
     JmpIfNotLabel  {label: usize, arg: Arg},
@@ -804,7 +805,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_gotos, Goto {name, loc, addr});
             get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-            push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+            push_opcode(Op::Bogus, (*l).loc, c);
             Some(())
         }
         Token::Asm => {

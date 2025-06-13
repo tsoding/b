@@ -186,6 +186,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         link_label(assembler, *op_labels.items.add(i), (*output).count);
         let op = (*body)[i];
         match op.opcode {
+            Op::Bogus => unreachable!("bogus-amogus"),
             Op::UnaryNot {result, arg} => {
                 load_arg(arg, output, assembler);
                 // if arg == 0 then 1 else 0
@@ -454,17 +455,17 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 store_auto(output, result);
             }
             Op::Asm {..} => missingf!(op.loc, c!("Inline assembly\n")),
-            Op::Jmp {addr} => {
-                write_op(output, UxnOp::JMI);
-                write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
-            }
-            Op::JmpIfNot {addr, arg} => {
-                load_arg(arg, output, assembler);
-                write_lit2(output, 0);
-                write_op(output, UxnOp::EQU2);
-                write_op(output, UxnOp::JCI);
-                write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
-            }
+            // Op::Jmp {addr} => {
+            //     write_op(output, UxnOp::JMI);
+            //     write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
+            // }
+            // Op::JmpIfNot {addr, arg} => {
+            //     load_arg(arg, output, assembler);
+            //     write_lit2(output, 0);
+            //     write_op(output, UxnOp::EQU2);
+            //     write_op(output, UxnOp::JCI);
+            //     write_label_rel(output, *op_labels.items.add(addr), assembler, 0);
+            // }
             Op::Return {arg} => {
                 // Put return value in the FIRST_ARG
                 if let Some(arg) = arg {

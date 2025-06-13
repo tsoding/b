@@ -61,9 +61,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
 
     for i in 0..body.len() {
-        sb_appendf(output, c!(".op_%zu:\n"), i);
         let op = (*body)[i];
         match op.opcode {
+            Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("rax"), output);
@@ -252,14 +252,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     sb_appendf(output, c!("    %s\n"), arg);
                 }
             }
-            Op::JmpIfNot{addr, arg} => {
-                load_arg_to_reg(arg, c!("rax"), output);
-                sb_appendf(output, c!("    test rax, rax\n"));
-                sb_appendf(output, c!("    jz .op_%zu\n"), addr);
-            },
-            Op::Jmp{addr} => {
-                sb_appendf(output, c!("    jmp .op_%zu\n"), addr);
-            },
             Op::Label {label} => {
                 sb_appendf(output, c!(".label_%zu:\n"), label);
             }
@@ -273,7 +265,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             }
         }
     }
-    sb_appendf(output, c!(".op_%zu:\n"), body.len());
     sb_appendf(output, c!("    mov rax, 0\n"));
     sb_appendf(output, c!("    mov rsp, rbp\n"));
     sb_appendf(output, c!("    pop rbp\n"));
