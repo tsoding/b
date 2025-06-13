@@ -687,14 +687,6 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
     da_append(names, name)
 }
 
-pub unsafe fn backpatch_jmp(backpatch: *mut OpWithLocation, addr: usize) {
-    match (*backpatch).opcode {
-        Op::Jmp{..}           => (*backpatch).opcode = Op::Jmp { addr },
-        Op::JmpIfNot{arg, ..} => (*backpatch).opcode = Op::JmpIfNot { addr, arg },
-        _                     => unreachable!()
-    }
-}
-
 pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -851,22 +843,28 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
             if let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) {
-                let addr = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
+                let fallthrough_label = allocate_label_index(c);
+                push_opcode(Op::JmpLabel{label: fallthrough_label}, case_loc, c);
+
+                push_opcode(Op::Label{
+                    label: (*switch_frame).label
+                }, case_loc, c);
+
                 push_opcode(Op::Binop{
                     binop: Binop::Equal,
                     index: (*switch_frame).cond,
                     lhs: (*switch_frame).value,
                     rhs: Arg::Literal(case_value)
                 }, case_loc, c);
-                push_opcode(Op::JmpIfNot {
-                    addr: 0,
+
+                let next_case_label = allocate_label_index(c);
+                push_opcode(Op::JmpIfNotLabel {
+                    label: next_case_label,
                     arg: Arg::AutoVar((*switch_frame).cond)
                 }, case_loc, c);
+                (*switch_frame).label = next_case_label;
 
-                let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
-                backpatch_jmp(backpatch, addr + 1);
-                (*switch_frame).jmp_addr = addr + 2;
+                push_opcode(Op::Label{label: fallthrough_label}, case_loc, c);
 
                 Some(())
             } else {
@@ -880,14 +878,14 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let switch_loc = (*l).loc;
             let (value, _) = compile_expression(l, c)?;
             let cond = allocate_auto_var(&mut (*c).auto_vars_ator);
-            let jmp_addr = (*c).func_body.count;
-            da_append(&mut (*c).switch_stack, Switch {jmp_addr, value, cond});
-            push_opcode(Op::Jmp {addr: 0}, switch_loc, c);
+            let label = allocate_label_index(c);
+            da_append(&mut (*c).switch_stack, Switch {label, value, cond});
+            push_opcode(Op::JmpLabel {label}, switch_loc, c);
+
             compile_statement(l, c)?;
 
             let switch_frame = da_last_mut(&mut (*c).switch_stack).expect("Switch stack was modified by somebody else");
-            let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
-            backpatch_jmp(backpatch, (*c).func_body.count);
+            push_opcode(Op::Label{label: (*switch_frame).label}, (*l).loc, c);
             (*c).switch_stack.count -= 1;
 
             (*c).auto_vars_ator.count = saved_auto_vars_count;
@@ -959,7 +957,7 @@ pub enum ImmediateValue {
 
 #[derive(Clone, Copy)]
 pub struct Switch {
-    pub jmp_addr: usize,
+    pub label: usize,
     pub value: Arg,
     pub cond: usize,
 }
