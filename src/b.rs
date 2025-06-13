@@ -965,6 +965,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_goto_labels_used: Array<GotoLabel>,
+    pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
@@ -1047,6 +1048,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).func_goto_labels.count = 0;
             (*c).func_goto_labels_used.count = 0;
             (*c).auto_vars_ator = zeroed();
+            (*c).op_label_count = 0;
         } else { // Variable definition
             (*l).parse_point = saved_point;
             declare_var(c, name, name_loc, Storage::External{name})?;
