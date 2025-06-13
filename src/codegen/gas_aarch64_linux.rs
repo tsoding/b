@@ -106,7 +106,6 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     }
 
     for i in 0..body.len() {
-        sb_appendf(output, c!("%s.op_%zu:\n"), name, i);
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
@@ -273,21 +272,19 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     sb_appendf(output, c!("    %s\n"), arg);
                 }
             }
-
-            // Op::Jmp {addr} => {
-            //     sb_appendf(output, c!("    b %s.op_%zu\n"), name, addr);
-            // },
-            // Op::JmpIfNot {addr, arg} => {
-            //     load_arg_to_reg(arg, c!("x0"), output, op.loc);
-            //     sb_appendf(output, c!("    cmp x0, 0\n"));
-            //     sb_appendf(output, c!("    beq %s.op_%zu\n"), name, addr);
-            // },
-            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR\n")),
-            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR\n")),
-            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR\n")),
+            Op::Label {label} => {
+                sb_appendf(output, c!("%s.label_%zu:\n"), name, label);
+            }
+            Op::JmpLabel {label} => {
+                sb_appendf(output, c!("    b %s.label_%zu\n"), name, label);
+            }
+            Op::JmpIfNotLabel {label, arg} => {
+                load_arg_to_reg(arg, c!("x0"), output, op.loc);
+                sb_appendf(output, c!("    cmp x0, 0\n"));
+                sb_appendf(output, c!("    beq %s.label_%zu\n"), name, label);
+            }
         }
     }
-    sb_appendf(output, c!("%s.op_%zu:\n"), name, body.len());
     sb_appendf(output, c!("    mov x0, 0\n"));
     sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
     sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
