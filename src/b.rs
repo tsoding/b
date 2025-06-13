@@ -159,6 +159,13 @@ pub unsafe fn declare_var(c: *mut Compiler, name: *const c_char, loc: Loc, stora
 pub struct GotoLabel {
     name: *const c_char,
     loc: Loc,
+    label: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct Goto {
+    name: *const c_char,
+    loc: Loc,
     addr: usize,
 }
 
@@ -172,7 +179,7 @@ pub unsafe fn find_label(labels: *const Array<GotoLabel>, name: *const c_char) -
     ptr::null()
 }
 
-pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
+pub unsafe fn define_goto_label_(c: *mut Compiler, name: *const c_char, loc: Loc, label: usize) -> Option<()> {
     let existing_label = find_label(&(*c).func_goto_labels, name);
     if !existing_label.is_null() {
         diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
@@ -180,7 +187,7 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
         return bump_error_count(c);
     }
 
-    da_append(&mut (*c).func_goto_labels, GotoLabel {name, loc, addr});
+    da_append(&mut (*c).func_goto_labels, GotoLabel {name, loc, label});
     Some(())
 }
 
@@ -803,7 +810,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
-            da_append(&mut (*c).func_goto_labels_used, GotoLabel {name, loc, addr});
+            da_append(&mut (*c).func_gotos, Goto {name, loc, addr});
             get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
             Some(())
@@ -891,10 +898,11 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             if (*l).token == Token::ID {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = (*l).loc;
-                let addr = (*c).func_body.count;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
-                    define_goto_label(c, name, name_loc, addr)?;
+                    let label = allocate_label_index(c);
+                    push_opcode(Op::Label{label}, name_loc, c);
+                    define_goto_label_(c, name, name_loc, label)?;
                     return Some(());
                 }
             }
@@ -963,7 +971,7 @@ pub struct Compiler {
     pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
-    pub func_goto_labels_used: Array<GotoLabel>,
+    pub func_gotos: Array<Goto>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
@@ -1024,15 +1032,15 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             compile_statement(l, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
-            for i in 0..(*c).func_goto_labels_used.count {
-                let used_label = *(*c).func_goto_labels_used.items.add(i);
+            for i in 0..(*c).func_gotos.count {
+                let used_label = *(*c).func_gotos.items.add(i);
                 let existing_label = find_label(&(*c).func_goto_labels, used_label.name);
                 if existing_label.is_null() {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
                     bump_error_count(c)?;
                     continue;
                 }
-                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
+                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
             }
             arena::reset(&mut (*c).arena_labels);
 
@@ -1045,7 +1053,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             });
             (*c).func_body = zeroed();
             (*c).func_goto_labels.count = 0;
-            (*c).func_goto_labels_used.count = 0;
+            (*c).func_gotos.count = 0;
             (*c).auto_vars_ator = zeroed();
             (*c).op_label_count = 0;
         } else { // Variable definition
