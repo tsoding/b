@@ -31,7 +31,6 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
 pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
-        sb_appendf(output, c!("%8zu:"), i);
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
@@ -109,13 +108,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             }
 
             Op::Label {label} => {
-                sb_appendf(output, c!("    label[%zu]\n"), label);
+                sb_appendf(output, c!("%3zu:\n"), label);
             }
             Op::JmpLabel {label} => {
-                sb_appendf(output, c!("    jmp label[%zu]\n"), label);
+                sb_appendf(output, c!("    jmp %zu:\n"), label);
             }
             Op::JmpIfNotLabel {label, arg} => {
-                sb_appendf(output, c!("    jmp_if_not label[%zu], "), label);
+                sb_appendf(output, c!("    jmp_if_not %zu:, "), label);
                 dump_arg(output, arg);
                 sb_appendf(output, c!("\n"));
             }
