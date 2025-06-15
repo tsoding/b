@@ -46,6 +46,7 @@ const TSX:       u8 = 0xBA;
 const TXA:       u8 = 0x8A;
 const TXS:       u8 = 0x9A;
 const TYA:       u8 = 0x98;
+const NOP:       u8 = 0xEA;
 
 // zero page addresses
 // TODO: Do we really have to use
@@ -443,32 +444,42 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, code_start: 
                 store_auto(output, result, asm);
             },
             Op::Asm {args: _} => unreachable!(),
-            // Op::JmpIfNot{addr, arg} => {
-            //     load_arg(arg, op.loc, output, asm);
+            Op::Label{label} => {
+                write_byte(output, NOP);
+                // TODO: find a way to avoid using temporary buffer to create a label
+                let label = temp_sprintf(c!(".%s%zu"), name, label);
+                da_append(&mut (*asm).labels, Label {
+                    name: label,
+                    addr: (*output).count as u16,
+                });
+            },
+            Op::JmpLabel{label} => {
+                // TODO: find a way to avoid using temporary buffer to create a label
+                let label = temp_sprintf(c!(".%s%zu"), name, label);
+                write_byte(output, JMP_ABS);
+                add_reloc(output, RelocationKind::Label{name: label}, asm);
+            }
+            Op::JmpIfNotLabel{label, arg} => {
+                load_arg(arg, op.loc, output, asm);
 
-            //     write_byte(output, CMP_IMM);
-            //     write_byte(output, 0);
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
 
-            //     // if !=0, skip next check and branch
-            //     write_byte(output, BNE);
-            //     write_byte(output, 7); // skip next 4 instructions
+                // if !=0, skip next check and branch
+                write_byte(output, BNE);
+                write_byte(output, 7); // skip next 4 instructions
 
-            //     write_byte(output, CPY_IMM);
-            //     write_byte(output, 0);
+                write_byte(output, CPY_IMM);
+                write_byte(output, 0);
 
-            //     write_byte(output, BNE);
-            //     write_byte(output, 3);
+                write_byte(output, BNE);
+                write_byte(output, 3);
 
-            //     write_byte(output, JMP_ABS);
-            //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
-            // },
-            // Op::Jmp{addr} => {
-            //     write_byte(output, JMP_ABS);
-            //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
-            // },
-            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR\n")),
-            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR\n")),
-            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR\n")),
+                write_byte(output, JMP_ABS);
+                // TODO: find a way to avoid using temporary buffer to create a label
+                let label = temp_sprintf(c!(".%s%zu"), name, label);
+                add_reloc(output, RelocationKind::Label{name: label}, asm);
+            }
         }
     }
     let addr_idx = *op_addresses.items.add(body.len());
