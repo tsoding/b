@@ -18,17 +18,6 @@ test_lookup(a, b) {
   return (-1);
 }
 
-test_fallthrough(x) {
-    extrn printf;
-    switch (x) {
-    case 0: printf("0\n");
-    case 1: printf("1\n");
-    case 2: printf("2\n");
-    case 3: printf("3\n");
-    case 4: printf("4\n");
-    }
-}
-
 /* TODO: maybe this should be a part of the libb at some point?
  * iirc snake example also uses a similar function
  */
@@ -36,6 +25,18 @@ unreachable(message) {
   extrn printf, abort;
   printf("UNREACHABLE: %s\n", message);
   abort();
+}
+
+test_fallthrough(x) {
+    extrn printf;
+    switch (x) {
+    unreachable("test_fallthrough");
+    case 0: printf("0\n");
+    case 1: printf("1\n");
+    case 2: printf("2\n");
+    case 3: printf("3\n");
+    case 4: printf("4\n");
+    }
 }
 
 main() {
