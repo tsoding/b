@@ -197,7 +197,7 @@ pub enum Arg {
     ///
     /// You should always call unreachable!() if you encounterd it in
     /// the codegens. This value indicates a compilation error and
-    /// encountering it means that the compiler fails the
+    /// encountering it means that the compiler didn't fail the
     /// compilation before passing the Compiler struct to the
     /// codegens.
     Bogus,
