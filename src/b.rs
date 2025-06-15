@@ -303,6 +303,7 @@ pub enum Op {
     Store          {index: usize, arg: Arg},
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
+    // TODO: Rename JmpIfNot to JmpUnless
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
@@ -464,6 +465,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
                 let word_size = Arg::Literal(target_word_size((*c).target));
+                // TODO: Introduce Op::Index instruction that indices values without explicitly emit Binop::Mult and uses efficient multiplication by the size of the word at the codegen level.
                 push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
                 push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
 
