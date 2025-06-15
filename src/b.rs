@@ -310,8 +310,6 @@ pub enum Op {
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
-    // Jmp            {addr: usize},
-    // JmpIfNot       {addr: usize, arg: Arg},
     Label          {label: usize},
     JmpLabel       {label: usize},
     JmpIfNotLabel  {label: usize, arg: Arg},
