@@ -169,7 +169,7 @@ pub struct Goto {
     addr: usize,
 }
 
-pub unsafe fn find_label(labels: *const Array<GotoLabel>, name: *const c_char) -> *const GotoLabel {
+pub unsafe fn find_goto_label(labels: *const Array<GotoLabel>, name: *const c_char) -> *const GotoLabel {
     for i in 0..(*labels).count {
         let label = (*labels).items.add(i);
         if strcmp((*label).name, name) == 0 {
@@ -179,8 +179,8 @@ pub unsafe fn find_label(labels: *const Array<GotoLabel>, name: *const c_char) -
     ptr::null()
 }
 
-pub unsafe fn define_goto_label_(c: *mut Compiler, name: *const c_char, loc: Loc, label: usize) -> Option<()> {
-    let existing_label = find_label(&(*c).func_goto_labels, name);
+pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc, label: usize) -> Option<()> {
+    let existing_label = find_goto_label(&(*c).func_goto_labels, name);
     if !existing_label.is_null() {
         diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
         diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
@@ -901,7 +901,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 if (*l).token == Token::Colon {
                     let label = allocate_label_index(c);
                     push_opcode(Op::Label{label}, name_loc, c);
-                    define_goto_label_(c, name, name_loc, label)?;
+                    define_goto_label(c, name, name_loc, label)?;
                     return Some(());
                 }
             }
@@ -1033,7 +1033,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             for i in 0..(*c).func_gotos.count {
                 let used_label = *(*c).func_gotos.items.add(i);
-                let existing_label = find_label(&(*c).func_goto_labels, used_label.name);
+                let existing_label = find_goto_label(&(*c).func_goto_labels, used_label.name);
                 if existing_label.is_null() {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
                     bump_error_count(c)?;
