@@ -222,16 +222,16 @@ const KEYWORDS: *const [(*const c_char, Token)] = &[
 
 #[derive(Clone, Copy)]
 pub struct Parse_Point {
-    pub current: *mut c_char,
-    pub line_start: *mut c_char,
+    pub current: *const c_char,
+    pub line_start: *const c_char,
     pub line_number: usize,
 }
 
 #[derive(Clone, Copy)]
 pub struct Lexer {
-    pub input_path: *mut c_char,
-    pub input_stream: *mut c_char,
-    pub eof: *mut c_char,
+    pub input_path: *const c_char,
+    pub input_stream: *const c_char,
+    pub eof: *const c_char,
     pub parse_point: Parse_Point,
 
     pub string_storage: String_Builder,
@@ -241,7 +241,7 @@ pub struct Lexer {
     pub loc: Loc,
 }
 
-pub unsafe fn new(input_path: *mut c_char, input_stream: *mut c_char, eof: *mut c_char) -> Lexer {
+pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *const c_char) -> Lexer {
     let mut l: Lexer = zeroed();
     l.input_path              = input_path;
     l.input_stream            = input_stream;

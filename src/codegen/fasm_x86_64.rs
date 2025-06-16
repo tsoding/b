@@ -315,7 +315,7 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
                     sb_appendf(output, c!(","));
                 }
                 match *global.values.items.add(j) {
-                    ImmediateValue::Literal(lit) => sb_appendf(output, c!("0x%X"), lit),
+                    ImmediateValue::Literal(lit) => sb_appendf(output, c!("0x%llX"), lit),
                     ImmediateValue::Name(name) => sb_appendf(output, c!("_%s"), name),
                     ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("dat+%zu"), offset),
                 };

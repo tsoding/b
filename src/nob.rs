@@ -116,4 +116,6 @@ extern "C" {
     pub fn sv_from_parts(data: *const c_char, count: usize) -> String_View;
     #[link_name = "nob_sv_starts_with"]
     pub fn sv_starts_with(sv: String_View, expected_prefix: String_View) -> bool;
+    #[link_name = "nob_file_exists"]
+    pub fn file_exists(file_path: *const c_char) -> c_int;
 }

@@ -27,6 +27,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/divmod \
 	$(BUILD)/tests/e \
 	$(BUILD)/tests/forward-declare \
+	$(BUILD)/tests/globals \
 	$(BUILD)/tests/goto \
 	$(BUILD)/tests/hello \
 	$(BUILD)/tests/inc_dec \
@@ -45,8 +46,11 @@ LINUX_TESTS=\
 	$(BUILD)/tests/vector \
 	$(BUILD)/tests/multiple-postfix \
 	$(BUILD)/tests/rvalue_call \
-	$(BUILD)/tests/call_stack_args
+	$(BUILD)/tests/call_stack_args \
+	$(BUILD)/tests/upper
 
+# TODO: ./tests/upper.b does not work on gas-aarch64-linux due to missing implementations of char() and lchar(). See ./libb/gas-aarch64-linux.b
+#	$(BUILD)/tests/upper-gas-aarch64-linux
 GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/args6-gas-aarch64-linux \
 	$(BUILD)/tests/args11-gas-aarch64-linux \
@@ -56,6 +60,7 @@ GAS_AARCH64_LINUX_TESTS=\
 	$(BUILD)/tests/divmod-gas-aarch64-linux \
 	$(BUILD)/tests/e-gas-aarch64-linux \
 	$(BUILD)/tests/forward-declare-gas-aarch64-linux \
+	$(BUILD)/tests/globals-gas-aarch64-linux \
 	$(BUILD)/tests/goto-gas-aarch64-linux \
 	$(BUILD)/tests/hello-gas-aarch64-linux \
 	$(BUILD)/tests/inc_dec-gas-aarch64-linux \
@@ -85,6 +90,7 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/divmod.exe \
 	$(BUILD)/tests/e.exe \
 	$(BUILD)/tests/forward-declare.exe \
+	$(BUILD)/tests/globals.exe \
 	$(BUILD)/tests/goto.exe \
 	$(BUILD)/tests/hello.exe \
 	$(BUILD)/tests/inc_dec.exe \
@@ -103,7 +109,8 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/vector.exe \
 	$(BUILD)/tests/multiple-postfix.exe \
 	$(BUILD)/tests/rvalue_call.exe \
-	$(BUILD)/tests/call_stack_args.exe
+	$(BUILD)/tests/call_stack_args.exe \
+	$(BUILD)/tests/upper.exe
 
 UXN_TESTS=\
 	$(BUILD)/tests/args6.rom \
@@ -114,6 +121,7 @@ UXN_TESTS=\
 	$(BUILD)/tests/divmod.rom \
 	$(BUILD)/tests/e.rom \
 	$(BUILD)/tests/forward-declare.rom \
+	$(BUILD)/tests/globals.rom \
 	$(BUILD)/tests/goto.rom \
 	$(BUILD)/tests/hello.rom \
 	$(BUILD)/tests/inc_dec.rom \
@@ -132,7 +140,8 @@ UXN_TESTS=\
 	$(BUILD)/tests/vector.rom \
 	$(BUILD)/tests/multiple-postfix.rom \
 	$(BUILD)/tests/rvalue_call.rom \
-	$(BUILD)/tests/call_stack_args.rom
+	$(BUILD)/tests/call_stack_args.rom \
+	$(BUILD)/tests/upper.rom
 
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
@@ -168,20 +177,20 @@ $(BUILD):
 .PHONY: test
 test: $(LINUX_TESTS)
 
-$(BUILD)/tests/%: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -run -o $@ $< ./std/test.b
+$(BUILD)/tests/%: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -run -o $@ $<
 
 .PHONY: test-gas-aarch64-linux
 test-gas-aarch64-linux: $(GAS_AARCH64_LINUX_TESTS)
 
-$(BUILD)/tests/%-gas-aarch64-linux: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t gas-aarch64-linux -run -o $@ $< ./std/test.b
+$(BUILD)/tests/%-gas-aarch64-linux: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t gas-aarch64-linux -run -o $@ $<
 
 .PHONY: test-mingw32
 test-mingw32: $(MINGW32_TESTS)
 
-$(BUILD)/tests/%.exe: ./tests/%.b ./std/test.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t fasm-x86_64-windows -run -o $@ $< ./std/test.b
+$(BUILD)/tests/%.exe: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t fasm-x86_64-windows -run -o $@ $<
 
 $(BUILD)/tests:
 	mkdir -pv $(BUILD)/tests
@@ -189,8 +198,8 @@ $(BUILD)/tests:
 .PHONY: test-uxn
 test-uxn: $(UXN_TESTS)
 
-$(BUILD)/tests/%.rom: ./tests/%.b ./std/test.b ./std/uxn.b $(BUILD)/b FORCE | $(BUILD)/tests
-	$(BUILD)/b -t uxn -o $@ $< ./std/test.b ./std/uxn.b
+$(BUILD)/tests/%.rom: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -t uxn -o $@ $<
 	uxncli $@
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html

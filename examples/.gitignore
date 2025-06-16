@@ -2,3 +2,4 @@
 !*/
 !**/*.b
 !.gitignore
+!**/README.md
