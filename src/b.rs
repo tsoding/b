@@ -303,6 +303,7 @@ pub enum Op {
     Store          {index: usize, arg: Arg},
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Jmp            {addr: usize},
+    // TODO: Rename JmpIfNot to JmpUnless
     JmpIfNot       {addr: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
@@ -344,13 +345,10 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 }
 
 
-pub unsafe fn compile_string(l: *mut Lexer, c: *mut Compiler) -> usize {
-     // TODO: communicate this assumption to the caller of the function
-    assert!((*l).token == Token::String);
-
+pub unsafe fn compile_string(string: *const c_char, c: *mut Compiler) -> usize {
     let offset = (*c).data.count;
-    let string_len = strlen((*l).string);
-    da_append_many(&mut (*c).data, slice::from_raw_parts((*l).string as *const u8, string_len));
+    let string_len = strlen(string);
+    da_append_many(&mut (*c).data, slice::from_raw_parts(string as *const u8, string_len));
     // TODO: Strings in B are not NULL-terminated.
     // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
     // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
@@ -444,7 +442,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             }
         }
         Token::String => {
-            let offset = compile_string(l, c);
+            let offset = compile_string((*l).string, c);
             Some((Arg::DataOffset(offset), false))
         }
         _ => {
@@ -467,6 +465,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
                 let word_size = Arg::Literal(target_word_size((*c).target));
+                // TODO: Introduce Op::Index instruction that indices values without explicitly emit Binop::Mult and uses efficient multiplication by the size of the word at the codegen level.
                 push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
                 push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
 
@@ -1089,7 +1088,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             while (*l).token != Token::SemiColon {
                 let value = match (*l).token {
                     Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
-                    Token::String => ImmediateValue::DataOffset(compile_string(l, c)),
+                    Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                     Token::ID => {
                         let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                         let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
@@ -1544,6 +1543,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 fake6502::load_rom_at(output, config.load_offset);
                 fake6502::reset();
                 fake6502::pc = config.load_offset;
+
+                // set reset to $0000 to exit on reset
+                fake6502::MEMORY[0xFFFC] = 0;
+                fake6502::MEMORY[0xFFFD] = 0;
+
                 while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
                     fake6502::step();
                     if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
@@ -1551,6 +1555,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                         fake6502::rts();
                     }
                 }
+                // print exit code (in Y:A)
+                printf(c!("Exited with code %u\n"),
+                       ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
             }
         }
         Target::IR => {
