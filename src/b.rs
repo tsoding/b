@@ -685,6 +685,31 @@ pub unsafe fn backpatch_jmp(backpatch: *mut OpWithLocation, addr: usize) {
     }
 }
 
+pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array<*const c_char>) -> Option<()> {
+    get_and_expect_token_but_continue(l, c, Token::OParen)?;
+    let saved_point = (*l).parse_point;
+    lexer::get_token(l)?;
+    if (*l).token != Token::CParen {
+        (*l).parse_point = saved_point;
+        loop {
+            get_and_expect_token(l, Token::String)?;
+            match (*l).token {
+                Token::String => da_append(args, arena::strdup(&mut (*c).arena_names, (*l).string)),
+                _             => unreachable!(),
+            }
+
+            get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
+            match (*l).token {
+                Token::Comma  => {}
+                Token::CParen => break,
+                _             => unreachable!(),
+            }
+        }
+    }
+    get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
+    Some(())
+}
+
 pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -810,29 +835,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::Asm => {
             let mut args: Array<*const c_char> = zeroed();
-            get_and_expect_token_but_continue(l, c, Token::OParen)?;
-
-            let saved_point = (*l).parse_point;
-            lexer::get_token(l)?;
-            if (*l).token != Token::CParen {
-                (*l).parse_point = saved_point;
-                loop {
-                    get_and_expect_token(l, Token::String)?;
-                    match (*l).token {
-                        Token::String => da_append(&mut args, arena::strdup(&mut (*c).arena_names, (*l).string)),
-                        _             => unreachable!(),
-                    }
-
-                    get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
-                    match (*l).token {
-                        Token::Comma  => {}
-                        Token::CParen => break,
-                        _             => unreachable!(),
-                    }
-                }
-            }
-            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-
+            compile_asm_args(l, c, &mut args)?;
             push_opcode(Op::Asm {args}, (*l).loc, c);
             Some(())
         }
@@ -926,6 +929,13 @@ pub unsafe fn usage() {
 }
 
 #[derive(Clone, Copy)]
+pub struct AsmFunc {
+    name: *const c_char,
+    name_loc: Loc,
+    body: Array<*const c_char>,
+}
+
+#[derive(Clone, Copy)]
 pub struct Func {
     name: *const c_char,
     name_loc: Loc,
@@ -968,6 +978,7 @@ pub struct Compiler {
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub globals: Array<Global>,
+    pub asm_funcs: Array<AsmFunc>,
     pub arena_names: Arena,
     pub arena_labels: Arena,
     pub target: Target,
@@ -993,12 +1004,12 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
         let name = arena::strdup(&mut (*c).arena_names, (*l).string);
         let name_loc = (*l).loc;
+        declare_var(c, name, name_loc, Storage::External{name})?;
 
         let saved_point = (*l).parse_point;
         lexer::get_token(l)?;
 
         if (*l).token == Token::OParen { // Function definition
-            declare_var(c, name, name_loc, Storage::External{name})?;
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
             let saved_point = (*l).parse_point;
@@ -1046,9 +1057,12 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).func_labels.count = 0;
             (*c).func_labels_used.count = 0;
             (*c).auto_vars_ator = zeroed();
+        } else if (*l).token == Token::Asm { // Assembly function definition
+            let mut body: Array<*const c_char> = zeroed();
+            compile_asm_args(l, c, &mut body)?;
+            da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
         } else { // Variable definition
             (*l).parse_point = saved_point;
-            declare_var(c, name, name_loc, Storage::External{name})?;
 
             let mut global = Global {
                 name,
