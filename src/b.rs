@@ -932,6 +932,7 @@ pub unsafe fn usage() {
 #[derive(Clone, Copy)]
 pub struct AsmFunc {
     name: *const c_char,
+    name_loc: Loc,
     body: Array<*const c_char>,
 }
 
@@ -1060,7 +1061,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         } else if (*l).token == Token::Asm { // Assembly function definition
             let mut body: Array<*const c_char> = zeroed();
             compile_asm_args(l, c, &mut body)?;
-            da_append(&mut (*c).asm_funcs, AsmFunc {name, body});
+            da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
         } else { // Variable definition
             (*l).parse_point = saved_point;
 

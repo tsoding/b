@@ -1,6 +1,7 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+use crate::crust::libc::*;
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, missingf, AsmFunc};
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -198,8 +199,18 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+    for i in 0..asm_funcs.len() {
+        let asm_func = (*asm_funcs)[i];
+        // TODO: Yet another proof that IR is not a target on its own.
+        // See TODO(2025-06-12 20:26:01)
+        missingf!(asm_func.name_loc, c!("__asm__ functions for IR"));
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     generate_funcs(output, da_slice((*c).funcs));
+    generate_asm_funcs(output, da_slice((*c).asm_funcs));
     generate_extrns(output, da_slice((*c).extrns));
     generate_globals(output, da_slice((*c).globals));
     generate_data_section(output, da_slice((*c).data));

@@ -8,7 +8,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc};
 use crate::nob::*;
 use crate::missingf;
 use crate::crust::libc::*;
@@ -625,11 +625,19 @@ pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) ->
     Some(config)
 }
 
+pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+    for i in 0..asm_funcs.len() {
+        let asm_func = (*asm_funcs)[i];
+        missingf!(asm_func.name_loc, c!("__asm__ functions for 6502"));
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, config: Config) -> Option<()> {
     let mut asm: Assembler = zeroed();
     generate_entry(output, &mut asm);
 
     generate_funcs(output, config.load_offset, da_slice((*c).funcs), &mut asm);
+    generate_asm_funcs(output, da_slice((*c).asm_funcs));
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
 
     let data_start = config.load_offset + (*output).count as u16;
