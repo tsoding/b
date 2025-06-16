@@ -22,6 +22,7 @@ LINUX_TESTS=\
 	$(BUILD)/tests/args6 \
 	$(BUILD)/tests/args11 \
 	$(BUILD)/tests/args11-extrn \
+	$(BUILD)/tests/asm_fasm_x86_64_linux \
 	$(BUILD)/tests/asm_func_fasm_x86_64_linux \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
