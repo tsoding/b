@@ -74,5 +74,4 @@ jobs:
         run: rustup toolchain install stable --no-self-update --profile minimal
       - name: Run Tests
         run: |
-          make
-          ./build/b -run -nostdlib -t 6502 ./examples/hello_world.b ./libb/6502.b
+          make -B -k test-6502
