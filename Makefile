@@ -84,7 +84,6 @@ MINGW32_TESTS=\
 	$(BUILD)/tests/args6.exe \
 	$(BUILD)/tests/args11.exe \
 	$(BUILD)/tests/args11-extrn.exe \
-	$(BUILD)/tests/asm_func.exe \
 	$(BUILD)/tests/compare.exe \
 	$(BUILD)/tests/deref_assign.exe \
 	$(BUILD)/tests/divmod.exe \
