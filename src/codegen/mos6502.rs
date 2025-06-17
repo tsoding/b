@@ -364,6 +364,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
         let op = (*body)[i];
         match op.opcode {
+            Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg(arg, op.loc, output, asm);
@@ -629,29 +630,32 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 store_auto(output, result, asm);
             },
             Op::Asm {args: _} => unreachable!(),
-            Op::JmpIfNot{addr, arg} => {
-                load_arg(arg, op.loc, output, asm);
+            // Op::JmpIfNot{addr, arg} => {
+            //     load_arg(arg, op.loc, output, asm);
 
-                write_byte(output, CMP_IMM);
-                write_byte(output, 0);
+            //     write_byte(output, CMP_IMM);
+            //     write_byte(output, 0);
 
-                // if !=0, skip next check and branch
-                write_byte(output, BNE);
-                write_byte(output, 7); // skip next 4 instructions
+            //     // if !=0, skip next check and branch
+            //     write_byte(output, BNE);
+            //     write_byte(output, 7); // skip next 4 instructions
 
-                write_byte(output, CPY_IMM);
-                write_byte(output, 0);
+            //     write_byte(output, CPY_IMM);
+            //     write_byte(output, 0);
 
-                write_byte(output, BNE);
-                write_byte(output, 3);
+            //     write_byte(output, BNE);
+            //     write_byte(output, 3);
 
-                write_byte(output, JMP_ABS);
-                add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
-            },
-            Op::Jmp{addr} => {
-                write_byte(output, JMP_ABS);
-                add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
-            },
+            //     write_byte(output, JMP_ABS);
+            //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
+            // },
+            // Op::Jmp{addr} => {
+            //     write_byte(output, JMP_ABS);
+            //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
+            // },
+            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR\n")),
+            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR\n")),
+            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR\n")),
         }
     }
     let addr_idx = *op_addresses.items.add(body.len());

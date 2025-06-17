@@ -156,13 +156,20 @@ pub unsafe fn declare_var(c: *mut Compiler, name: *const c_char, loc: Loc, stora
 }
 
 #[derive(Clone, Copy)]
-pub struct Label {
+pub struct GotoLabel {
+    name: *const c_char,
+    loc: Loc,
+    label: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct Goto {
     name: *const c_char,
     loc: Loc,
     addr: usize,
 }
 
-pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *const Label {
+pub unsafe fn find_goto_label(labels: *const Array<GotoLabel>, name: *const c_char) -> *const GotoLabel {
     for i in 0..(*labels).count {
         let label = (*labels).items.add(i);
         if strcmp((*label).name, name) == 0 {
@@ -172,15 +179,15 @@ pub unsafe fn find_label(labels: *const Array<Label>, name: *const c_char) -> *c
     ptr::null()
 }
 
-pub unsafe fn define_label(c: *mut Compiler, name: *const c_char, loc: Loc, addr: usize) -> Option<()> {
-    let existing_label = find_label(&(*c).func_labels, name);
+pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc, label: usize) -> Option<()> {
+    let existing_label = find_goto_label(&(*c).func_goto_labels, name);
     if !existing_label.is_null() {
         diagf!(loc, c!("ERROR: duplicate label `%s`\n"), name);
         diagf!((*existing_label).loc, c!("NOTE: the first definition is located here\n"));
         return bump_error_count(c);
     }
 
-    da_append(&mut (*c).func_labels, Label {name, loc, addr});
+    da_append(&mut (*c).func_goto_labels, GotoLabel {name, loc, label});
     Some(())
 }
 
@@ -294,6 +301,7 @@ impl Binop {
 
 #[derive(Clone, Copy)]
 pub enum Op {
+    Bogus,
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
     Asm            {args: Array<*const c_char>},
@@ -302,9 +310,10 @@ pub enum Op {
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
-    Jmp            {addr: usize},
+    Label          {label: usize},
+    JmpLabel       {label: usize},
     // TODO: Rename JmpIfNot to JmpUnless
-    JmpIfNot       {addr: usize, arg: Arg},
+    JmpIfNotLabel  {label: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
 
@@ -334,6 +343,12 @@ pub struct AutoVarsAtor {
     pub count: usize,
     /// Maximum allocated autovars throughout the function body
     pub max: usize,
+}
+
+pub unsafe fn allocate_label_index(c: *mut Compiler) -> usize {
+    let index = (*c).op_label_count;
+    (*c).op_label_count += 1;
+    index
 }
 
 pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
@@ -605,24 +620,20 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
     if (*l).token == Token::Question {
         let result = allocate_auto_var(&mut (*c).auto_vars_ator);
 
-        let addr_condition = (*c).func_body.count;
-        push_opcode(Op::JmpIfNot{addr: 0, arg: lhs}, (*l).loc, c);
+        let else_label = allocate_label_index(c);
+        push_opcode(Op::JmpIfNotLabel{label: else_label, arg: lhs}, (*l).loc, c);
 
         let (if_true, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_true}, (*l).loc, c);
+        let out_label = allocate_label_index(c);
+        push_opcode(Op::JmpLabel{label: out_label}, (*l).loc, c);
 
-        let addr_skips_true = (*c).func_body.count;
-        push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
-
-        let addr_false = (*c).func_body.count;
         get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
+        push_opcode(Op::Label{label: else_label}, (*l).loc, c);
         let (if_false, _) = compile_expression(l, c)?;
         push_opcode(Op::AutoAssign {index: result, arg: if_false}, (*l).loc, c);
-
-        let addr_after_false = (*c).func_body.count;
-        (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_false, arg: lhs};
-        (*(*c).func_body.items.add(addr_skips_true)).opcode = Op::Jmp      {addr: addr_after_false};
+        push_opcode(Op::Label{label: out_label}, (*l).loc, c);
 
         Some((Arg::AutoVar(result), false))
     } else {
@@ -675,14 +686,6 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
         }
     }
     da_append(names, name)
-}
-
-pub unsafe fn backpatch_jmp(backpatch: *mut OpWithLocation, addr: usize) {
-    match (*backpatch).opcode {
-        Op::Jmp{..}           => (*backpatch).opcode = Op::Jmp { addr },
-        Op::JmpIfNot{arg, ..} => (*backpatch).opcode = Op::JmpIfNot { addr, arg },
-        _                     => unreachable!()
-    }
 }
 
 pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array<*const c_char>) -> Option<()> {
@@ -763,50 +766,47 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::If => {
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
-            let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let (cond, _) = compile_expression(l, c)?;
+                let saved_auto_vars_count = (*c).auto_vars_ator.count;
+                   let (cond, _) = compile_expression(l, c)?;
+                   let else_label = allocate_label_index(c);
+                   push_opcode(Op::JmpIfNotLabel{label: else_label, arg: cond}, (*l).loc, c);
+                (*c).auto_vars_ator.count = saved_auto_vars_count;
             get_and_expect_token_but_continue(l, c, Token::CParen)?;
-
-            let addr_condition = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg: cond}, (*l).loc, c);
-            (*c).auto_vars_ator.count = saved_auto_vars_count;
 
             compile_statement(l, c)?;
 
             let saved_point = (*l).parse_point;
             lexer::get_token(l)?;
-
             if (*l).token == Token::Else {
-                let addr_skips_else = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: 0}, (*l).loc, c);
-                let addr_else = (*c).func_body.count;
-                compile_statement(l, c)?;
-                let addr_after_else = (*c).func_body.count;
-                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_else, arg: cond};
-                (*(*c).func_body.items.add(addr_skips_else)).opcode = Op::Jmp      {addr: addr_after_else};
+                let out_label = allocate_label_index(c);
+                push_opcode(Op::JmpLabel{label: out_label}, (*l).loc, c);
+                push_opcode(Op::Label{label: else_label}, (*l).loc, c);
+                    compile_statement(l, c)?;
+                push_opcode(Op::Label{label: out_label}, (*l).loc, c);
             } else {
                 (*l).parse_point = saved_point;
-                let addr_after_if = (*c).func_body.count;
-                (*(*c).func_body.items.add(addr_condition)).opcode  = Op::JmpIfNot {addr: addr_after_if , arg: cond};
+                push_opcode(Op::Label{label: else_label}, (*l).loc, c);
             }
 
             Some(())
         }
         Token::While => {
-            let begin = (*c).func_body.count;
+            let cond_label = allocate_label_index(c);
+            push_opcode(Op::Label {label: cond_label}, (*l).loc, c);
+
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
-            let saved_auto_vars_count = (*c).auto_vars_ator.count;
-            let (arg, _) = compile_expression(l, c)?;
-
+                let saved_auto_vars_count = (*c).auto_vars_ator.count;
+                    let (arg, _) = compile_expression(l, c)?;
+                (*c).auto_vars_ator.count = saved_auto_vars_count;
             get_and_expect_token_but_continue(l, c, Token::CParen)?;
-            let condition_jump = (*c).func_body.count;
-            push_opcode(Op::JmpIfNot{addr: 0, arg}, (*l).loc, c);
-            (*c).auto_vars_ator.count = saved_auto_vars_count;
 
-            compile_statement(l, c)?;
-            push_opcode(Op::Jmp{addr: begin}, (*l).loc, c);
-            let end = (*c).func_body.count;
-            (*(*c).func_body.items.add(condition_jump)).opcode = Op::JmpIfNot{addr: end, arg};
+            let out_label = allocate_label_index(c);
+            push_opcode(Op::JmpIfNotLabel{label: out_label, arg}, (*l).loc, c);
+
+                compile_statement(l, c)?;
+
+            push_opcode(Op::JmpLabel{label: cond_label}, (*l).loc, c);
+            push_opcode(Op::Label {label: out_label}, (*l).loc, c);
             Some(())
         }
         Token::Return => {
@@ -828,9 +828,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
-            da_append(&mut (*c).func_labels_used, Label {name, loc, addr});
+            da_append(&mut (*c).func_gotos, Goto {name, loc, addr});
             get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-            push_opcode(Op::Jmp {addr: 0}, (*l).loc, c);
+            push_opcode(Op::Bogus, (*l).loc, c);
             Some(())
         }
         Token::Asm => {
@@ -847,22 +847,28 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             get_and_expect_token_but_continue(l, c, Token::Colon)?;
 
             if let Some(switch_frame) = da_last_mut(&mut (*c).switch_stack) {
-                let addr = (*c).func_body.count;
-                push_opcode(Op::Jmp{addr: addr + 3}, case_loc, c);
+                let fallthrough_label = allocate_label_index(c);
+                push_opcode(Op::JmpLabel{label: fallthrough_label}, case_loc, c);
+
+                push_opcode(Op::Label{
+                    label: (*switch_frame).label
+                }, case_loc, c);
+
                 push_opcode(Op::Binop{
                     binop: Binop::Equal,
                     index: (*switch_frame).cond,
                     lhs: (*switch_frame).value,
                     rhs: Arg::Literal(case_value)
                 }, case_loc, c);
-                push_opcode(Op::JmpIfNot {
-                    addr: 0,
+
+                let next_case_label = allocate_label_index(c);
+                push_opcode(Op::JmpIfNotLabel {
+                    label: next_case_label,
                     arg: Arg::AutoVar((*switch_frame).cond)
                 }, case_loc, c);
+                (*switch_frame).label = next_case_label;
 
-                let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
-                backpatch_jmp(backpatch, addr + 1);
-                (*switch_frame).jmp_addr = addr + 2;
+                push_opcode(Op::Label{label: fallthrough_label}, case_loc, c);
 
                 Some(())
             } else {
@@ -876,14 +882,14 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             let switch_loc = (*l).loc;
             let (value, _) = compile_expression(l, c)?;
             let cond = allocate_auto_var(&mut (*c).auto_vars_ator);
-            let jmp_addr = (*c).func_body.count;
-            da_append(&mut (*c).switch_stack, Switch {jmp_addr, value, cond});
-            push_opcode(Op::Jmp {addr: 0}, switch_loc, c);
+            let label = allocate_label_index(c);
+            da_append(&mut (*c).switch_stack, Switch {label, value, cond});
+            push_opcode(Op::JmpLabel {label}, switch_loc, c);
+
             compile_statement(l, c)?;
 
             let switch_frame = da_last_mut(&mut (*c).switch_stack).expect("Switch stack was modified by somebody else");
-            let backpatch = (*c).func_body.items.add((*switch_frame).jmp_addr);
-            backpatch_jmp(backpatch, (*c).func_body.count);
+            push_opcode(Op::Label{label: (*switch_frame).label}, (*l).loc, c);
             (*c).switch_stack.count -= 1;
 
             (*c).auto_vars_ator.count = saved_auto_vars_count;
@@ -894,10 +900,11 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             if (*l).token == Token::ID {
                 let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
                 let name_loc = (*l).loc;
-                let addr = (*c).func_body.count;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
-                    define_label(c, name, name_loc, addr)?;
+                    let label = allocate_label_index(c);
+                    push_opcode(Op::Label{label}, name_loc, c);
+                    define_goto_label(c, name, name_loc, label)?;
                     return Some(());
                 }
             }
@@ -961,7 +968,7 @@ pub enum ImmediateValue {
 
 #[derive(Clone, Copy)]
 pub struct Switch {
-    pub jmp_addr: usize,
+    pub label: usize,
     pub value: Arg,
     pub cond: usize,
 }
@@ -972,8 +979,9 @@ pub struct Compiler {
     pub auto_vars_ator: AutoVarsAtor,
     pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
-    pub func_labels: Array<Label>,
-    pub func_labels_used: Array<Label>,
+    pub func_goto_labels: Array<GotoLabel>,
+    pub func_gotos: Array<Goto>,
+    pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
@@ -1034,15 +1042,15 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             compile_statement(l, c)?;
             scope_pop(&mut (*c).vars); // end function scope
 
-            for i in 0..(*c).func_labels_used.count {
-                let used_label = *(*c).func_labels_used.items.add(i);
-                let existing_label = find_label(&(*c).func_labels, used_label.name);
+            for i in 0..(*c).func_gotos.count {
+                let used_label = *(*c).func_gotos.items.add(i);
+                let existing_label = find_goto_label(&(*c).func_goto_labels, used_label.name);
                 if existing_label.is_null() {
                     diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
                     bump_error_count(c)?;
                     continue;
                 }
-                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::Jmp {addr: (*existing_label).addr};
+                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
             }
             arena::reset(&mut (*c).arena_labels);
 
@@ -1054,9 +1062,10 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 auto_vars_count: (*c).auto_vars_ator.max,
             });
             (*c).func_body = zeroed();
-            (*c).func_labels.count = 0;
-            (*c).func_labels_used.count = 0;
+            (*c).func_goto_labels.count = 0;
+            (*c).func_gotos.count = 0;
             (*c).auto_vars_ator = zeroed();
+            (*c).op_label_count = 0;
         } else if (*l).token == Token::Asm { // Assembly function definition
             let mut body: Array<*const c_char> = zeroed();
             compile_asm_args(l, c, &mut body)?;
