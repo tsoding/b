@@ -90,7 +90,7 @@ pub enum RelocationKind {
         off: u16,
         low: bool
     },
-    Label {
+    Function {
         name: *const c_char
     },
 }
@@ -98,7 +98,7 @@ impl RelocationKind {
     pub fn is16(self) -> bool {
         match self {
             RelocationKind::DataOffset{..} => false,
-            RelocationKind::Label{..} => true,
+            RelocationKind::Function{..}   => true,
             RelocationKind::AddressRel{..} => false,
             RelocationKind::AddressAbs{..} => true,
         }
@@ -112,15 +112,22 @@ pub struct Relocation {
 }
 
 #[derive(Clone, Copy)]
-pub struct Label {
+pub struct Function {
     pub name: *const c_char,
+    pub addr: u16,
+}
+
+#[derive(Clone, Copy)]
+pub struct Label {
+    pub func_name: *const c_char,
+    pub label: usize,
     pub addr: u16,
 }
 
 #[derive(Clone, Copy)]
 pub struct Assembler {
     pub relocs: Array<Relocation>,
-    pub labels: Array<Label>,
+    pub functions: Array<Function>,
     pub addresses: Array<u16>,
     pub code_start: u16, // load address of code section
     pub frame_sz: u8, // current stack frame size in bytes, because 6502 has no base register
@@ -312,12 +319,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                                 asm: *mut Assembler) {
     (*asm).frame_sz = 0;
     let fun_addr = (*output).count as u16;
-    da_append(&mut (*asm).labels, Label {
+    da_append(&mut (*asm).functions, Function {
         name,
         addr: fun_addr,
     });
 
-    // prepare labels for each op and the end of the function
+    // prepare function labels for each op and the end of the function
     let mut op_addresses: Array<usize> = zeroed();
     for _ in 0..=body.len() {
         let idx = (*asm).addresses.count;
@@ -604,7 +611,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 match fun {
                     Arg::RefExternal(name) | Arg::External(name) => {
                         write_byte(output, JSR);
-                        add_reloc(output, RelocationKind::Label{name}, asm);
+                        add_reloc(output, RelocationKind::Function{name}, asm);
                     },
                     _ => { // function pointer already loaded in ZP_DEREF_FUN
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
@@ -690,15 +697,15 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
                     write_byte_at(output, ((data_start + off) >> 8) as u8, caddr);
                 }
             },
-            RelocationKind::Label{name} => {
-                for i in 0..(*asm).labels.count {
-                    let label = *(*asm).labels.items.add(i);
+            RelocationKind::Function{name} => {
+                for i in 0..(*asm).functions.count {
+                    let label = *(*asm).functions.items.add(i);
                     if strcmp(label.name, name) == 0 {
                         write_word_at(output, (*asm).code_start + label.addr, caddr);
                         continue 'reloc_loop;
                     }
                 }
-                printf(c!("linking failed. could not find label `%s'\n"), name);
+                printf(c!("linking failed. could not find function `%s'\n"), name);
                 unreachable!();
             },
             RelocationKind::AddressRel{idx} => {
@@ -738,7 +745,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             // returns the ith character in a string pointed to by string, 0 based
 
             let fun_addr = (*output).count as u16;
-            da_append(&mut (*asm).labels, Label {
+            da_append(&mut (*asm).functions, Function {
                 name,
                 addr: fun_addr,
             });
@@ -792,7 +799,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 
 pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
     write_byte(output, JSR);
-    add_reloc(output, RelocationKind::Label{name: c!("main")}, asm);
+    add_reloc(output, RelocationKind::Function{name: c!("main")}, asm);
 
     // exit code 0
     write_byte(output, LDA_IMM);
