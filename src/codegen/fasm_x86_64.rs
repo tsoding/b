@@ -3,7 +3,7 @@ use core::cmp;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, Compiler, align_bytes};
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::codegen::Os;
+use crate::targets::Os;
 
 pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder) {
     match arg {
