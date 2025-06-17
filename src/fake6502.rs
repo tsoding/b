@@ -1,7 +1,7 @@
 use core::mem::zeroed;
 use crate::nob::*;
 
-static mut MEMORY: [u8; 1<<16] = unsafe { zeroed() };
+pub static mut MEMORY: [u8; 1<<16] = unsafe { zeroed() };
 
 pub unsafe fn load_rom_at(rom: String_Builder, offset: u16) {
     for i in 0..rom.count {
@@ -27,4 +27,5 @@ extern "C" {
     pub fn rts();
     pub static mut pc: u16;
     pub static mut a: u8;
+    pub static mut y: u8;
 }

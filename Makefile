@@ -22,6 +22,8 @@ LINUX_TESTS=\
 	$(BUILD)/tests/args6 \
 	$(BUILD)/tests/args11 \
 	$(BUILD)/tests/args11-extrn \
+	$(BUILD)/tests/asm_fasm_x86_64_linux \
+	$(BUILD)/tests/asm_func_fasm_x86_64_linux \
 	$(BUILD)/tests/compare \
 	$(BUILD)/tests/deref_assign \
 	$(BUILD)/tests/divmod \
@@ -143,6 +145,37 @@ UXN_TESTS=\
 	$(BUILD)/tests/call_stack_args.rom \
 	$(BUILD)/tests/upper.rom
 
+6502_TESTS=\
+	$(BUILD)/tests/args6.6502 \
+	$(BUILD)/tests/args11.6502 \
+	$(BUILD)/tests/args11-extrn.6502 \
+	$(BUILD)/tests/compare.6502 \
+	$(BUILD)/tests/deref_assign.6502 \
+	$(BUILD)/tests/divmod.6502 \
+	$(BUILD)/tests/e.6502 \
+	$(BUILD)/tests/forward-declare.6502 \
+	$(BUILD)/tests/globals.6502 \
+	$(BUILD)/tests/goto.6502 \
+	$(BUILD)/tests/hello.6502 \
+	$(BUILD)/tests/inc_dec.6502 \
+	$(BUILD)/tests/lexer.6502 \
+	$(BUILD)/tests/literals.6502 \
+	$(BUILD)/tests/minus_2.6502 \
+	$(BUILD)/tests/recursion.6502 \
+	$(BUILD)/tests/ref.6502 \
+	$(BUILD)/tests/return.6502 \
+	$(BUILD)/tests/switch.6502 \
+	$(BUILD)/tests/stack_alloc.6502 \
+	$(BUILD)/tests/ternary-side-effect.6502 \
+	$(BUILD)/tests/ternary.6502 \
+	$(BUILD)/tests/ternary-assign.6502 \
+	$(BUILD)/tests/unary_priority.6502 \
+	$(BUILD)/tests/vector.6502 \
+	$(BUILD)/tests/multiple-postfix.6502 \
+	$(BUILD)/tests/rvalue_call.6502 \
+	$(BUILD)/tests/call_stack_args.6502 \
+	$(BUILD)/tests/upper.6502
+
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
 	$(BUILD)/flag.linux.o \
@@ -201,6 +234,12 @@ test-uxn: $(UXN_TESTS)
 $(BUILD)/tests/%.rom: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
 	$(BUILD)/b -t uxn -o $@ $<
 	uxncli $@
+
+.PHONY: test-6502
+test-6502: $(6502_TESTS)
+
+$(BUILD)/tests/%.6502: ./tests/%.b $(BUILD)/b FORCE | $(BUILD)/tests
+	$(BUILD)/b -run -nostdlib -t 6502 -o $@ $< ./libb/6502.b
 
 # https://www.gnu.org/software/make/manual/html_node/Force-Targets.html
 FORCE:

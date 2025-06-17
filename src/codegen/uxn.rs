@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};
@@ -101,6 +101,13 @@ const SP: u8 = 0;
 const BP: u8 = 2;
 const FIRST_ARG: u8 = 4;
 
+pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+    for i in 0..asm_funcs.len() {
+        let asm_func = (*asm_funcs)[i];
+        missingf!(asm_func.name_loc, c!("__asm__ functions for uxn"));
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     let mut assembler: Assembler = zeroed();
     assembler.data_section_label = create_label(&mut assembler);
@@ -127,6 +134,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     write_op(output, UxnOp::BRK);
 
     generate_funcs(output, da_slice((*c).funcs), &mut assembler);
+    generate_asm_funcs(output, da_slice((*c).asm_funcs));
     generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut assembler);
     generate_data_section(output, da_slice((*c).data), &mut assembler);
     generate_globals(output, da_slice((*c).globals), &mut assembler);

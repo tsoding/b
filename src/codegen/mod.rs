@@ -16,8 +16,8 @@ pub enum Target {
     Gas_AArch64_Linux,
     Uxn,
     Mos6502,
-    // TODO: IR should not be a target. It should be just a flag for debugging.
-    //   - rexim (2025-06-12 20:26:01)
+    // TODO(2025-06-12 20:26:01): IR should not be a target. It should be just a flag for debugging.
+    //   - rexim
     IR,
 }
 

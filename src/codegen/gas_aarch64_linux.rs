@@ -2,7 +2,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes};
+use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes, AsmFunc};
 use crate::{missingf, Loc};
 
 pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder) {
@@ -344,8 +344,16 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
     }
 }
 
+pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+    for i in 0..asm_funcs.len() {
+        let asm_func = (*asm_funcs)[i];
+        missingf!(asm_func.name_loc, c!("__asm__ functions for gas_aarch64_linux"));
+    }
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     generate_funcs(output, da_slice((*c).funcs));
+    generate_asm_funcs(output, da_slice((*c).asm_funcs));
     generate_globals(output, da_slice((*c). globals));
     generate_data_section(output, da_slice((*c).data));
 }
