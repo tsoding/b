@@ -58,6 +58,7 @@ const TSX:       u8 = 0xBA;
 const TXA:       u8 = 0x8A;
 const TXS:       u8 = 0x9A;
 const TYA:       u8 = 0x98;
+const NOP:       u8 = 0xEA;
 
 // zero page addresses
 // TODO: Do we really have to use
@@ -93,12 +94,17 @@ pub enum RelocationKind {
     Function {
         name: *const c_char
     },
+    Label {
+        func_name: *const c_char,
+        label: usize
+    },
 }
 impl RelocationKind {
     pub fn is16(self) -> bool {
         match self {
             RelocationKind::DataOffset{..} => false,
             RelocationKind::Function{..}   => true,
+            RelocationKind::Label{..}      => true,
             RelocationKind::AddressRel{..} => false,
             RelocationKind::AddressAbs{..} => true,
         }
@@ -128,6 +134,7 @@ pub struct Label {
 pub struct Assembler {
     pub relocs: Array<Relocation>,
     pub functions: Array<Function>,
+    pub op_labels: Array<Label>,
     pub addresses: Array<u16>,
     pub code_start: u16, // load address of code section
     pub frame_sz: u8, // current stack frame size in bytes, because 6502 has no base register
@@ -660,9 +667,37 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             //     write_byte(output, JMP_ABS);
             //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
             // },
-            Op::Label          {..} => missingf!(op.loc, c!("Label-style IR\n")),
-            Op::JmpLabel       {..} => missingf!(op.loc, c!("Label-style IR\n")),
-            Op::JmpIfNotLabel  {..} => missingf!(op.loc, c!("Label-style IR\n")),
+            Op::Label{label} => {
+                write_byte(output, NOP);
+                da_append(&mut (*asm).op_labels, Label {
+                    func_name: name,
+                    label,
+                    addr: (*output).count as u16,
+                });
+            },
+            Op::JmpLabel{label} => {
+                write_byte(output, JMP_ABS);
+                add_reloc(output, RelocationKind::Label{func_name: name, label}, asm);
+            },
+            Op::JmpIfNotLabel{label, arg} => {
+                load_arg(arg, op.loc, output, asm);
+
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
+
+                // if !=0, skip next check and branch
+                write_byte(output, BNE);
+                write_byte(output, 7); // skip next 4 instructions
+
+                write_byte(output, CPY_IMM);
+                write_byte(output, 0);
+
+                write_byte(output, BNE);
+                write_byte(output, 3);
+
+                write_byte(output, JMP_ABS);
+                add_reloc(output, RelocationKind::Label{func_name: name, label}, asm);
+            },
         }
     }
     let addr_idx = *op_addresses.items.add(body.len());
@@ -706,6 +741,17 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
                     }
                 }
                 printf(c!("linking failed. could not find function `%s'\n"), name);
+                unreachable!();
+            },
+            RelocationKind::Label{func_name: name, label} => {
+                for i in 0..(*asm).op_labels.count {
+                    let op_label = *(*asm).op_labels.items.add(i);
+                    if strcmp(op_label.func_name, name) == 0 && op_label.label == label {
+                        write_word_at(output, (*asm).code_start + op_label.addr, caddr);
+                        continue 'reloc_loop;
+                    }
+                }
+                printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
                 unreachable!();
             },
             RelocationKind::AddressRel{idx} => {
