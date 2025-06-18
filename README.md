@@ -31,7 +31,7 @@ Also check out more examples at [./examples/](./examples/).
 
 ## Testing
 
-The project comes with [btest](./src/btest.rs) utitlity which tests the B compiler. It is built automatically along with the B compiler when you do `make`.
+The project comes with [btest](./src/btest.rs) utility which tests the B compiler. It is built automatically along with the B compiler when you do `make`.
 
 When you run it, it just builds and runs all the tests from the [./tests/](./tests/) folder on all the supported targets and generates a matrix report. Give it a try to see it for yourself:
 
