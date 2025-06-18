@@ -1163,6 +1163,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
+    let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*mut c_char> = zeroed();
@@ -1277,6 +1278,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
+
+    if *ir {
+        codegen::ir::generate_program(&mut output, &c);
+        da_append(&mut output, 0);
+        printf(c!("%s"), output.items);
+        return Some(())
+    }
+
     match target {
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64_linux::generate_program(&mut output, &c);
@@ -1568,24 +1577,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 // print exit code (in Y:A)
                 printf(c!("Exited with code %u\n"),
                        ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
-            }
-        }
-        Target::IR => {
-            codegen::ir::generate_program(&mut output, &c);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.ir"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
-            if *run {
-                todo!("Interpret the IR?");
             }
         }
     }
