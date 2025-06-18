@@ -8,11 +8,10 @@ on:
     branches:
       - main
 
-# TODO: add *-on-windows jobs
-# TODO: build examples on CI
+# TODO: add jobs that test on different hot platforms (windows, aarch64, etc)
 
 jobs:
-  fasm-x86_64-linux-on-ubuntu:
+  btest:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -22,56 +21,9 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -qq -y clang make fasm
-      - name: Run Tests
-        run: make test
-  fasm-x86_64-windows-on-ubuntu:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup toolchain install stable --no-self-update --profile minimal
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -qq -y clang make fasm mingw-w64 wine64
-      - name: Run Tests
-        run: make test-mingw32
-  gas-aarch64-linux-on-ubuntu:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup toolchain install stable --no-self-update --profile minimal
-      - name: Install Dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -qq -y clang make qemu-user gcc-aarch64-linux-gnu
-      - name: Run Tests
-        run: make test-gas-aarch64-linux
-  uxn-on-ubuntu:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup toolchain install stable --no-self-update --profile minimal
-      - name: Install Dependencies
-        run: |
+          sudo apt-get install -qq -y clang make fasm mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
           make cli
       - name: Run Tests
-        run: PATH=$(realpath uxn11/bin):$PATH make test-uxn
-  mos6502-on-ubuntu:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust
-        run: rustup toolchain install stable --no-self-update --profile minimal
-      - name: Run Tests
-        run: |
-          make -B -k test-6502 || true
+        run: PATH=$(realpath uxn11/bin):$PATH make test

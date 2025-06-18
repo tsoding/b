@@ -1,7 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::crust::libc::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, missingf, AsmFunc};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -202,12 +201,14 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
     for i in 0..asm_funcs.len() {
         let asm_func = (*asm_funcs)[i];
-        // TODO: Yet another proof that IR is not a target on its own.
-        // See TODO(2025-06-12 20:26:01)
-        missingf!(asm_func.name_loc, c!("__asm__ functions for IR"));
+        sb_appendf(output, c!("%s(asm):\n"), asm_func.name);
+        for j in 0..asm_func.body.count {
+            let line = *asm_func.body.items.add(j);
+            sb_appendf(output, c!("    %s\n"), line);
+        }
     }
 }
 
