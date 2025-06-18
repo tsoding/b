@@ -70,7 +70,13 @@ struct Report {
 
 pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const c_char, target: Target) -> Status {
     let input_path = temp_sprintf(c!("./tests/%s.b"), name);
-    let output_path = temp_sprintf(c!("./build/tests/%s"), name);
+    let output_path = temp_sprintf(c!("./build/tests/%s%s"), name, match target {
+        Target::Fasm_x86_64_Windows => c!(".exe"),
+        Target::Fasm_x86_64_Linux   => c!(""),
+        Target::Gas_AArch64_Linux   => c!(""),
+        Target::Uxn                 => c!(".rom"),
+        Target::Mos6502             => c!(".6502"),
+    });
     cmd_append! {
         cmd,
         c!("./build/b"),
