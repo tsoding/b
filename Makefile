@@ -193,6 +193,13 @@ MINGW32_OBJS=\
 $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
 
+.PHONY: btest
+btest: $(BUILD)/btest
+	$(BUILD)/btest
+
+$(BUILD)/btest: $(RSS) $(LINUX_OBJS) | $(BUILD)
+	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/btest.rs -o $(BUILD)/btest
+
 $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
 	$(CC) -fPIC -g -c $< -o $@ $(LDFLAGS)
 
