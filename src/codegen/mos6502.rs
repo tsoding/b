@@ -644,29 +644,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 store_auto(output, result, asm);
             },
             Op::Asm {args: _} => unreachable!(),
-            // Op::JmpIfNot{addr, arg} => {
-            //     load_arg(arg, op.loc, output, asm);
-
-            //     write_byte(output, CMP_IMM);
-            //     write_byte(output, 0);
-
-            //     // if !=0, skip next check and branch
-            //     write_byte(output, BNE);
-            //     write_byte(output, 7); // skip next 4 instructions
-
-            //     write_byte(output, CPY_IMM);
-            //     write_byte(output, 0);
-
-            //     write_byte(output, BNE);
-            //     write_byte(output, 3);
-
-            //     write_byte(output, JMP_ABS);
-            //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
-            // },
-            // Op::Jmp{addr} => {
-            //     write_byte(output, JMP_ABS);
-            //     add_reloc(output, RelocationKind::AddressAbs{idx: *op_addresses.items.add(addr)}, asm);
-            // },
             Op::Label{label} => {
                 write_byte(output, NOP);
                 da_append(&mut (*asm).op_labels, Label {
