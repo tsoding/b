@@ -56,7 +56,7 @@ const TEST_NAMES: *const [*const c_char] = &[
 ];
 
 #[derive(Copy, Clone)]
-enum Status {
+pub enum Status {
     Ok,
     BuildFail,
     RunFail,
@@ -108,7 +108,7 @@ pub unsafe fn usage() {
     flag_print_options(stderr());
 }
 
-pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
+pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
     let cases_flags = flag_list(c!("c"), c!("Test cases"));
 
@@ -200,7 +200,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     for j in (0..targets.count).rev() {
         let target = *targets.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
-        for i in 0..j {
+        for _ in 0..j {
             printf(c!("│ "));
         }
         printf(c!("└─%s\n"), name_of_target(target).unwrap(), j);
