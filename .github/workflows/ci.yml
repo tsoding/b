@@ -27,4 +27,4 @@ jobs:
           cd uxn11
           make cli
       - name: Run Tests
-        run: PATH=$(realpath uxn11/bin):$PATH make btest
+        run: PATH=$(realpath uxn11/bin):$PATH make test

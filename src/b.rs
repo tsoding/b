@@ -1,3 +1,4 @@
+// The B compiler itself
 #![no_main]
 #![no_std]
 #![allow(non_upper_case_globals)]

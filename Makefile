@@ -37,12 +37,15 @@ MINGW32_OBJS=\
 	$(BUILD)/arena.mingw32.o \
 	$(BUILD)/fake6502.linux.o
 
+.PHONY: all
+all: $(BUILD)/b $(BUILD)/btest
+
+.PHONY: test
+test: $(BUILD)/b $(BUILD)/btest
+	$(BUILD)/btest
+
 $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
-
-.PHONY: btest
-btest: $(BUILD)/btest $(BUILD)/b
-	$(BUILD)/btest
 
 $(BUILD)/btest: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/btest.rs -o $(BUILD)/btest
@@ -53,7 +56,10 @@ $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
 # Cross-compilation on Linux to Windows using mingw32-w64
 # Invoked on demand by `make ./build/b.exe`
 $(BUILD)/b.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b.exe
+
+$(BUILD)/btest.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/btest.rs -o $(BUILD)/btest.exe
 
 $(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
 	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@

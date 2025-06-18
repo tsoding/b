@@ -21,6 +21,7 @@ use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 
+// TODO: read all the tests directly from the ./tests/ folder
 const TEST_NAMES: *const [*const c_char] = &[
     c!("args11-extrn"),
     c!("args11"),
@@ -72,8 +73,8 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const 
     let input_path = temp_sprintf(c!("./tests/%s.b"), name);
     let output_path = temp_sprintf(c!("./build/tests/%s%s"), name, match target {
         Target::Fasm_x86_64_Windows => c!(".exe"),
-        Target::Fasm_x86_64_Linux   => c!(""),
-        Target::Gas_AArch64_Linux   => c!(""),
+        Target::Fasm_x86_64_Linux   => c!(".fasm-x86_64-linux"),
+        Target::Gas_AArch64_Linux   => c!(".gas-aarch64-linux"),
         Target::Uxn                 => c!(".rom"),
         Target::Mos6502             => c!(".6502"),
     });
@@ -111,11 +112,21 @@ pub unsafe fn usage() {
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
     let cases_flags = flag_list(c!("c"), c!("Test cases"));
+    let help = flag_bool(c!("help"), false, c!("Print this help message"));
+    // TODO: flag to print the list of tests
+    // TODO: flag to print the list of targets
+    // TODO: select test cases and targets by a glob pattern
+    // See if https://github.com/tsoding/glob.h can be used here
 
     if !flag_parse(argc, argv) {
         usage();
         flag_print_error(stderr());
         return None;
+    }
+
+    if *help {
+        usage();
+        return Some(());
     }
 
     let mut output: String_Builder = zeroed();
@@ -154,6 +165,9 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     if !mkdir_if_not_exists(c!("./build/tests/")) { return None; }
 
+    // TODO: Parallelize the test runner.
+    // Probably using `cmd_run_async_and_reset`.
+    // Also don't forget to add the `-j` flag.
     for i in 0..cases.count {
         let test_name = *cases.items.add(i);
         let mut report = Report {
@@ -163,16 +177,22 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         for j in 0..targets.count {
             let target = *targets.items.add(j);
             da_append(&mut report.statuses, run_test(&mut cmd, &mut output, test_name, target));
-            // da_append(&mut report.statuses, Status::Ok);
         }
         da_append(&mut reports, report);
     }
+
+    // TODO: generate HTML reports and deploy them somewhere automatically
 
     let mut width = 0;
     for i in 0..reports.count {
         let report = *reports.items.add(i);
         width = cmp::max(width, strlen(report.name));
     }
+
+    printf(c!("%*s\x1b[32mK\x1b[0m - success\n"), width + 2, c!(""));
+    printf(c!("%*s\x1b[33mB\x1b[0m - failed to build\n"), width + 2, c!(""));
+    printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
+    printf(c!("\n"));
 
     for j in 0..targets.count {
         let target = *targets.items.add(j);
@@ -205,6 +225,11 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
         printf(c!("└─%s\n"), name_of_target(target).unwrap(), j);
     }
+
+    printf(c!("\n"));
+    printf(c!("%*s\x1b[32mK\x1b[0m - success\n"), width + 2, c!(""));
+    printf(c!("%*s\x1b[33mB\x1b[0m - failed to build\n"), width + 2, c!(""));
+    printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
 
     Some(())
 }
