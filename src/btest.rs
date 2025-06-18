@@ -146,6 +146,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
+    if !mkdir_if_not_exists(c!("./build/tests/")) { return None; }
+
     for i in 0..cases.count {
         let test_name = *cases.items.add(i);
         let mut report = Report {

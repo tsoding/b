@@ -118,4 +118,6 @@ extern "C" {
     pub fn sv_starts_with(sv: String_View, expected_prefix: String_View) -> bool;
     #[link_name = "nob_file_exists"]
     pub fn file_exists(file_path: *const c_char) -> c_int;
+    #[link_name = "nob_mkdir_if_not_exists"]
+    pub fn mkdir_if_not_exists(path: *const c_char) -> bool;
 }
