@@ -1,6 +1,17 @@
 /* B comment */
 // C++ comment
 
+assert_equal(actual, expected, message) {
+    extrn printf, abort;
+    printf("%s: ", message);
+    if (actual != expected) {
+        printf("FAIL\n");
+        abort();
+    } else {
+        printf("OK\n");
+    }
+}
+
 main() {
     extrn assert_equal;
     assert_equal(0105, 69, "0105 == 69");
