@@ -178,9 +178,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         let target = *targets.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
         for _ in 0..j {
-            printf(c!("| "));
+            printf(c!("│ "));
         }
-        printf(c!("┌-%s\n"), name_of_target(target).unwrap(), j);
+        printf(c!("┌─%s\n"), name_of_target(target).unwrap(), j);
     }
 
     for i in 0..reports.count {
@@ -201,9 +201,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         let target = *targets.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
         for i in 0..j {
-            printf(c!("| "));
+            printf(c!("│ "));
         }
-        printf(c!("└-%s\n"), name_of_target(target).unwrap(), j);
+        printf(c!("└─%s\n"), name_of_target(target).unwrap(), j);
     }
 
     Some(())
