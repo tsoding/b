@@ -1,7 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::crust::libc::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, missingf, AsmFunc};
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {

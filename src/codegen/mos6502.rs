@@ -12,6 +12,7 @@ use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc, Loc
 use crate::nob::*;
 use crate::{missingf, diagf};
 use crate::crust::libc::*;
+use crate::runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 
 const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
@@ -800,13 +801,6 @@ pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
 
     write_byte(output, JMP_IND);
     write_word(output, 0xFFFC);
-}
-
-pub const DEFAULT_LOAD_OFFSET: u16 = 0xE000;
-
-#[derive(Clone, Copy)]
-pub struct Config {
-    pub load_offset: u16,
 }
 
 pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<Config> {

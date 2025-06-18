@@ -12,8 +12,8 @@ pub mod flag;
 pub mod crust;
 pub mod arena;
 pub mod codegen;
+pub mod runner;
 pub mod lexer;
-pub mod fake6502;
 pub mod targets;
 
 use core::ffi::*;
@@ -1166,7 +1166,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
-    let mut run_args: Array<*mut c_char> = zeroed();
+    let mut run_args: Array<*const c_char> = zeroed();
     'args: while argc > 0 {
         if !flag_parse(argc, argv) {
             usage();
@@ -1177,7 +1177,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         argv = flag_rest_argv();
         if argc > 0 {
             if strcmp(*argv, c!("--")) == 0 {
-                da_append_many(&mut run_args, slice::from_raw_parts_mut(argv.add(1), (argc - 1) as usize));
+                da_append_many(&mut run_args, slice::from_raw_parts(argv.add(1) as *const*const c_char, (argc - 1) as usize));
                 break 'args;
             } else {
                 da_append(&mut input_paths, shift!(argv, argc));
@@ -1337,34 +1337,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
-                    cmd_append! {
-                        &mut cmd,
-                        c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
-                    }
-                }
-
-                // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
-                let run_path: *const c_char;
-                if (strchr(effective_output_path, '/' as c_int)).is_null() {
-                    run_path = temp_sprintf(c!("./%s"), effective_output_path);
-                } else {
-                    run_path = effective_output_path;
-                }
-
-                cmd_append! {
-                    &mut cmd,
-                    run_path,
-                }
-
-                for i in 0..run_args.count {
-                    cmd_append! {
-                        &mut cmd,
-                        *(run_args).items.add(i),
-                    }
-                }
-
-                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
         },
         Target::Fasm_x86_64_Linux => {
@@ -1415,27 +1388,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
-                let run_path: *const c_char;
-                if (strchr(effective_output_path, '/' as c_int)).is_null() {
-                    run_path = temp_sprintf(c!("./%s"), effective_output_path);
-                } else {
-                    run_path = effective_output_path;
-                }
-
-                cmd_append! {
-                    &mut cmd,
-                    run_path,
-                }
-
-                for i in 0..run_args.count {
-                    cmd_append! {
-                        &mut cmd,
-                        *(run_args).items.add(i),
-                    }
-                }
-
-                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
             }
         }
         Target::Fasm_x86_64_Windows => {
@@ -1492,27 +1445,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // TODO: document that you may need wine as a system package to cross-run fasm-x86_64-windows
-                if !cfg!(target_os = "windows") {
-                    cmd_append! {
-                        &mut cmd,
-                        c!("wine"),
-                    }
-                }
-
-                cmd_append! {
-                    &mut cmd,
-                    effective_output_path,
-                }
-
-                for i in 0..run_args.count {
-                    cmd_append! {
-                        &mut cmd,
-                        *(run_args).items.add(i),
-                    }
-                }
-
-                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
         }
         Target::Uxn => {
@@ -1530,17 +1463,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
-                cmd_append! {
-                    &mut cmd,
-                    c!("uxnemu"), effective_output_path,
-                }
-                for i in 0..run_args.count {
-                    cmd_append! {
-                        &mut cmd,
-                        *(run_args).items.add(i),
-                    }
-                }
-                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args))?;
             }
         }
         Target::Mos6502 => {
@@ -1559,24 +1482,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
-                fake6502::load_rom_at(output, config.load_offset);
-                fake6502::reset();
-                fake6502::pc = config.load_offset;
-
-                // set reset to $0000 to exit on reset
-                fake6502::MEMORY[0xFFFC] = 0;
-                fake6502::MEMORY[0xFFFD] = 0;
-
-                while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
-                    fake6502::step();
-                    if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
-                        printf(c!("%c"), fake6502::a as c_uint);
-                        fake6502::rts();
-                    }
-                }
-                // print exit code (in Y:A)
-                printf(c!("Exited with code %u\n"),
-                       ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
+                runner::mos6502::run(&mut output, config, effective_output_path)?;
             }
         }
     }

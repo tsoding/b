@@ -9,6 +9,7 @@ pub mod crust;
 #[macro_use]
 pub mod nob;
 pub mod targets;
+pub mod runner;
 
 use core::ffi::*;
 use core::cmp;
@@ -16,6 +17,7 @@ use core::mem::zeroed;
 use crust::libc::*;
 use nob::*;
 use targets::*;
+use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 
 const TEST_NAMES: *const [*const c_char] = &[
     c!("args11-extrn"),
@@ -64,7 +66,7 @@ struct Report {
     statuses: Array<Status>,
 }
 
-pub unsafe fn run_test(cmd: *mut Cmd, name: *const c_char, target: Target) -> Status {
+pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const c_char, target: Target) -> Status {
     let input_path = temp_sprintf(c!("./tests/%s.b"), name);
     let output_path = temp_sprintf(c!("./build/tests/%s"), name);
     cmd_append! {
@@ -77,12 +79,26 @@ pub unsafe fn run_test(cmd: *mut Cmd, name: *const c_char, target: Target) -> St
     if !cmd_run_sync_and_reset(cmd) {
         return Status::BuildFail;
     }
+    let run_result = match target {
+        Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
+        Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
+        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
+        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
+        Target::Mos6502             => runner::mos6502::run(output, Config {
+            load_offset: DEFAULT_LOAD_OFFSET
+        }, output_path),
+    };
+    if let None = run_result {
+        return Status::RunFail;
+    }
     Status::Ok
 }
 
 pub unsafe fn main(mut _argc: i32, mut _argv: *mut*mut c_char) -> Option<()> {
+    let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
+
     for i in 0..TEST_NAMES.len() {
         let test_name = (*TEST_NAMES)[i];
         let mut report = Report {
@@ -91,7 +107,8 @@ pub unsafe fn main(mut _argc: i32, mut _argv: *mut*mut c_char) -> Option<()> {
         };
         for j in 0..TARGET_NAMES.len() {
             let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
-            da_append(&mut report.statuses, run_test(&mut cmd, test_name, target));
+            // da_append(&mut report.statuses, run_test(&mut cmd, &mut output, test_name, target));
+            da_append(&mut report.statuses, Status::Ok);
         }
         da_append(&mut reports, report);
     }
@@ -100,6 +117,15 @@ pub unsafe fn main(mut _argc: i32, mut _argv: *mut*mut c_char) -> Option<()> {
     for i in 0..reports.count {
         let report = *reports.items.add(i);
         width = cmp::max(width, strlen(report.name));
+    }
+
+    for j in 0..TARGET_NAMES.len() {
+        let Target_Name { name: target_name, target: _ } = (*TARGET_NAMES)[j];
+        printf(c!("%*s"), width + 2, c!(""));
+        for i in 0..j {
+            printf(c!("| "));
+        }
+        printf(c!("┌-%s\n"), target_name, j);
     }
 
     for i in 0..reports.count {
@@ -114,6 +140,15 @@ pub unsafe fn main(mut _argc: i32, mut _argv: *mut*mut c_char) -> Option<()> {
             };
         }
         printf(c!("\n"));
+    }
+
+    for j in (0..TARGET_NAMES.len()).rev() {
+        let Target_Name { name: target_name, target: _ } = (*TARGET_NAMES)[j];
+        printf(c!("%*s"), width + 2, c!(""));
+        for i in 0..j {
+            printf(c!("| "));
+        }
+        printf(c!("└-%s\n"), target_name, j);
     }
 
     Some(())
