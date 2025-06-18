@@ -21,6 +21,7 @@ use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 
+// TODO: build examples too
 // TODO: read all the tests directly from the ./tests/ folder
 const TEST_NAMES: *const [*const c_char] = &[
     c!("args11-extrn"),

@@ -9,7 +9,6 @@ on:
       - main
 
 # TODO: add jobs that test on different hot platforms (windows, aarch64, etc)
-# TODO: build examples on CI
 
 jobs:
   btest:
