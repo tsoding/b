@@ -41,7 +41,7 @@ $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
 
 .PHONY: btest
-btest: $(BUILD)/btest
+btest: $(BUILD)/btest $(BUILD)/b
 	$(BUILD)/btest
 
 $(BUILD)/btest: $(RSS) $(LINUX_OBJS) | $(BUILD)

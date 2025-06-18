@@ -169,7 +169,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     for j in 0..targets.count {
         let target = *targets.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
-        for i in 0..j {
+        for _ in 0..j {
             printf(c!("| "));
         }
         printf(c!("┌-%s\n"), name_of_target(target).unwrap(), j);
