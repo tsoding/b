@@ -20,12 +20,12 @@
 // 1  | size     | u64
 // 2  | string   | i8[size]
 // 3  | index    | u64
-// 4  | Op       | u16
+// 4  | Op       | u8
 
 //
 // Extra Types:
 //      Argument:
-//          type: u16
+//          type: u8
 //          argument:
 //          0: Bogus 
 //          1: Autovar(u64)
@@ -58,7 +58,7 @@ use crate::nob::*;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
 use crate::crust::libc::*;
 
-pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
+pub unsafe fn dump_arg_call(arg: Arg, output: *mut Array<u8>) {
     match arg {
         Arg::RefExternal(name) | Arg::External(name) => {
             push_opcode(output, 0x00);
@@ -69,14 +69,13 @@ pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
             dump_arg(output, arg);
         }
     };
-
 }
 
-pub unsafe fn push_opcode(output: *mut String_Builder, op: usize) {
-    sb_appendf(output, c!("%c"), op);
+pub unsafe fn push_opcode(output: *mut Array<u8>, op: usize) {
+    append_u8(output, op.try_into().unwrap());
 }
 
-pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
+pub unsafe fn dump_arg(output: *mut Array<u8>, arg: Arg) {
     match arg {
         Arg::External(name)     => {
             push_opcode(output, 0x07);
@@ -104,6 +103,7 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
         }
         Arg::DataOffset(offset) => {
             push_opcode(output, 0x06);
+            printf(c!("%i\n"), offset);
             append_u64(output, offset.try_into().unwrap());
         }
         Arg::Bogus              => {
@@ -112,21 +112,25 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     };
 }
 
-pub unsafe fn append_u64(output: *mut String_Builder, content: u64) {
+pub unsafe fn append_u8(output: *mut Array<u8>, content: u8) {
+        da_append(output, content);
+}
+
+pub unsafe fn append_u64(output: *mut Array<u8>, content: u64) {
     let mut data = content;
-    for _ in 1..8 {
-        sb_appendf(output, c!("%c"), (data & 0xFF) as c_int);
-        data >>= 8;
+    for _ in 0..8 {
+        append_u8(output, (data & 0xFF).try_into().unwrap());
+        data <<= 8;
     }
 }
 
-pub unsafe fn append_string(output: *mut String_Builder, content: *const c_char) {
+pub unsafe fn append_string(output: *mut Array<u8>, content: *const c_char) {
     let len: usize = strlen(content);
     append_u64(output, len.try_into().unwrap());
-    sb_appendf(output, c!("%s"), content );
+    sb_appendf(output as *mut String_Builder, c!("%s"), content );
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut Array<u8>) {
     append_string(output, name);
     append_u64(output, params_count.try_into().unwrap());
     append_u64(output, auto_vars_count.try_into().unwrap());
@@ -138,8 +142,11 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             Op::Bogus => push_opcode(output, 0x00),
             Op::Return {arg} => {
                 push_opcode(output, 0x01);
+                
                 if let Some(arg) = arg {
                     dump_arg(output, arg);
+                } else {
+                    push_opcode(output, 0x00);
                 }
             },
             Op::Store{index, arg} => {
@@ -191,7 +198,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, rhs);
             }
             Op::Funcall{result, fun, args} => {
-                push_opcode(output, 0x08);
+                push_opcode(output, 0x0C);
                 append_u64(output, result.try_into().unwrap());
                 dump_arg_call(fun, output);
                 append_u64(output, args.count.try_into().unwrap());
@@ -225,60 +232,47 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+pub unsafe fn generate_funcs(output: *mut Array<u8>, funcs: *const [Func]) {
+    append_u64(output, funcs.len().try_into().unwrap());
     for i in 0..funcs.len() {
         generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
+pub unsafe fn generate_extrns(output: *mut Array<u8>, extrns: *const [*const c_char]) {
+    append_u64(output, extrns.len().try_into().unwrap());
     for i in 0..extrns.len() {
         append_string(output, (*extrns)[i]);
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
+pub unsafe fn generate_globals(output: *mut Array<u8>, globals: *const [Global]) {
     for i in 0..globals.len() {
         todo!();
-        let global = (*globals)[i];
-        sb_appendf(output, c!("%s"), global.name);
-        if global.is_vec {
-            sb_appendf(output, c!("[%zu]"), global.minimum_size);
-        }
-        sb_appendf(output, c!(": "));
-        for j in 0..global.values.count {
-            if j > 0 {
-                sb_appendf(output, c!(", "));
-            }
-            match *global.values.items.add(j) {
-                ImmediateValue::Literal(lit) => sb_appendf(output, c!("%zu"), lit),
-                ImmediateValue::Name(name) => sb_appendf(output, c!("%s"), name),
-                ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
-            };
-        }
-        sb_appendf(output, c!("\n"));
     }
 }
 
 //data is:
 //     u8[data.len()]
-pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+pub unsafe fn generate_data_section(output: *mut Array<u8>, data: *const [u8]) {
     append_u64(output, (*data).len().try_into().unwrap());
     if data.len() > 0 {
         for i in (0..(*data).len()) {
-            sb_appendf(output, c!("%c"), (*data)[i] as c_uint);
+            append_u8(output, (*data)[i]);
         }
     }
 }
 
-const magic: c_uint = 0xB8; // trying to be clever here :3c - null
-const version: c_uint = 0;
+const version: u8 = 0x00;
 
 
 // Get the last bytes of the pgram for the table
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    sb_appendf(output, c!("%c"), magic);
-    sb_appendf(output, c!("%c"), version);
+pub unsafe fn generate_program(output: *mut Array<u8>, c: *const Compiler) {
+    append_u8(output, 0xDE);
+    append_u8(output, 0xBC);
+
+    //VERSION
+    da_append(output, version);
     let extrn_pos = (*output).count;
     generate_extrns(output, da_slice((*c).extrns));
     let data_pos = (*output).count;

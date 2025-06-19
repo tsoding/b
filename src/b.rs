@@ -1546,7 +1546,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::IR => {
-            codegen::ir::generate_program(&mut output, &c);
+            let mut IR_Output: Array<u8> = zeroed();
+            codegen::ir::generate_program(&mut IR_Output, &c);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1557,7 +1558,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            if !write_entire_file(effective_output_path, IR_Output.items as *const c_void, IR_Output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 todo!("Interpret the IR?");
