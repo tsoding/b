@@ -447,7 +447,19 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::Minus  => missingf!(op.loc, c!("implement Minus\n")),
+                    Binop::Minus  => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, SEC);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::Mod => missingf!(op.loc, c!("implement Mod\n")),
                     Binop::Div => missingf!(op.loc, c!("implement Div\n")),
                     Binop::Mult => {
@@ -569,7 +581,33 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::Greater => missingf!(op.loc, c!("implement Greater\n")),
+                    Binop::Greater => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if greater skip, we already have X=1
+                        write_byte(output, BPL);
+                        write_byte(output, 1);
+
+                        write_byte(output, DEX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                     Binop::Equal => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -591,8 +629,55 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::NotEqual => missingf!(op.loc, c!("implement NotEqual\n")),
-                    Binop::GreaterEqual => missingf!(op.loc, c!("implement GreaterEqual\n")),
+                    Binop::NotEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        write_byte(output, CMP_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, BNE);
+                        write_byte(output, 5);
+
+                        write_byte(output, CPY_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, BNE);
+                        write_byte(output, 1);
+
+                        write_byte(output, DEX);
+                        write_byte(output, TXA);
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::GreaterEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=0
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                     Binop::LessEqual => missingf!(op.loc, c!("implement LessEqual\n")),
                 }
                 store_auto(output, index, asm);
@@ -813,6 +898,19 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_byte(output, DEY);
 
             write_byte(output, RTS);
+        } else if strcmp(name, c!("abort")) == 0 {
+            let fun_addr = (*output).count as u16;
+            da_append(&mut (*asm).functions, Function {
+                name,
+                addr: fun_addr,
+            });
+
+            // exit code 69
+            write_byte(output, LDA_IMM);
+            write_byte(output, 69);
+
+            write_byte(output, JMP_IND);
+            write_word(output, 0xFFFC);
         } else {
             fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
             abort();
