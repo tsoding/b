@@ -7,17 +7,32 @@ malloc() {
 }
 
 // TODO: add other arguments
-printf(str) {
+printf(str, x1) {
     extrn char;
-    auto i, c;
+    auto i, j, arg, c;
     i = 0;
+    j = 0;
+
+    arg = &x1;
 
     c = char(str, i);
     while (c) {
         if (c == '\n') {
             putchar(0xD); // \r
         }
-        putchar(c); // ECHO
+        if(c == '%') {
+            i += 1;
+            c = char(str, i);
+            if (c == 0) {
+                return;
+            } else if (c == 's') { /* clobbers `c`, the last one */
+                while (c = char(x1, j++)) {
+                    putchar(c);
+                }
+            }
+        } else {
+            putchar(c); // ECHO
+        }
         i++;
         c = char(str, i);
     }
