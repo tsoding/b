@@ -227,7 +227,31 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
         },
-        Arg::RefAutoVar(_index)  => missingf!(loc, c!("RefAutoVar\n")),
+        Arg::RefAutoVar(index)  => {
+            let auto_var_address = STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2 - 1;
+
+            // save current stack pointer
+            write_byte(output, TSX);
+
+            // load address low byte
+            write_byte(output, TXA);
+
+            write_byte(output, CLC);
+            write_byte(output, ADC_IMM);
+            write_byte(output, (auto_var_address & 0xFF) as u8);
+
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_TMP_0);
+
+            write_byte(output, LDA_IMM);
+            write_byte(output, 0);
+            write_byte(output, ADC_IMM);
+            write_byte(output, (auto_var_address >> 8) as u8);
+
+            write_byte(output, TAY);
+            write_byte(output, LDA_ZP);
+            write_byte(output, ZP_TMP_0);
+        }
         Arg::RefExternal(_name)  => missingf!(loc, c!("RefExternal\n")),
         Arg::External(_name)     => missingf!(loc, c!("External\n")),
         Arg::AutoVar(index)     => {
