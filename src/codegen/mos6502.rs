@@ -8,7 +8,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc, Loc};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, ImmediateValue, Arg, AsmFunc, Loc};
 use crate::nob::*;
 use crate::{missingf, diagf};
 use crate::crust::libc::*;
@@ -95,6 +95,13 @@ pub enum RelocationKind {
     Function {
         name: *const c_char
     },
+    External {
+        name: *const c_char,
+        byte: u8, // Indicates which address bytes to use for the relocation
+                  // 0 => First byte
+                  // 1 => Second byte
+                  // 2 => Use both bytes
+    },
     Label {
         func_name: *const c_char,
         label: usize
@@ -105,6 +112,13 @@ impl RelocationKind {
         match self {
             RelocationKind::DataOffset{..} => false,
             RelocationKind::Function{..}   => true,
+            RelocationKind::External{byte, ..} => {
+                match byte {
+                    0|1 => false,
+                    2 => true,
+                    _ => unreachable!(),
+                }
+            },
             RelocationKind::Label{..}      => true,
             RelocationKind::AddressRel{..} => false,
             RelocationKind::AddressAbs{..} => true,
@@ -132,10 +146,17 @@ pub struct Label {
 }
 
 #[derive(Clone, Copy)]
+pub struct External {
+    pub name: *const c_char,
+    pub addr: u16,
+}
+
+#[derive(Clone, Copy)]
 pub struct Assembler {
     pub relocs: Array<Relocation>,
     pub functions: Array<Function>,
     pub op_labels: Array<Label>,
+    pub externals: Array<External>,
     pub addresses: Array<u16>,
     pub code_start: u16, // load address of code section
     pub frame_sz: u8, // current stack frame size in bytes, because 6502 has no base register
@@ -252,8 +273,40 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDA_ZP);
             write_byte(output, ZP_TMP_0);
         }
-        Arg::RefExternal(_name)  => missingf!(loc, c!("RefExternal\n")),
-        Arg::External(_name)     => missingf!(loc, c!("External\n")),
+        Arg::RefExternal(name)  => {
+            // load address low byte
+            write_byte(output, LDA_IMM);
+            write_byte(output, 0);
+
+            write_byte(output, CLC);
+            write_byte(output, ADC_IMM);
+            add_reloc(output, RelocationKind::External{name, byte:0}, asm);
+
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_TMP_0);
+
+            write_byte(output, LDA_IMM);
+            write_byte(output, 0);
+            write_byte(output, ADC_IMM);
+            add_reloc(output, RelocationKind::External{name, byte:1}, asm);
+
+            write_byte(output, TAY);
+            write_byte(output, LDA_ZP);
+            write_byte(output, ZP_TMP_0);
+        },
+        Arg::External(name)     => {
+            write_byte(output, LDX_IMM);
+            write_byte(output, 0);
+
+            write_byte(output, LDA_X);
+            add_reloc(output, RelocationKind::External{name, byte: 2}, asm);
+
+            write_byte(output, LDX_IMM);
+            write_byte(output, 1);
+            // load high byte
+            write_byte(output, LDY_X);
+            add_reloc(output, RelocationKind::External{name, byte: 2}, asm);
+        },
         Arg::AutoVar(index)     => {
             load_auto_var(output, index, asm);
         },
@@ -846,6 +899,33 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
                 printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
                 unreachable!();
             },
+            RelocationKind::External{name, byte} => {
+                for i in 0..(*asm).externals.count {
+                    let external = *(*asm).externals.items.add(i);
+                    if strcmp(external.name, name) == 0 {
+                        printf(c!("Patching external: %s with addr: %p\n"), external.name, ((*asm).code_start + external.addr) as c_uint);
+                        match byte {
+                            0 => {
+                                printf(c!("byte: %d addr: %p\n"), byte as c_uint, (((*asm).code_start + external.addr) & 0xFF) as c_uint);
+                                write_byte_at(output, (((*asm).code_start + external.addr) & 0xFF) as u8, caddr)
+                            },
+                            1 => {
+                                printf(c!("byte: %d addr: %p\n"), byte as c_uint, (((*asm).code_start + external.addr) >> 8) as c_uint);
+                                write_byte_at(output, (((*asm).code_start + external.addr) >> 8) as u8, caddr)
+                            },
+                            2 => {
+                                printf(c!("byte: %d addr: %p\n"), byte as c_uint, ((*asm).code_start + external.addr) as c_uint);
+                                write_word_at(output, (*asm).code_start + external.addr, caddr)
+                            },
+                            _ => unreachable!(),
+                        }
+                        continue 'reloc_loop;
+                    }
+                }
+                printf(c!("linking failed. could not find label `%s'\n"), name);
+                unreachable!();
+
+            },
             RelocationKind::AddressRel{idx} => {
                 let jaddr = *(*asm).addresses.items.add(idx);
                 let rel: i16 = jaddr as i16 - (caddr + 1) as i16;
@@ -942,6 +1022,33 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *mut [Global], asm: *mut Assembler) {
+    for i in 0..globals.len() {
+        let global = (*globals)[i];
+        da_append(&mut (*asm).externals, External{
+            name: global.name,
+            addr: (*output).count as u16,
+        });
+
+        if global.values.count > 0 {
+            for j in 0..global.values.count {
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => write_word(output, lit as u16),
+                    ImmediateValue::Name(..) => todo!("ImmediateValue::Name"),
+                    ImmediateValue::DataOffset(..) => todo!("ImmediateValue::DataOffset"),
+                }
+            }
+
+        }
+
+        if global.values.count < global.minimum_size {
+            for _ in 0..(global.minimum_size - global.values.count) {
+                write_word(output, 0);
+            }
+        }
+    }
+}
+
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     for i in 0..data.len() {
         write_byte(output, (*data)[i]);
@@ -1001,6 +1108,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
 
     let data_start = config.load_offset + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
+    generate_globals(output, da_slice((*c).globals), &mut asm);
 
     apply_relocations(output, data_start, &mut asm);
     Some(())
