@@ -1,11 +1,9 @@
-char(string, i) {
-    extrn printf, abort;
-    printf("TODO: char() is not implemented for gas-x86_64-linux\n");
-    abort();
-}
+char __asm__(
+    "ldrb w0, [x0, x1]",
+    "ret"
+);
 
-lchar(string, i, c) {
-    extrn printf, abort;
-    printf("TODO: lchar() is not implemented for gas-x86_64-linux\n");
-    abort();
-}
+lchar __asm__(
+    "strb w2, [x0, x1]",
+    "ret"
+);
