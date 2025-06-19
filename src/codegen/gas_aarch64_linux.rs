@@ -344,10 +344,14 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
     }
 }
 
-pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
     for i in 0..asm_funcs.len() {
         let asm_func = (*asm_funcs)[i];
-        missingf!(asm_func.name_loc, c!("__asm__ functions for gas_aarch64_linux"));
+        sb_appendf(output, c!(".global %s\n"), asm_func.name);
+        sb_appendf(output, c!("%s:\n"), asm_func.name);
+        for j in 0..asm_func.body.count {
+            sb_appendf(output, c!("    %s\n"), *asm_func.body.items.add(j));
+        }
     }
 }
 
