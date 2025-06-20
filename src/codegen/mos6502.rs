@@ -903,18 +903,14 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
                 for i in 0..(*asm).externals.count {
                     let external = *(*asm).externals.items.add(i);
                     if strcmp(external.name, name) == 0 {
-                        printf(c!("Patching external: %s with addr: %p\n"), external.name, ((*asm).code_start + external.addr) as c_uint);
                         match byte {
                             0 => {
-                                printf(c!("byte: %d addr: %p\n"), byte as c_uint, (((*asm).code_start + external.addr) & 0xFF) as c_uint);
                                 write_byte_at(output, (((*asm).code_start + external.addr) & 0xFF) as u8, caddr)
                             },
                             1 => {
-                                printf(c!("byte: %d addr: %p\n"), byte as c_uint, (((*asm).code_start + external.addr) >> 8) as c_uint);
                                 write_byte_at(output, (((*asm).code_start + external.addr) >> 8) as u8, caddr)
                             },
                             2 => {
-                                printf(c!("byte: %d addr: %p\n"), byte as c_uint, ((*asm).code_start + external.addr) as c_uint);
                                 write_word_at(output, (*asm).code_start + external.addr, caddr)
                             },
                             _ => unreachable!(),
@@ -1002,6 +998,16 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_byte(output, DEY);
 
             write_byte(output, RTS);
+        } else if strcmp(name, c!("exit")) == 0 {
+            let fun_addr = (*output).count as u16;
+            da_append(&mut (*asm).functions, Function {
+                name,
+                addr: fun_addr,
+            });
+
+            // exit code already stored in A
+            write_byte(output, JMP_IND);
+            write_word(output, 0xFFFC);
         } else if strcmp(name, c!("abort")) == 0 {
             let fun_addr = (*output).count as u16;
             da_append(&mut (*asm).functions, Function {
