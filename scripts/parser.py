@@ -1,5 +1,7 @@
 import math
 import pprint
+import subprocess
+import sys
 
 def parse_u8(f):
     return int.from_bytes(f.read(1), "little", signed=False) 
@@ -88,7 +90,10 @@ def parse_function(f):
         func['ops'].append(op)
     return func
 
-with open("./test", 'rb') as f:
+subprocess.run("make")
+subprocess.run(["./build/b", "-t", "ir", "-o", "./build/bytecode.ir", sys.argv[1]])
+
+with open("./build/bytecode.ir", 'rb') as f:
     bcode = {}
     magic = [parse_u8(f), parse_u8(f)]
     bcode['magic'] = f'{magic[1]:02x}{magic[0]:02x}'
@@ -105,8 +110,9 @@ with open("./test", 'rb') as f:
     data_size = parse_u64(f)
     bcode['data'] = []
     for _ in range(data_size):
-        bcode['data'].append(parse_u8(f))
+        bcode['data'].append(chr(parse_u8(f)))
 
+    bcode['data'] = ''.join(bcode['data']).split("\x00")
     funcs_len = parse_u64(f)
     bcode['functions'] = []
     for _ in range(funcs_len):
