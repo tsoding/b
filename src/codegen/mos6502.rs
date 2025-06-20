@@ -274,6 +274,11 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, ZP_TMP_0);
         }
         Arg::RefExternal(name)  => {
+            // TODO: Understand why the test ref does not give the correct value to y
+            // where it should write 420 to it 
+            // Output:
+            //     y: 410 410 410 410 410
+
             // load address low byte
             write_byte(output, LDA_IMM);
             write_byte(output, 0);
