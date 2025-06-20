@@ -18,6 +18,7 @@ const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
 const AND_ZP:    u8 = 0x25;
+const ORA_ZP:    u8 = 0x05;
 const ASL_ZP:    u8 = 0x06;
 const BCC:       u8 = 0x90;
 const BMI:       u8 = 0x30;
@@ -498,10 +499,45 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 store_auto(output, index, asm);
             },
             Op::Negate {result: _, arg: _} => missingf!(op.loc, c!("implement Negate\n")),
-            Op::UnaryNot{result: _, arg: _} => missingf!(op.loc, c!("implement UnaryNot\n")),
+            Op::UnaryNot{result, arg} => {
+                load_arg(arg, op.loc, output, asm);
+
+                write_byte(output, LDX_IMM);
+                write_byte(output, 0);
+
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
+                write_byte(output, BNE);
+                write_byte(output, 6);
+
+                write_byte(output, TYA);
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
+                write_byte(output, BNE);
+                write_byte(output, 1);
+
+                write_byte(output, INX);
+
+                write_byte(output, TXA);
+                write_byte(output, LDY_IMM);
+                write_byte(output, 0);
+
+                store_auto(output, result, asm);
+            },
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
-                    Binop::BitOr => missingf!(op.loc, c!("implement BitOr\n")),
+                    Binop::BitOr => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, ORA_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, ORA_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::BitAnd => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -760,7 +796,33 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::LessEqual => missingf!(op.loc, c!("implement LessEqual\n")),
+                    Binop::LessEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if greater skip, we already have X=0
+                        write_byte(output, BPL);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                 }
                 store_auto(output, index, asm);
             },
@@ -1045,8 +1107,11 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *mut [Globa
             for j in 0..global.values.count {
                 match *global.values.items.add(j) {
                     ImmediateValue::Literal(lit) => write_word(output, lit as u16),
-                    ImmediateValue::Name(..) => todo!("ImmediateValue::Name"),
-                    ImmediateValue::DataOffset(..) => todo!("ImmediateValue::DataOffset"),
+                    ImmediateValue::Name(name) => add_reloc(output, RelocationKind::External{name, byte:2}, asm),
+                    ImmediateValue::DataOffset(offset) => {
+                        add_reloc(output, RelocationKind::DataOffset{off: offset as u16, low: true}, asm);
+                        add_reloc(output, RelocationKind::DataOffset{off: offset as u16, low: false}, asm);
+                    }
                 }
             }
 
