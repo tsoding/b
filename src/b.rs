@@ -920,17 +920,6 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     }
 }
 
-pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Option<*const c_char> {
-    let mut sv = sv_from_cstr(s);
-    let suffix_len = strlen(suffix);
-    if sv_end_with(sv, suffix) {
-        sv.count -= suffix_len;
-        Some(temp_sv_to_cstr(sv))
-    } else {
-        None
-    }
-}
-
 pub unsafe fn usage() {
     fprintf(stderr(), c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
