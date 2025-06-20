@@ -11,7 +11,7 @@ malloc() {
 // mapped to the operator
 div (a, b) {
     auto d;
-    d = 0; while(a > b) {
+    d = 0; while(a >= b) {
         a = a - b;
         d++;
     }
@@ -23,7 +23,7 @@ div (a, b) {
 // mapped to the operator
 rem (a, b) {
     auto d;
-    while(a > b) {
+    while(a >= b) {
         a = a - b;
     }
     return (a);
@@ -66,7 +66,7 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
             } else if (c == 'p') {
                 printn(*arg, 16);
             } else if (c == 'c') {
-                putchar(c);
+                putchar(*arg);
             } else if (c == 's') { /* clobbers `c`, the last one */
                 while (c = char(*arg, j++)) {
                     putchar(c);
