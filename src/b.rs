@@ -982,6 +982,7 @@ pub struct Compiler {
     pub arena_labels: Arena,
     pub target: Target,
     pub error_count: usize,
+    pub historical: bool
 }
 
 pub const MAX_ERROR_COUNT: usize = 100;
@@ -1154,6 +1155,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
+    let historical  = flag_bool(c!("clasic"), false, c!("Changes everything to be historical instead of more useful"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1208,6 +1210,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let mut c: Compiler = zeroed();
     c.target = target;
+    c.historical = *historical;
 
     if !*nostdlib {
         // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
@@ -1256,7 +1259,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
 
-        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
+        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
 
         compile_program(&mut l, &mut c)?;
     }
