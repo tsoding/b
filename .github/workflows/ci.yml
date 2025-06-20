@@ -18,15 +18,23 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Install Rust
         run: rustup toolchain install stable --no-self-update --profile minimal
-      - name: Install Dependencies
+
+      - name: Install/Restore Dependency Cache
+        id: cache-deps
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: clang make fasm mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
+          version: 1.0 # version of the cache
+
+      - name: Install uxncli
         run: |
-          sudo apt-get update
-          sudo apt-get install -qq -y clang make fasm mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
           make cli
+
       - name: Run Tests
         run: |
           make -B
