@@ -112,7 +112,6 @@ toupper(c) {
 // This will probably generate more instructions
 // then needed.
 lchar(str, i, c) {
-    extrn printf;
     auto ptr;
     ptr = str + i;
     *ptr = *ptr&0xFF00;
