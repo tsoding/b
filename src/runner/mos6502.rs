@@ -38,7 +38,9 @@ pub mod fake6502 {
         pub fn step();
         pub fn rts();
         pub static mut pc: u16;
+        pub static mut sp: u16;
         pub static mut a: u8;
+        pub static mut x: u8;
         pub static mut y: u8;
     }
 
@@ -64,7 +66,7 @@ pub unsafe fn run(output: *mut String_Builder, config: Config, output_path: *con
         }
     }
     // print exit code (in Y:A)
-    printf(c!("Exited with code %u\n"),
+    printf(c!("Exited with code %hd\n"),
            ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
 
     Some(())
