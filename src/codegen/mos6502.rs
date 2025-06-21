@@ -20,6 +20,7 @@ const ADC_ZP:    u8 = 0x65;
 const AND_ZP:    u8 = 0x25;
 const ASL_ZP:    u8 = 0x06;
 const BCC:       u8 = 0x90;
+const BEQ:       u8 = 0xF0;
 const BMI:       u8 = 0x30;
 const BNE:       u8 = 0xD0;
 const BPL:       u8 = 0x10;
@@ -30,16 +31,20 @@ const CPY_IMM:   u8 = 0xC0;
 const CPY_ZP:    u8 = 0xC4;
 const DEX:       u8 = 0xCA;
 const DEY:       u8 = 0x88;
+const EOR_IMM:   u8 = 0x49;
 const INX:       u8 = 0xE8;
 const JMP_ABS:   u8 = 0x4C;
 const JMP_IND:   u8 = 0x6C;
 const JSR:       u8 = 0x20;
+const LDA_ABS:   u8 = 0xAD;
 const LDA_IMM:   u8 = 0xA9;
 const LDA_IND_X: u8 = 0xA1;
 const LDA_IND_Y: u8 = 0xB1;
 const LDA_X:     u8 = 0xBD;
 const LDA_ZP:    u8 = 0xA5;
 const LDX_IMM:   u8 = 0xA2;
+const LDX_ZP:    u8 = 0xA6;
+const LDY_ABS:   u8 = 0xAC;
 const LDY_IMM:   u8 = 0xA0;
 const LDY_X:     u8 = 0xBC;
 const LDY_ZP:    u8 = 0xA4;
@@ -49,9 +54,12 @@ const RTS:       u8 = 0x60;
 const ROL_ZP:    u8 = 0x26;
 const SBC_ZP:    u8 = 0xE5;
 const SEC:       u8 = 0x38;
+const STA_ABS:   u8 = 0x8D;
+const STA_IND_X: u8 = 0x81;
 const STA_IND_Y: u8 = 0x91;
 const STA_X:     u8 = 0x9D;
 const STA_ZP:    u8 = 0x85;
+const STY_ABS:   u8 = 0x8C;
 const STY_ZP:    u8 = 0x84;
 const TAX:       u8 = 0xAA;
 const TAY:       u8 = 0xA8;
@@ -60,6 +68,7 @@ const TXA:       u8 = 0x8A;
 const TXS:       u8 = 0x9A;
 const TYA:       u8 = 0x98;
 const NOP:       u8 = 0xEA;
+const ORA_ZP:    u8 = 0x05;
 
 // zero page addresses
 // TODO: Do we really have to use
@@ -75,8 +84,9 @@ const ZP_TMP_0:         u8 = 6;
 const ZP_TMP_1:         u8 = 7;
 const ZP_TMP_2:         u8 = 8;
 const ZP_TMP_3:         u8 = 9;
-const ZP_DEREF_FUN_0:   u8 = 10; // can't be the same as ZP_DEREF,
-const ZP_DEREF_FUN_1:   u8 = 11; // as we use this before argument loading
+const ZP_TMP_4:         u8 = 10;
+const ZP_DEREF_FUN_0:   u8 = 12; // can't be the same as ZP_DEREF,
+const ZP_DEREF_FUN_1:   u8 = 13; // as we use this before argument loading
 
 const STACK_PAGE: u16 = 0x0100;
 
@@ -208,6 +218,16 @@ pub unsafe fn load_auto_var(output: *mut String_Builder, index: usize, asm: *mut
     write_byte(output, LDY_X);
     write_word(output, STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2);
 }
+pub unsafe fn load_auto_var_ref(output: *mut String_Builder, index: usize, asm: *mut Assembler) {
+    // save current stack pointer
+    write_byte(output, TSX);
+    write_byte(output, TXA);
+    write_byte(output, CLC);
+    write_byte(output, ADC_IMM);
+    write_byte(output, (*asm).frame_sz as u8 - (index-1) as u8 * 2 - 1);
+    write_byte(output, LDY_IMM);
+    write_byte(output, (STACK_PAGE >> 8) as u8);
+}
 
 pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mut Assembler) {
     match arg {
@@ -248,6 +268,8 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDY_ABS);
             add_reloc(output, RelocationKind::Extern {name, offset: 1, mode: LoadMode::Word}, asm);
         },
+        Arg::AutoVar(index) => load_auto_var(output, index, asm),
+        Arg::RefAutoVar(index) => load_auto_var_ref(output, index, asm),
         Arg::Literal(value) => {
             if value >= 65536 {
                 diagf!(loc, c!("WARNING: contant `%d` out of range for 16 bits\n"), value);
@@ -436,11 +458,68 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 load_arg(arg, op.loc, output, asm);
                 store_auto(output, index, asm);
             },
-            Op::Negate {result: _, arg: _} => missingf!(op.loc, c!("implement Negate\n")),
-            Op::UnaryNot{result: _, arg: _} => missingf!(op.loc, c!("implement UnaryNot\n")),
+            Op::Negate {result, arg} => { // Y:A -> 0 - Y:A
+                load_arg(arg, op.loc, output, asm);
+
+                write_byte(output, STA_ZP);
+                write_byte(output, ZP_TMP_0);
+                write_byte(output, STY_ZP);
+                write_byte(output, ZP_TMP_1);
+
+                write_byte(output, LDA_IMM);
+                write_byte(output, 0);
+                write_byte(output, TAY);
+
+                write_byte(output, SEC);
+                write_byte(output, SBC_ZP);
+                write_byte(output, ZP_TMP_0);
+                write_byte(output, TAX);
+                write_byte(output, TYA);
+                write_byte(output, SBC_ZP);
+                write_byte(output, ZP_TMP_1);
+                write_byte(output, TAY);
+                write_byte(output, TXA);
+
+                store_auto(output, result, asm);
+            },
+            Op::UnaryNot{result, arg} => {
+                load_arg(arg, op.loc, output, asm);
+
+                write_byte(output, LDX_IMM);
+                write_byte(output, 0);
+
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
+                write_byte(output, BNE);
+                write_byte(output, 5);
+
+                write_byte(output, CPY_IMM);
+                write_byte(output, 0);
+                write_byte(output, BNE);
+                write_byte(output, 1);
+
+                write_byte(output, INX);
+
+                write_byte(output, TXA);
+                write_byte(output, LDY_IMM);
+                write_byte(output, 0);
+
+                store_auto(output, result, asm);
+            },
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
-                    Binop::BitOr => missingf!(op.loc, c!("implement BitOr\n")),
+                    Binop::BitOr => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, AND_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, ORA_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::BitAnd => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -453,7 +532,38 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::BitShl => missingf!(op.loc, c!("implement BitShl\n")),
+                    Binop::BitShl => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, STY_ZP);
+                        write_byte(output, ZP_TMP_1);
+
+                        // as maximum shift is 16, Y can be ignored.
+                        // TODO: only shift 16 times if value > 16 provided
+                        // TODO: do we have to handle negative shifts?
+                        write_byte(output, LDX_ZP);
+                        write_byte(output, ZP_RHS_L);
+
+                        let loop_start = create_address_label_here(output, asm);
+                        write_byte(output, BEQ);
+                        write_byte(output, 8);
+
+                        write_byte(output, ASL_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, ROL_ZP);
+                        write_byte(output, ZP_TMP_1);
+
+                        write_byte(output, DEX);
+                        write_byte(output, JMP_ABS);
+                        add_reloc(output, RelocationKind::AddressAbs{idx: loop_start}, asm);
+
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, LDY_ZP);
+                        write_byte(output, ZP_TMP_1);
+                    },
                     Binop::BitShr => missingf!(op.loc, c!("implement BitShr\n")),
                     Binop::Plus => {
                         load_two_args(output, lhs, rhs, op, asm);
@@ -468,9 +578,25 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::Minus  => missingf!(op.loc, c!("implement Minus\n")),
+                    Binop::Minus => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, SEC);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::Mod => missingf!(op.loc, c!("implement Mod\n")),
-                    Binop::Div => missingf!(op.loc, c!("implement Div\n")),
+                    Binop::Div => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        //divmod();
+                        missingf!(op.loc, c!("implement Div\n"))
+                    },
                     Binop::Mult => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -481,15 +607,76 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         // shift-and-add/long multiplication
                         // see: https://en.wikipedia.org/wiki/Multiplication_algorithm
 
-                        // TODO: this should be signed, save and restore signes before.
-
-                        // from here on: unsigned multiplication
                         // store lhs
                         write_byte(output, STA_ZP);
                         write_byte(output, ZP_TMP_0);
                         write_byte(output, STY_ZP);
                         write_byte(output, ZP_TMP_1);
 
+                        // TODO: this should be signed, save and restore signs before.
+                        let if0_end = create_address_label(asm);
+                        let if1_end = create_address_label(asm);
+                        // if (lhs < 0) {
+                        write_byte(output, CPY_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, BPL);
+                        add_reloc(output, RelocationKind::AddressRel{idx: if0_end}, asm);
+
+                        // lhs = -lhs;
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, SEC);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_1);
+
+                        // tmp4 = 1;
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 1);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        // }
+                        link_address_label_here(if0_end, output, asm);
+
+                        // if (rhs < 0) {
+                        write_byte(output, CPY_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, BPL);
+                        add_reloc(output, RelocationKind::AddressRel{idx: if1_end}, asm);
+
+                        // lhs = -lhs;
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, SEC);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_1);
+
+                        // tmp4 ^= 1;
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        write_byte(output, EOR_IMM);
+                        write_byte(output, 1);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        // }
+                        link_address_label_here(if1_end, output, asm);
+
+                        // from here on: unsigned multiplication
                         // store Y:A in ZP, because shifting and adding is easier
                         // without all the register switching
                         write_byte(output, LDA_IMM);
@@ -560,8 +747,32 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_ZP);
                         write_byte(output, ZP_TMP_3);
 
+                        write_byte(output, LDX_ZP);
+                        write_byte(output, ZP_TMP_4);
+                        // if (negative == 1) {
+                        write_byte(output, BEQ);
+                        write_byte(output, 12);
+
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 0);
+                        write_byte(output, TAY);
+
+                        // Y:A = -Y:A
+                        write_byte(output, SEC);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_2);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_TMP_3);
+                        write_byte(output, TXA);
+                        write_byte(output, TAY);
+                        // }
+
                         // missingf!(op.loc, c!("implement Mult\n"))
                     },
+
+                    // TODO: use same less code everywhere without duplication
                     Binop::Less => {
                         load_two_args(output, lhs, rhs, op, asm);
                         // we subtract, then check sign
@@ -590,7 +801,89 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::Greater => missingf!(op.loc, c!("implement Greater\n")),
+                    Binop::GreaterEqual => { // A >= B <=> !(A < B)
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=0
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::LessEqual => { // A <= B <=> B >= A <=> !(B < A)
+                        load_two_args(output, rhs, lhs, op, asm);
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=0
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::Greater => { // A > B <=> B < A
+                        load_two_args(output, rhs, lhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=1
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, DEX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                     Binop::Equal => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -612,9 +905,27 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::NotEqual => missingf!(op.loc, c!("implement NotEqual\n")),
-                    Binop::GreaterEqual => missingf!(op.loc, c!("implement GreaterEqual\n")),
-                    Binop::LessEqual => missingf!(op.loc, c!("implement LessEqual\n")),
+                    Binop::NotEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        write_byte(output, CMP_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, BNE);
+                        write_byte(output, 5);
+
+                        write_byte(output, CPY_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, BNE);
+                        write_byte(output, 1);
+
+                        write_byte(output, DEX);
+                        write_byte(output, TXA);
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                 }
                 store_auto(output, index, asm);
             },
@@ -704,16 +1015,21 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
         }
     }
+
+    write_byte(output, LDA_IMM);
+    write_byte(output, 0);
+
+    // return block
     let addr_idx = *op_addresses.items.add(body.len());
-    *(*asm).addresses.items.add(addr_idx) = (*output).count as u16; // update op address
+    *(*asm).addresses.items.add(addr_idx) = (*output).count as u16;
 
     if stack_size > 0 {
         // seriously... we don't have enough registers to save A to...
         write_byte(output, STA_ZP);
-        write_byte(output, ZP_RHS_L);
+        write_byte(output, ZP_TMP_0);
         add_sp(output, stack_size, asm);
         write_byte(output, LDA_ZP);
-        write_byte(output, ZP_RHS_L);
+        write_byte(output, ZP_TMP_0);
     }
     write_byte(output, RTS);
 }
@@ -823,22 +1139,64 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_byte(output, STA_ZP);
             write_byte(output, ZP_DEREF_1);
 
-            write_byte(output, LDX_IMM);
-            write_byte(output, 0);
-
-            // A = ((0))
-            write_byte(output, LDA_IND_X);
-            write_byte(output, ZP_DEREF_0);
-
-            // sign extend Y
             write_byte(output, LDY_IMM);
             write_byte(output, 0);
 
-            write_byte(output, CMP_IMM);
+            // A = ((0))
+            write_byte(output, LDA_IND_Y);
+            write_byte(output, ZP_DEREF_0);
+
+            // TODO: maybe sign extend Y, if we expect signed chars?
+            // write_byte(output, CMP_IMM);
+            // write_byte(output, 0);
+            // write_byte(output, BPL);
+            // write_byte(output, 1);
+            // write_byte(output, DEY);
+
+            write_byte(output, RTS);
+        } else if strcmp(name, c!("lchar")) == 0 {
+            // ch = char(string, i, ch);
+            // returns the ith character in a string pointed to by string, 0 based
+
+            let fun_addr = (*output).count as u16;
+            da_append(&mut (*asm).externs, Extern {
+                name,
+                addr: fun_addr,
+            });
+
+            write_byte(output, TSX);
+            write_byte(output, CLC);
+            write_byte(output, ADC_X);
+            write_word(output, STACK_PAGE + 2 + 1); // low
+
+            // load address to buffer in ZP to dereference, because registers
+            // only 8 bits
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_DEREF_0);
+
+            write_byte(output, TYA);
+            write_byte(output, ADC_X);
+            write_word(output, STACK_PAGE + 2 + 2); // high
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_DEREF_1);
+
+            write_byte(output, LDY_IMM);
             write_byte(output, 0);
-            write_byte(output, BPL);
-            write_byte(output, 1);
-            write_byte(output, DEY);
+
+            write_byte(output, LDA_X);
+            write_word(output, STACK_PAGE + 2*2 + 1); // low
+            write_byte(output, LDY_X);
+            write_word(output, STACK_PAGE + 2*2 + 1); // high
+
+            write_byte(output, STA_IND_X);
+            write_byte(output, ZP_DEREF_0);
+
+            // TODO: maybe sign extend Y, if we expect signed chars?
+            // write_byte(output, CMP_IMM);
+            // write_byte(output, 0);
+            // write_byte(output, BPL);
+            // write_byte(output, 1);
+            // write_byte(output, DEY);
 
             write_byte(output, RTS);
         } else {
