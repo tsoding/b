@@ -1329,9 +1329,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if *run {
                 runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
-        },
+        }
         Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64_linux::generate_program(&mut output, &c);
+            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1380,7 +1380,64 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if *run {
                 runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
             }
-        },
+        }
+        Target::Gas_x86_64_Windows => {
+            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
+                c!("cc")
+            } else {
+                c!("x86_64-w64-mingw32-gcc")
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            cmd_append! {
+                &mut cmd,
+                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+            }
+        }
         Target::Fasm_x86_64_Linux => {
             codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 

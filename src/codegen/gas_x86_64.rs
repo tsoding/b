@@ -2,6 +2,7 @@ use core::ffi::*;
 use core::cmp;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, Compiler, align_bytes};
 use crate::nob::*;
+use crate::targets::Os;
 
 pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -31,7 +32,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char,output: *mut String_B
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count * 8, 16);
     sb_appendf(output, c!(".global %s\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
@@ -41,7 +42,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         sb_appendf(output, c!("    subq $%zu, %%rsp\n"), stack_size);
     }
     assert!(auto_vars_count >= params_count);
-    let registers: *const [*const c_char] = &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")];
+        let registers: *const[*const c_char] = match os {
+        Os::Linux   => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
+        Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")], // https://en.wikipedia.org/wiki/X86_calling_conventions#Microsoft_x64_calling_convention
+    };
 
     let mut i = 0;
     while i < cmp::min(params_count, registers.len()) {
@@ -50,8 +54,11 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         i += 1;
     }
     for j in i..params_count {
-        sb_appendf(output, c!("    movq %zu(%%rbp), %%rax\n"), ((j - i) + 2) * 8);
-        sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), (j + 1) * 8);
+        match os {
+            Os::Linux   => sb_appendf(output, c!("    movq %zu(%%rbp), %%rax\n"), ((j - i) + 2)*8),
+            Os::Windows => sb_appendf(output, c!("    movq %zu(%%rbp), %%rax\n"), ((j - i) + 6)*8),
+        };
+        sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), (j + 1)*8);
     }
 
     for i in 0..body.len() {
@@ -154,12 +161,24 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         sb_appendf(output, c!("    movq %%rax, %zu(%%rsp)\n"), i * 8);
                     }
                 }
-                sb_appendf(output, c!("    movb $0, %%al\n"));     // x86_64 Linux ABI passes the amount of
-                                                                   // floating point args via al. Since B
-                                                                   // does not distinguish regular and
-                                                                   // variadic functions we set al to 0 just
-                                                                   // in case.
-                call_arg(fun, output);
+                match os {
+                    Os::Linux => {
+                        sb_appendf(output, c!("    movb $0, %%al\n")); // x86_64 Linux ABI passes the amount of
+                                                                       // floating point args via al. Since B
+                                                                       // does not distinguish regular and
+                                                                       // variadic functions we set al to 0 just
+                                                                       // in case.
+                        call_arg(fun, output);
+                    }
+                    Os::Windows => {
+                        // allocate 32 bytes for "shadow space"
+                        // it must be allocated at the top of the stack after all arguments are pushed
+                        // so we can't allocate it at function prologue
+                        sb_appendf(output, c!("    subq $32, %%rsp\n"));
+                        call_arg(fun, output);
+                        sb_appendf(output, c!("    addq $32, %%rsp\n"));
+                    }
+                }
                 if stack_args_count > 0 {
                     sb_appendf(output, c!("    addq $%zu, %%rsp\n"), stack_args_size);
                 }
@@ -191,9 +210,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     sb_appendf(output, c!("    ret\n"));
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
     }
 }
 
@@ -254,9 +273,9 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
+pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, os: Os) {
     sb_appendf(output, c!(".section .text\n"));
-    generate_funcs(output, da_slice((*c).funcs));
+    generate_funcs(output, da_slice((*c).funcs), os);
     generate_asm_funcs(output, da_slice((*c).asm_funcs));
     sb_appendf(output, c!(".section .data\n"));
     generate_data_section(output, da_slice((*c).data));
