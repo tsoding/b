@@ -45,6 +45,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
+        Target::Bytecode            => todo!()
     });
     cmd_append! {
         cmd,
@@ -64,6 +65,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
         Target::Mos6502             => runner::mos6502::run(output, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, output_path),
+        Target::Bytecode => todo!(),
     };
     if let None = run_result {
         return Status::RunFail;
@@ -108,7 +110,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     let mut targets: Array<Target> = zeroed();
     if (*target_flags).count == 0 {
-        for j in 0..TARGET_NAMES.len() {
+        for j in 0..TARGET_NAMES.len() - 1 { // SKIP Bytecode
             let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
             da_append(&mut targets, target);
         }

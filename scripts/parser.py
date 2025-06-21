@@ -91,7 +91,7 @@ def parse_function(f):
     return func
 
 subprocess.run("make")
-subprocess.run(["./build/b", "-t", "ir", "-o", "./build/bytecode.ir", sys.argv[1]])
+subprocess.run(["./build/b", "-t", "bytecode", "-o", "./build/bytecode.ir", sys.argv[1]])
 
 with open("./build/bytecode.ir", 'rb') as f:
     bcode = {}

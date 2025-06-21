@@ -10,6 +10,7 @@ pub enum Target {
     Gas_AArch64_Linux,
     Uxn,
     Mos6502,
+    Bytecode
 }
 
 #[derive(Clone, Copy)]
@@ -30,6 +31,7 @@ pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("gas-aarch64-linux"),   target: Target::Gas_AArch64_Linux   },
     Target_Name { name: c!("uxn"),                 target: Target::Uxn                 },
     Target_Name { name: c!("6502"),                target: Target::Mos6502             },
+    Target_Name { name: c!("bytecode"),            target: Target::Bytecode            },
 ];
 
 pub unsafe fn name_of_target(target: Target) -> Option<*const c_char> {
@@ -54,6 +56,7 @@ pub unsafe fn target_word_size(target: Target) -> u64 {
     match target {
         Target::Fasm_x86_64_Windows => 8,
         Target::Fasm_x86_64_Linux   => 8,
+        Target::Bytecode            => 8,
         Target::Gas_AArch64_Linux   => 8,
         Target::Uxn                 => 2,
         Target::Mos6502             => 2,

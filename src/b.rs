@@ -1475,6 +1475,25 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::mos6502::run(&mut output, config, effective_output_path)?;
             }
         }
+        Target::Bytecode => {
+            let mut IR_Output: Array<u8> = zeroed();
+            codegen::bytecode::generate_program(&mut IR_Output, &c);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let input_path = *input_paths.items;
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.ir"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            if !write_entire_file(effective_output_path, IR_Output.items as *const c_void, IR_Output.count) { return None; }
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            if *run {
+                todo!("Interpret the IR?");
+            }
+        }
     }
     Some(())
 }
