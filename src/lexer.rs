@@ -165,7 +165,6 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
 //   so it's checked earlier.
 //   TODO: Maybe we should create a function that analyses the PUNCTS and orders them accordingly, so this notice is
 //   not needed
-// TODO: Some punctuations are not historically accurate. =+ instead of +=, etc.
 pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!("?"), Token::Question),
     (c!("{"), Token::OCurly),
@@ -207,6 +206,48 @@ pub const PUNCTS: *const [(*const c_char, Token)] = &[
     (c!(">"), Token::Greater),
 ];
 
+pub const HISTORICAL_PUNCTS: *const [(*const c_char, Token)] = &[
+    (c!("?"), Token::Question),
+    (c!("{"), Token::OCurly),
+    (c!("}"), Token::CCurly),
+    (c!("("), Token::OParen),
+    (c!(")"), Token::CParen),
+    (c!("["), Token::OBracket),
+    (c!("]"), Token::CBracket),
+    (c!(";"), Token::SemiColon),
+    (c!(":"), Token::Colon),
+    (c!(","), Token::Comma),
+    (c!("--"), Token::MinusMinus),
+    (c!("=-"), Token::MinusEq),
+    (c!("-"), Token::Minus),
+    (c!("++"), Token::PlusPlus),
+    (c!("=+"), Token::PlusEq),
+    (c!("+"), Token::Plus),
+    (c!("=*"), Token::MulEq),
+    (c!("*"), Token::Mul),
+    (c!("=%"), Token::ModEq),
+    (c!("%"), Token::Mod),
+    (c!("=/"), Token::DivEq),
+    (c!("/"), Token::Div),
+    (c!("=|"), Token::OrEq),
+    (c!("|"), Token::Or),
+    (c!("=&"), Token::AndEq),
+    (c!("&"), Token::And),
+    (c!("=="), Token::EqEq),
+    (c!("!="), Token::NotEq),
+    (c!("!"), Token::Not),
+    (c!("=<<"), Token::ShlEq),
+    (c!("<<"), Token::Shl),
+    (c!("<="), Token::LessEq),
+    (c!("<"), Token::Less),
+    (c!("=>>"), Token::ShrEq),
+    (c!(">>"), Token::Shr),
+    (c!(">="), Token::GreaterEq),
+
+    (c!("="), Token::Eq),
+    (c!(">"), Token::Greater),
+];
+
 const KEYWORDS: *const [(*const c_char, Token)] = &[
     (c!("auto"), Token::Auto),
     (c!("extrn"), Token::Extrn),
@@ -234,6 +275,7 @@ pub struct Lexer {
     pub eof: *const c_char,
     pub parse_point: Parse_Point,
 
+    pub historical: bool,
     pub string_storage: String_Builder,
     pub token: Token,
     pub string: *const c_char,
@@ -241,7 +283,7 @@ pub struct Lexer {
     pub loc: Loc,
 }
 
-pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *const c_char) -> Lexer {
+pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *const c_char, historical: bool) -> Lexer {
     let mut l: Lexer = zeroed();
     l.input_path              = input_path;
     l.input_stream            = input_stream;
@@ -249,6 +291,7 @@ pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *
     l.parse_point.current     = input_stream;
     l.parse_point.line_start  = input_stream;
     l.parse_point.line_number = 1;
+    l.historical = historical;
     l
 }
 
@@ -324,31 +367,37 @@ pub unsafe fn loc(l: *mut Lexer) -> Loc {
     }
 }
 
+pub unsafe fn parse_escape_sequence(l: *mut Lexer, delim: c_char, escape_char: c_char) -> Option<()> {
+        skip_char(l);
+        let Some(x) = peek_char(l) else {
+            (*l).token = Token::ParseError;
+            diagf!(loc(l), c!("LEXER ERROR: Unfinished escape sequence\n"));
+            return None;
+        };
+        let x = match x {
+            x if x == '0'   as c_char => '\0' as c_char,
+            x if x == 'n'   as c_char => '\n' as c_char,
+            x if x == 't'   as c_char => '\t' as c_char,
+            x if x == delim           => delim,
+            x if x == escape_char => escape_char,
+            x => {
+                (*l).token = Token::ParseError;
+                diagf!(loc(l), c!("LEXER ERROR: Unknown escape sequence starting with `%c`\n"), x as c_int);
+                return None;
+            }
+      };
+      da_append(&mut (*l).string_storage, x);
+      skip_char(l);
+      return Some(());
+}
+
 pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<()> {
+    let escape_char = if !(*l).historical { '\\' } else {'*'} as c_char;
+
     while let Some(x) = peek_char(l) {
         match x {
-            // TODO: string escaping is not historically accurate. The escape symbol should be * instead of \
-            x if x == '\\' as c_char => {
-                skip_char(l);
-                let Some(x) = peek_char(l) else {
-                    (*l).token = Token::ParseError;
-                    diagf!(loc(l), c!("LEXER ERROR: Unfinished escape sequence\n"));
-                    return None;
-                };
-                let x = match x {
-                    x if x == '0'   as c_char => '\0' as c_char,
-                    x if x == 'n'   as c_char => '\n' as c_char,
-                    x if x == 't'   as c_char => '\t' as c_char,
-                    x if x == delim           => delim,
-                    x if x == '\\'  as c_char => '\\' as c_char,
-                    x => {
-                        (*l).token = Token::ParseError;
-                        diagf!(loc(l), c!("LEXER ERROR: Unknown escape sequence starting with `%c`\n"), x as c_int);
-                        return None;
-                    }
-                };
-                da_append(&mut (*l).string_storage, x);
-                skip_char(l);
+            x if (x == escape_char) => {
+                parse_escape_sequence(l, delim, escape_char)?;
             },
             x if x == delim => break,
             _ => {
@@ -365,7 +414,8 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         skip_whitespaces(l);
 
         // TODO: C++ style comments are not particularly historically accurate
-        if skip_prefix(l, c!("//")) {
+       //       Migrate it to be gone behind (*l).historical 
+        if skip_prefix(l, c!("//")) && !(*l).historical {
             skip_until(l, c!("\n"));
             continue 'comments;
         }
@@ -384,9 +434,10 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         (*l).token = Token::EOF;
         return Some(())
     };
+    let puncs = if !(*l).historical { PUNCTS } else { HISTORICAL_PUNCTS };
 
-    for i in 0..PUNCTS.len() {
-        let (prefix, token) = (*PUNCTS)[i];
+    for i in 0..puncs.len() {
+        let (prefix, token) = (*puncs)[i];
         if skip_prefix(l, prefix) {
             (*l).token = token;
             return Some(())
@@ -418,8 +469,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         return Some(())
     }
 
-    // TODO: B originally does not support hex literals actually.
-    if skip_prefix(l, c!("0x")) {
+    if skip_prefix(l, c!("0x")) && !((*l).historical){
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
         while let Some(x) = peek_char(l) {
