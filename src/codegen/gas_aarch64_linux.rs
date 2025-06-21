@@ -278,7 +278,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::JmpLabel {label} => {
                 sb_appendf(output, c!("    b %s.label_%zu\n"), name, label);
             }
-            Op::JmpIfNotLabel {label, arg} => {
+            Op::JmpUnlessLabel {label, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
                 sb_appendf(output, c!("    beq %s.label_%zu\n"), name, label);

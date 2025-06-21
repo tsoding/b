@@ -662,7 +662,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 write_byte(output, JMP_ABS);
                 add_reloc(output, RelocationKind::Label{func_name: name, label}, asm);
             },
-            Op::JmpIfNotLabel{label, arg} => {
+            Op::JmpUnlessLabel{label, arg} => {
                 load_arg(arg, op.loc, output, asm);
 
                 write_byte(output, CMP_IMM);
