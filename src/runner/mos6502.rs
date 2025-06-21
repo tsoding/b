@@ -1,6 +1,7 @@
 use crate::nob::*;
 use crate::crust::libc::*;
 use core::ffi::*;
+use core::mem::zeroed;
 
 pub const DEFAULT_LOAD_OFFSET: u16 = 0xE000;
 
@@ -68,4 +69,21 @@ pub unsafe fn run(output: *mut String_Builder, config: Config, output_path: *con
            ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
 
     Some(())
+}
+
+pub unsafe fn run_async(config: Config, output_path: *const c_char) -> Proc {
+    let pid = fork();
+
+    if pid < 0 { return -1; }
+    if pid != 0 { return pid; }
+
+    // This is a child process
+    let mut output: String_Builder = zeroed();
+    if let Some(_) = run(&mut output, config, output_path) {
+        exit(0);
+        0
+    } else {
+        exit(1);
+        1
+    }
 }

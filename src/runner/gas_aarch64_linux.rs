@@ -2,7 +2,7 @@ use crate::nob::*;
 use crate::crust::libc::*;
 use core::ffi::*;
 
-pub unsafe fn run(cmd: *mut Cmd, output_path: *const c_char, run_args: *const [*const c_char]) -> Option<()> {
+unsafe fn prepare_cmd(cmd: *mut Cmd, output_path: *const c_char, run_args: *const [*const c_char]) {
     if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
         cmd_append! {
             cmd,
@@ -24,7 +24,15 @@ pub unsafe fn run(cmd: *mut Cmd, output_path: *const c_char, run_args: *const [*
     }
 
     da_append_many(cmd, run_args);
+}
 
+pub unsafe fn run(cmd: *mut Cmd, output_path: *const c_char, run_args: *const [*const c_char]) -> Option<()> {
+    prepare_cmd(cmd, output_path, run_args);
     if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
+}
+
+pub unsafe fn run_async(cmd: *mut Cmd, output_path: *const c_char, run_args: *const [*const c_char]) -> Proc {
+    prepare_cmd(cmd, output_path, run_args);
+    cmd_run_async_and_reset(cmd)
 }
