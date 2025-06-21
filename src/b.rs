@@ -1330,6 +1330,57 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
         },
+        Target::Gas_x86_64_Linux => {
+            codegen::gas_x86_64_linux::generate_program(&mut output, &c);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
+                // TODO: think how to approach cross-compilation
+                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
+            }
+        },
         Target::Fasm_x86_64_Linux => {
             codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 

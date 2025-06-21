@@ -43,6 +43,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
         Target::Fasm_x86_64_Windows => c!("exe"),
         Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+        Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
     });
@@ -60,6 +61,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
         Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
         Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
         Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
+        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, output_path, &[]),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
         Target::Mos6502             => runner::mos6502::run(output, Config {
             load_offset: DEFAULT_LOAD_OFFSET
