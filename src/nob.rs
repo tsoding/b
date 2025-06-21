@@ -73,6 +73,7 @@ macro_rules! shift {
 }
 
 pub type Cmd = Array<*const c_char>;
+pub type Proc = c_int;
 
 #[macro_export]
 macro_rules! cmd_append {
@@ -86,6 +87,11 @@ macro_rules! cmd_append {
 extern "C" {
     #[link_name = "nob_cmd_run_sync_and_reset"]
     pub fn cmd_run_sync_and_reset(cmd: *mut Cmd) -> bool;
+    #[link_name = "nob_cmd_run_async_and_reset"]
+    pub fn cmd_run_async_and_reset(cmd: *mut Cmd) -> Proc;
+    #[link_name = "nob_proc_wait"]
+    pub fn proc_wait(proc: Proc) -> bool;
+
 }
 
 pub type String_Builder = Array<c_char>;

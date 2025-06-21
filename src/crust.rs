@@ -38,6 +38,8 @@ pub mod libc {
         pub fn isalnum(c: c_int) -> c_int;
         pub fn isdigit(c: c_int) -> c_int;
         pub fn qsort(base: *mut c_void, nmemb: usize, size: usize, compar: unsafe extern "C" fn(*const c_void, *const c_void) -> c_int);
+        pub fn fork() -> c_int;
+        pub fn exit(code: c_int) -> c_void;
     }
 
     // count is the amount of items, not bytes
