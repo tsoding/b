@@ -8,7 +8,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc, Loc};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc, Loc, ImmediateValue};
 use crate::nob::*;
 use crate::{missingf, diagf};
 use crate::crust::libc::*;
@@ -80,6 +80,13 @@ const ZP_DEREF_FUN_1:   u8 = 11; // as we use this before argument loading
 
 const STACK_PAGE: u16 = 0x0100;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum LoadMode {
+    Low,
+    High,
+    Word
+}
+
 #[derive(Clone, Copy)]
 pub enum RelocationKind {
     AddressAbs {
@@ -90,10 +97,12 @@ pub enum RelocationKind {
     }, // address from Assembler.addresses
     DataOffset {
         off: u16,
-        low: bool
+        mode: LoadMode
     },
-    Function {
-        name: *const c_char
+    Extern {
+        name: *const c_char,
+        offset: usize,
+        mode: LoadMode
     },
     Label {
         func_name: *const c_char,
@@ -103,11 +112,11 @@ pub enum RelocationKind {
 impl RelocationKind {
     pub fn is16(self) -> bool {
         match self {
-            RelocationKind::DataOffset{..} => false,
-            RelocationKind::Function{..}   => true,
-            RelocationKind::Label{..}      => true,
-            RelocationKind::AddressRel{..} => false,
-            RelocationKind::AddressAbs{..} => true,
+            RelocationKind::DataOffset{mode, ..} => mode == LoadMode::Word,
+            RelocationKind::Extern{mode, ..}     => mode == LoadMode::Word,
+            RelocationKind::Label{..}            => true,
+            RelocationKind::AddressRel{..}       => false,
+            RelocationKind::AddressAbs{..}       => true,
         }
     }
 }
@@ -119,7 +128,7 @@ pub struct Relocation {
 }
 
 #[derive(Clone, Copy)]
-pub struct Function {
+pub struct Extern {
     pub name: *const c_char,
     pub addr: u16,
 }
@@ -134,7 +143,7 @@ pub struct Label {
 #[derive(Clone, Copy)]
 pub struct Assembler {
     pub relocs: Array<Relocation>,
-    pub functions: Array<Function>,
+    pub externs: Array<Extern>,
     pub op_labels: Array<Label>,
     pub addresses: Array<u16>,
     pub code_start: u16, // load address of code section
@@ -227,11 +236,17 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
         },
-        Arg::RefAutoVar(_index)  => missingf!(loc, c!("RefAutoVar\n")),
-        Arg::RefExternal(_name)  => missingf!(loc, c!("RefExternal\n")),
-        Arg::External(_name)     => missingf!(loc, c!("External\n")),
-        Arg::AutoVar(index)     => {
-            load_auto_var(output, index, asm);
+        Arg::RefExternal(name)  => {
+            write_byte(output, LDA_IMM);
+            add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::Low}, asm);
+            write_byte(output, LDY_IMM);
+            add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::High}, asm);
+        },
+        Arg::External(name) => {
+            write_byte(output, LDA_ABS);
+            add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::Word}, asm);
+            write_byte(output, LDY_ABS);
+            add_reloc(output, RelocationKind::Extern {name, offset: 1, mode: LoadMode::Word}, asm);
         },
         Arg::Literal(value) => {
             if value >= 65536 {
@@ -245,9 +260,9 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
         Arg::DataOffset(offset) => {
             assert!(offset < 65536, "data offset out of range");
             write_byte(output, LDA_IMM);
-            add_reloc(output, RelocationKind::DataOffset{off: offset as u16, low: true}, asm);
+            add_reloc(output, RelocationKind::DataOffset{off: offset as u16, mode: LoadMode::Low}, asm);
             write_byte(output, LDY_IMM);
-            add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, low: false}, asm);
+            add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, mode: LoadMode::High}, asm);
         },
         Arg::Bogus => unreachable!(),
     };
@@ -327,7 +342,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                                 asm: *mut Assembler) {
     (*asm).frame_sz = 0;
     let fun_addr = (*output).count as u16;
-    da_append(&mut (*asm).functions, Function {
+    da_append(&mut (*asm).externs, Extern {
         name,
         addr: fun_addr,
     });
@@ -410,7 +425,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 write_byte(output, STA_IND_Y); // low
                 write_byte(output, ZP_DEREF_STORE_0);
             },
-            Op::ExternalAssign{name: _, arg: _} => missingf!(op.loc, c!("implement ExternalAssign\n")),
+            Op::ExternalAssign{name, arg} => {
+                load_arg(arg, op.loc, output, asm);
+                write_byte(output, STA_ABS);
+                add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::Word}, asm);
+                write_byte(output, STY_ABS);
+                add_reloc(output, RelocationKind::Extern {name, offset: 1, mode: LoadMode::Word}, asm);
+            },
             Op::AutoAssign{index, arg} => {
                 load_arg(arg, op.loc, output, asm);
                 store_auto(output, index, asm);
@@ -619,7 +640,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 match fun {
                     Arg::RefExternal(name) | Arg::External(name) => {
                         write_byte(output, JSR);
-                        add_reloc(output, RelocationKind::Function{name}, asm);
+                        add_reloc(output, RelocationKind::Extern{name, offset: 0, mode: LoadMode::Word}, asm);
                     },
                     _ => { // function pointer already loaded in ZP_DEREF_FUN
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
@@ -708,22 +729,28 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
         let reloc = *(*asm).relocs.items.add(i);
         let caddr = reloc.addr;
         match reloc.kind {
-            RelocationKind::DataOffset{off, low} => {
-                if low {
-                    write_byte_at(output, (data_start + off) as u8, caddr);
-                } else {
-                    write_byte_at(output, ((data_start + off) >> 8) as u8, caddr);
+            RelocationKind::DataOffset{off, mode} => {
+                let faddr = data_start + off;
+                match mode {
+                    LoadMode::Low  => write_byte_at(output, faddr as u8, caddr),
+                    LoadMode::High => write_byte_at(output, (faddr >> 8) as u8, caddr),
+                    LoadMode::Word => write_word_at(output, faddr, caddr),
                 }
             },
-            RelocationKind::Function{name} => {
-                for i in 0..(*asm).functions.count {
-                    let label = *(*asm).functions.items.add(i);
+            RelocationKind::Extern{name, offset, mode} => {
+                for i in 0..(*asm).externs.count {
+                    let label = *(*asm).externs.items.add(i);
                     if strcmp(label.name, name) == 0 {
-                        write_word_at(output, (*asm).code_start + label.addr, caddr);
+                        let faddr = (*asm).code_start + label.addr + offset as u16;
+                        match mode {
+                            LoadMode::Low  => write_byte_at(output, faddr as u8, caddr),
+                            LoadMode::High => write_byte_at(output, (faddr >> 8) as u8, caddr),
+                            LoadMode::Word => write_word_at(output, faddr, caddr)
+                        }
                         continue 'reloc_loop;
                     }
                 }
-                printf(c!("linking failed. could not find function `%s'\n"), name);
+                printf(c!("linking failed. could not find extern `%s'\n"), name);
                 unreachable!();
             },
             RelocationKind::Label{func_name: name, label} => {
@@ -768,13 +795,14 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
                 continue 'skip_function_or_global
             }
         }
+
         // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it
         if strcmp(name, c!("char")) == 0 {
             // ch = char(string, i);
             // returns the ith character in a string pointed to by string, 0 based
 
             let fun_addr = (*output).count as u16;
-            da_append(&mut (*asm).functions, Function {
+            da_append(&mut (*asm).externs, Extern {
                 name,
                 addr: fun_addr,
             });
@@ -820,6 +848,41 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global], asm: *mut Assembler) {
+    for i in 0..globals.len() {
+        let global = (*globals)[i];
+
+        da_append(&mut (*asm).externs, Extern {
+            name: global.name,
+            addr: (*output).count as u16,
+        });
+
+        if global.is_vec {
+            let address = create_address_label(asm);
+            add_reloc(output, RelocationKind::AddressAbs{idx: address}, asm);
+            link_address_label_here(address, output, asm);
+        }
+        for j in 0..global.values.count {
+            match *global.values.items.add(j) {
+                ImmediateValue::Literal(lit) => {
+                    write_word(output, lit as u16);
+                }
+                ImmediateValue::Name(name) => {
+                    add_reloc(output, RelocationKind::Extern{name, offset: 0, mode: LoadMode::Word}, asm);
+                }
+                ImmediateValue::DataOffset(offset) => {
+                    add_reloc(output, RelocationKind::DataOffset{off: offset as u16, mode: LoadMode::Word}, asm);
+                }
+            }
+        }
+        for _ in global.values.count..global.minimum_size {
+            write_word(output, 0);
+        }
+    }
+}
+
+
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     for i in 0..data.len() {
         write_byte(output, (*data)[i]);
@@ -828,12 +891,9 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 
 pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
     write_byte(output, JSR);
-    add_reloc(output, RelocationKind::Function{name: c!("main")}, asm);
+    add_reloc(output, RelocationKind::Extern{name: c!("main"), offset: 0, mode: LoadMode::Word}, asm);
 
     // exit code 0
-    write_byte(output, LDA_IMM);
-    write_byte(output, 0);
-
     write_byte(output, JMP_IND);
     write_word(output, 0xFFFC);
 }
@@ -879,6 +939,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
 
     let data_start = config.load_offset + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
+    generate_globals(output, da_slice((*c).globals), &mut asm);
 
     apply_relocations(output, data_start, &mut asm);
     Some(())
