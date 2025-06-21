@@ -18,7 +18,9 @@ Compiler for the B Programming Language implemented in [Crust](https://github.co
 - [Rust](https://www.rust-lang.org/) - the compiler is written in it;
 - [fasm](https://flatassembler.net/) - used as the compiler backend;
 
-<!-- TODO: document specific dependencies for the rest of the targets. Like mingw32-w64 and wine on Linux for Fasm_x86_64_Windows, etc. -->
+### Target-Specific Dependencies
+
+- **fasm-x86_64-windows**: When cross-compiling from Linux to Windows, you may need [Wine](https://www.winehq.org/) installed as a system package to run the compiled Windows executables with the `-run` flag.
 
 ## Quick Start
 
