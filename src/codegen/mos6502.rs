@@ -98,7 +98,7 @@ instr_enum! {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AddrMode {
     IMM = 0,
@@ -370,7 +370,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, out: *mut String_Builder, asm: *mut A
         },
         Arg::Literal(value) => {
             if value >= 65536 {
-                diagf!(loc, c!("WARNING: contant `%d` out of range for 16 bits\n"), value);
+                diagf!(loc, c!("WARNING: contant $%X out of range for 16 bits\n"), value);
             }
             instr8(out, LDA, IMM, value as u8);
             instr8(out, LDY, IMM, (value >> 8) as u8);
@@ -447,6 +447,201 @@ pub unsafe fn load_two_args(out: *mut String_Builder, lhs: Arg, rhs: Arg, op: Op
     instr8(out, STA, ZP, ZP_RHS_L);
     instr8(out, STY, ZP, ZP_RHS_H);
     load_arg(lhs, op.loc, out, asm);
+}
+
+// TODO: maybe recover from errors?
+pub unsafe fn parse_num(mut line: *const c_char, loc: Loc) -> (u16, *const c_char) {
+    while isspace(*line as i32) != 0 {line = line.add(1);}
+    let (v, mut end) = match *line as u8 {
+        b'$' => {
+            let mut end = ptr::null_mut();
+            let v = strtoull(line.add(1), &mut end, 16);
+            (v, end)
+        }
+        b'0'..=b'9' => {
+            let mut end = ptr::null_mut();
+            let v = strtoull(line, &mut end, 10);
+            (v, end)
+        },
+        c => {
+            diagf!(loc, c!("ERROR: unexpected character `%c` in __asm__ number literal\n"),
+                   c as c_int);
+            abort();
+        }
+    };
+    if v > 0xFFFF {
+        diagf!(loc, c!("ERROR: contant $%X out of range for 16 bits\n"), v);
+        abort();
+    }
+    while isspace(*end as i32) != 0 {end = end.add(1);}
+    (v as u16, end)
+}
+
+pub unsafe fn assemble_statement(out: *mut String_Builder,
+                                 mut line: *const c_char, loc: Loc) {
+
+    while isspace(*line as i32) != 0 {
+        line = line.add(1);
+    }
+
+    // all instruction mnemonics are 3 characters.
+    let mut buf = [0i8; 4];
+    for i in 0 .. 3 {
+        buf[i] = toupper(*line as i32) as i8;
+        if *line == 0 {
+            break;
+        }
+        line = line.add(1);
+    }
+
+    let instr = match instr_from_string(buf.as_ptr()) {
+        Some(v) => v,
+        None => {
+            diagf!(loc, c!("ERROR: invalid instruction mnemonic `%s`\n"), buf.as_ptr());
+            abort();
+        }
+    };
+
+    while isspace(*line as i32) != 0 {line = line.add(1);}
+
+    let operand = line;
+    let mut arg8 = None;
+    let mut arg16 = None;
+    let mut mode = match *line as u8 {
+        0    => IMPL,
+        b'#' => {
+            line = line.add(1);
+
+            let num;
+            (num, line) = parse_num(line, loc);
+            if num > 0xFF {
+                diagf!(loc, c!("ERROR: constant $%X out of range for 8 bit immediate\n"),
+                       num as c_uint);
+                abort();
+            }
+            arg8 = Some(num as u8);
+            IMM
+        },
+        b'0'..=b'9' | b'$' => {
+            let num;
+            (num, line) = parse_num(line, loc);
+
+            arg16 = Some(num);
+            if *line as u8 == b',' {
+                line = line.add(1);
+                while isspace(*line as i32) != 0 {line = line.add(1);}
+
+                if toupper(*line as i32) as u8 == b'X' {
+                    line = line.add(1);
+                    ABS_X
+                } else if toupper(*line as i32) as u8 == b'Y' {
+                    line = line.add(1);
+                    ABS_Y
+                } else {
+                    ABS
+                }
+            } else {
+                ABS
+            }
+        },
+        b'(' => {
+            line = line.add(1);
+            let num;
+            (num, line) = parse_num(line, loc);
+
+            if *line as u8 == b',' {
+                if num > 0xFF {
+                    diagf!(loc, c!("ERROR: constant $%X out of 8-bit range for indirect X\n"),
+                           num as c_uint);
+                    abort();
+                }
+                arg8 = Some(num as u8);
+
+                line = line.add(1);
+                while isspace(*line as i32) != 0 {line = line.add(1);}
+                if toupper(*line as i32) as u8 != b'X' {
+                    diagf!(loc, c!("ERROR: X expected for indirect addressing mode __asm__\n"), *line as c_int);
+                    abort();
+                }
+                line = line.add(1);
+                while isspace(*line as i32) != 0 {line = line.add(1);}
+                if toupper(*line as i32) as u8 != b')' {
+                    diagf!(loc, c!("ERROR: ) expected in __asm__\n"), *line as c_int);
+                    abort();
+                }
+                line = line.add(1);
+                IND_X
+            } else {
+                if *line as u8 != b')' {
+                    diagf!(loc, c!("ERROR: expected ',' or ')' after indirect address __asm__\n"), *line as c_int);
+                    abort();
+                }
+                line = line.add(1);
+                while isspace(*line as i32) != 0 {line = line.add(1);}
+
+                if *line as u8 == b',' {
+                    if num > 0xFF {
+                        diagf!(loc, c!("ERROR: constant $%X out of 8-bit range for indirect Y\n"),
+                               num as c_uint);
+                        abort();
+                    }
+                    arg8 = Some(num as u8);
+
+                    line = line.add(1);
+                    while isspace(*line as i32) != 0 {line = line.add(1);}
+                    if toupper(*line as i32) as u8 != b'Y' {
+                        diagf!(loc, c!("ERROR: Y expected for indirect addressing mode __asm__\n"), *line as c_int);
+                        abort();
+                    }
+                    line = line.add(1);
+                    IND_Y
+                } else {
+                    arg16 = Some(num);
+                    IND
+                }
+            }
+        },
+        c => {
+            diagf!(loc, c!("ERROR: unexpected character `%c` in __asm__\n"), c as c_int);
+            abort();
+        }
+    };
+
+    // prefer zeropage instructions, if they exist
+    if let Some(v) = arg16 {
+        if mode == ABS && v <= 0xFF && OPCODES[instr as usize][ZP as usize] != INVL {
+            mode = ZP;
+            arg8 = Some(v as u8);
+            arg16 = None;
+        } else if mode == ABS_X && v <= 0xFF && OPCODES[instr as usize][ZP_X as usize] != INVL {
+            mode = ZP_X;
+            arg8 = Some(v as u8);
+            arg16 = None;
+        } else if mode == ABS_Y && v <= 0xFF && OPCODES[instr as usize][ZP_Y as usize] != INVL {
+            mode = ZP_Y;
+            arg8 = Some(v as u8);
+            arg16 = None;
+        }
+    }
+
+    let opcode = OPCODES[instr as usize][mode as usize];
+    if opcode == INVL {
+        diagf!(loc, c!("ERROR: invalid combination of instruction `%s` and operand `%s`\n"),
+               buf.as_ptr(), operand);
+        abort();
+    }
+
+    write_byte(out, opcode);
+    if let Some(a) = arg8 {
+        write_byte(out, a);
+    } else if let Some(a) = arg16 {
+        write_word(out, a);
+    }
+
+    if *line != 0 {
+        diagf!(loc, c!("ERROR: trailing garbage: `%s`\n"), line);
+        abort();
+    }
 }
 
 pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize,
@@ -699,8 +894,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     },
                     _ => { // function pointer already loaded in ZP_DEREF_FUN
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
-                        instr16(out, JSR, ABS, (*asm).code_start + (*out).count as u16 + 5);
-                        instr16(out, JMP, ABS, (*asm).code_start + (*out).count as u16 + 5);
+                        instr16(out, JSR, ABS, (*asm).code_start + (*out).count as u16 + 6);
+                        instr16(out, JMP, ABS, (*asm).code_start + (*out).count as u16 + 6);
                         instr16(out, JMP, IND, ZP_DEREF_FUN_0 as u16);
                     },
                 }
@@ -717,7 +912,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 store_auto(out, result, asm);
             },
-            Op::Asm {args: _} => unreachable!(),
+            Op::Asm {args} => {
+                for i in 0..args.count {
+                    let arg = *args.items.add(i);
+                    assemble_statement(out, arg, op.loc);
+                }
+            },
             Op::Label{label} => {
                 // TODO: RE: https://github.com/tsoding/b/pull/147#issue-3154667157
                 // > For this thing I introduces a new NOP instruction because it would be a bit too
@@ -750,6 +950,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
         }
     }
+
+    instr8(out, LDA, IMM, 0);
+    instr(out, TAY);
     let addr_idx = *op_addresses.items.add(body.len());
     *(*asm).addresses.items.add(addr_idx) = (*out).count as u16; // update op address
 
@@ -886,8 +1089,6 @@ pub unsafe fn generate_entry(out: *mut String_Builder, asm: *mut Assembler) {
     instr0(out, JSR, ABS);
     add_reloc(out, RelocationKind::Function{name: c!("main")}, asm);
 
-    // exit code 0
-    instr8(out, LDA, IMM, 0);
     instr16(out, JMP, IND, 0xFFFC);
 }
 
@@ -914,10 +1115,20 @@ pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) ->
     Some(config)
 }
 
-pub unsafe fn generate_asm_funcs(_out: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [AsmFunc],
+                                 asm: *mut Assembler) {
     for i in 0..asm_funcs.len() {
         let asm_func = (*asm_funcs)[i];
-        missingf!(asm_func.name_loc, c!("__asm__ functions for 6502"));
+
+        let fun_addr = (*out).count as u16;
+        da_append(&mut (*asm).functions, Function {
+            name: asm_func.name,
+            addr: fun_addr,
+        });
+
+        for j in 0..asm_func.body.count {
+            assemble_statement(out, *asm_func.body.items.add(j), asm_func.name_loc);
+        }
     }
 }
 
@@ -927,7 +1138,7 @@ pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, con
     asm.code_start = config.load_offset;
 
     generate_funcs(out, da_slice((*c).funcs), &mut asm);
-    generate_asm_funcs(out, da_slice((*c).asm_funcs));
+    generate_asm_funcs(out, da_slice((*c).asm_funcs), &mut asm);
     generate_extrns(out, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
 
     let data_start = config.load_offset + (*out).count as u16;
