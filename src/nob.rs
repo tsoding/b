@@ -97,6 +97,8 @@ pub struct String_View {
     pub data: *const c_char,
 }
 
+pub type File_Paths = Array<*const c_char>;
+
 extern "C" {
     #[link_name = "nob_read_entire_file"]
     pub fn read_entire_file(path: *const c_char, sb: *mut String_Builder) -> bool;
@@ -118,4 +120,20 @@ extern "C" {
     pub fn sv_starts_with(sv: String_View, expected_prefix: String_View) -> bool;
     #[link_name = "nob_file_exists"]
     pub fn file_exists(file_path: *const c_char) -> c_int;
+    #[link_name = "nob_mkdir_if_not_exists"]
+    pub fn mkdir_if_not_exists(path: *const c_char) -> bool;
+    #[link_name = "nob_read_entire_dir"]
+    pub fn read_entire_dir(parent: *const c_char, children: *mut File_Paths) -> bool;
+}
+
+// TODO: This is a generally useful function. Consider making it a part of nob.h
+pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Option<*const c_char> {
+    let mut sv = sv_from_cstr(s);
+    let suffix_len = libc::strlen(suffix);
+    if sv_end_with(sv, suffix) {
+        sv.count -= suffix_len;
+        Some(temp_sv_to_cstr(sv))
+    } else {
+        None
+    }
 }

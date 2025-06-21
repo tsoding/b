@@ -1,289 +1,221 @@
-// NAME     OPCODE   ARGUMENT       NOTES
-// BOGUS    00
-// RET      01       0
-// STORE    02       3,0
-// ExrnAss  03       1,2,0
-// AutoAss  04       3,0
-// Negate   05       3,0
-// UnaryNot 06       3,0
-// Binop    07       3,4,0,0
-// Asm      08       1[(1,2)]       Array of Strings
-// Label    09       3
-// Jmp      0A       3              Op::JmpLabel
-// JmpNot   0B       3              Op::JmpIfNotLabel
-// Funcall  0C       3,0,1[0]       Array of arguments
-
-// Argument Table:
-// ID | Name     | Type
-// =====================
-// 0  | argument | Argument
-// 1  | size     | u64
-// 2  | string   | i8[size]
-// 3  | index    | u64
-// 4  | Op       | u8
-
-//
-// Extra Types:
-//      Argument:
-//          type: u8
-//          argument:
-//          0: Bogus 
-//          1: Autovar(u64)
-//          2: Deref(u64)
-//          3: RefExtrn{size: u64, name: i8[size]}
-//          4: RefAutoVar(u64)
-//          5: Literal(u64)
-//          6: DataOffset(u64+data_offset) 
-//          7: Extrn{size: u64, name: i8[size]}
-
-//      Binop:
-//              0:  Plus,
-//              1:  Minus,
-//              2:  Mult,
-//              3:  Mod,
-//              4:  Div,
-//              5:  Less,
-//              6:  Greater,
-//              7:  Equal,
-//              8:  NotEqual,
-//              9:  GreaterEqual
-//              10: LessEqual,
-//              11: BitOr,
-//              12: BitAnd,
-//              13: BitShl,
-//              14: BitShr
-
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
-use crate::crust::libc::*;
+use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
 
-pub unsafe fn dump_arg_call(arg: Arg, output: *mut Array<u8>) {
+pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
         Arg::RefExternal(name) | Arg::External(name) => {
-            push_opcode(output, 0x00);
-            append_string(output, name);
+            sb_appendf(output, c!("call(\"%s\""), name);
         }
         arg => {
-            push_opcode(output, 0x01);
+            sb_appendf(output, c!("call("));
             dump_arg(output, arg);
         }
     };
+
 }
 
-pub unsafe fn push_opcode(output: *mut Array<u8>, op: usize) {
-    append_u8(output, op.try_into().unwrap());
-}
-
-pub unsafe fn dump_arg(output: *mut Array<u8>, arg: Arg) {
+pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     match arg {
-        Arg::External(name)     => {
-            push_opcode(output, 0x07);
-            append_string(output, name);
-        }
-        Arg::Deref(index)       => {
-            push_opcode(output, 0x02);
-            append_u64(output, index.try_into().unwrap());
-        }
-        Arg::RefAutoVar(index)  => {
-            push_opcode(output, 0x04);
-            append_u64(output, index.try_into().unwrap());
-        }
-        Arg::RefExternal(name)  => {
-            push_opcode(output, 0x3);
-            append_string(output, name);
-        }
-        Arg::Literal(value)     => {
-            push_opcode(output, 0x05);
-            append_u64(output, value.try_into().unwrap());
-        }
-        Arg::AutoVar(index)     => {
-            push_opcode(output, 0x01);
-            append_u64(output, index.try_into().unwrap());
-        }
-        Arg::DataOffset(offset) => {
-            push_opcode(output, 0x06);
-            printf(c!("%i\n"), offset);
-            append_u64(output, offset.try_into().unwrap());
-        }
-        Arg::Bogus              => {
-            push_opcode(output, 0x00);
-        } 
+        Arg::External(name)     => sb_appendf(output, c!("%s"), name),
+        Arg::Deref(index)       => sb_appendf(output, c!("deref[%zu]"), index),
+        Arg::RefAutoVar(index)  => sb_appendf(output, c!("ref auto[%zu]"), index),
+        Arg::RefExternal(name)  => sb_appendf(output, c!("ref %s"), name),
+        Arg::Literal(value)     => sb_appendf(output, c!("%ld"), value),
+        Arg::AutoVar(index)     => sb_appendf(output, c!("auto[%zu]"), index),
+        Arg::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
+        Arg::Bogus              => unreachable!("bogus-amogus")
     };
 }
 
-pub unsafe fn append_u8(output: *mut Array<u8>, content: u8) {
-        da_append(output, content);
-}
-
-pub unsafe fn append_u64(output: *mut Array<u8>, content: u64) {
-    let mut data = content;
-    for _ in 0..8 {
-        append_u8(output, (data & 0xFF).try_into().unwrap());
-        data <<= 8;
-    }
-}
-
-pub unsafe fn append_string(output: *mut Array<u8>, content: *const c_char) {
-    let len: usize = strlen(content);
-    append_u64(output, len.try_into().unwrap());
-    sb_appendf(output as *mut String_Builder, c!("%s"), content );
-}
-
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut Array<u8>) {
-    append_string(output, name);
-    append_u64(output, params_count.try_into().unwrap());
-    append_u64(output, auto_vars_count.try_into().unwrap());
-    append_u64(output, body.len().try_into().unwrap());
-
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+    sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
         let op = (*body)[i];
         match op.opcode {
-            Op::Bogus => push_opcode(output, 0x00),
+            Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return {arg} => {
-                push_opcode(output, 0x01);
-                
+                sb_appendf(output, c!("    return "));
                 if let Some(arg) = arg {
                     dump_arg(output, arg);
-                } else {
-                    push_opcode(output, 0x00);
                 }
+                sb_appendf(output, c!("\n"));
             },
             Op::Store{index, arg} => {
-                push_opcode(output, 0x02);
-                append_u64(output, index.try_into().unwrap());
+                sb_appendf(output, c!("    store deref[%zu], "), index);
                 dump_arg(output, arg);
+                sb_appendf(output, c!("\n"));
             }
             Op::ExternalAssign{name, arg} => {
-                push_opcode(output, 0x03);
-                append_string(output, name);
+                sb_appendf(output, c!("    %s = "), name);
                 dump_arg(output, arg);
+                sb_appendf(output, c!("\n"));
             }
             Op::AutoAssign{index, arg} => {
-                push_opcode(output, 0x04);
-                append_u64(output, index.try_into().unwrap());
+                sb_appendf(output, c!("    auto[%zu] = "), index);
                 dump_arg(output, arg);
+                sb_appendf(output, c!("\n"));
             }
             Op::Negate{result, arg} => {
-                push_opcode(output, 0x05);
-                append_u64(output, result.try_into().unwrap());
+                sb_appendf(output, c!("    auto[%zu] = -"), result);
                 dump_arg(output, arg);
+                sb_appendf(output, c!("\n"));
             }
             Op::UnaryNot{result, arg} => {
-                push_opcode(output, 0x06);
-                append_u64(output, result.try_into().unwrap());
+                sb_appendf(output, c!("    auto[%zu] = !"), result);
                 dump_arg(output, arg);
+                sb_appendf(output, c!("\n"));
             }
             Op::Binop {binop, index, lhs, rhs} => {
-                push_opcode(output, 0x07);
-                append_u64(output, index.try_into().unwrap());
-                match binop {
-                    Binop::BitOr        => push_opcode(output, 0x0B),
-                    Binop::BitAnd       => push_opcode(output, 0x0C), 
-                    Binop::BitShl       => push_opcode(output, 0x0D),
-                    Binop::BitShr       => push_opcode(output, 0x0E),
-                    Binop::Plus         => push_opcode(output, 0x00), 
-                    Binop::Minus        => push_opcode(output, 0x01), 
-                    Binop::Mod          => push_opcode(output, 0x02),
-                    Binop::Div          => push_opcode(output, 0x03), 
-                    Binop::Mult         => push_opcode(output, 0x04), 
-                    Binop::Less         => push_opcode(output, 0x05), 
-                    Binop::Greater      => push_opcode(output, 0x06), 
-                    Binop::Equal        => push_opcode(output, 0x07),
-                    Binop::NotEqual     => push_opcode(output, 0x08),
-                    Binop::GreaterEqual => push_opcode(output, 0x09),
-                    Binop::LessEqual    => push_opcode(output, 0x0A), 
-                };
+                sb_appendf(output, c!("    auto[%zu] = "), index);
                 dump_arg(output, lhs);
+                match binop {
+                    Binop::BitOr        => sb_appendf(output, c!(" | ")),
+                    Binop::BitAnd       => sb_appendf(output, c!(" & ")),
+                    Binop::BitShl       => sb_appendf(output, c!(" << ")),
+                    Binop::BitShr       => sb_appendf(output, c!(" >> ")),
+                    Binop::Plus         => sb_appendf(output, c!(" + ")),
+                    Binop::Minus        => sb_appendf(output, c!(" - ")),
+                    Binop::Mod          => sb_appendf(output, c!(" %% ")),
+                    Binop::Div          => sb_appendf(output, c!(" / ")),
+                    Binop::Mult         => sb_appendf(output, c!(" * ")),
+                    Binop::Less         => sb_appendf(output, c!(" < ")),
+                    Binop::Greater      => sb_appendf(output, c!(" > ")),
+                    Binop::Equal        => sb_appendf(output, c!(" == ")),
+                    Binop::NotEqual     => sb_appendf(output, c!(" != ")),
+                    Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
+                    Binop::LessEqual    => sb_appendf(output, c!(" < ")),
+                };
                 dump_arg(output, rhs);
+                sb_appendf(output, c!("\n"));
             }
             Op::Funcall{result, fun, args} => {
-                push_opcode(output, 0x0C);
-                append_u64(output, result.try_into().unwrap());
+                sb_appendf(output, c!("    auto[%zu] = "), result);
                 dump_arg_call(fun, output);
-                append_u64(output, args.count.try_into().unwrap());
                 for i in 0..args.count {
+                    sb_appendf(output, c!(", "));
                     dump_arg(output, *args.items.add(i));
                 }
+                sb_appendf(output, c!(")\n"));
             }
             Op::Asm {args} => {
-                push_opcode(output, 0x08);
-                append_u64(output, args.count.try_into().unwrap());
+                sb_appendf(output, c!("   __asm__(\n"));
                 for i in 0..args.count {
                     let arg = *args.items.add(i);
-                    append_string(output, arg);
+                    sb_appendf(output, c!("    %s\n"), arg);
                 }
+                sb_appendf(output, c!(")\n"));
             }
 
             Op::Label {label} => {
-                push_opcode(output, 0x09);
-                append_u64(output, label.try_into().unwrap());
+                sb_appendf(output, c!("  label[%zu]\n"), label);
             }
             Op::JmpLabel {label} => {
-                push_opcode(output, 0x0A);
-                append_u64(output, label.try_into().unwrap());
+                sb_appendf(output, c!("    jmp label[%zu]\n"), label);
             }
             Op::JmpIfNotLabel {label, arg} => {
-                push_opcode(output, 0x0B);
-                append_u64(output, label.try_into().unwrap());
+                sb_appendf(output, c!("    jmp_if_not label[%zu], "), label);
                 dump_arg(output, arg);
+                sb_appendf(output, c!("\n"));
             }
         }
     }
 }
 
-pub unsafe fn generate_funcs(output: *mut Array<u8>, funcs: *const [Func]) {
-    append_u64(output, funcs.len().try_into().unwrap());
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+    sb_appendf(output, c!("-- Functions --\n"));
+    sb_appendf(output, c!("\n"));
     for i in 0..funcs.len() {
         generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut Array<u8>, extrns: *const [*const c_char]) {
-    append_u64(output, extrns.len().try_into().unwrap());
+pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
+    sb_appendf(output, c!("\n"));
+    sb_appendf(output, c!("-- External Symbols --\n\n"));
     for i in 0..extrns.len() {
-        append_string(output, (*extrns)[i]);
+        sb_appendf(output, c!("    %s\n"), (*extrns)[i]);
     }
 }
 
-pub unsafe fn generate_globals(output: *mut Array<u8>, globals: *const [Global]) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
+    sb_appendf(output, c!("\n"));
+    sb_appendf(output, c!("-- Global Variables --\n\n"));
     for i in 0..globals.len() {
-        todo!();
+        let global = (*globals)[i];
+        sb_appendf(output, c!("%s"), global.name);
+        if global.is_vec {
+            sb_appendf(output, c!("[%zu]"), global.minimum_size);
+        }
+        sb_appendf(output, c!(": "));
+        for j in 0..global.values.count {
+            if j > 0 {
+                sb_appendf(output, c!(", "));
+            }
+            match *global.values.items.add(j) {
+                ImmediateValue::Literal(lit) => sb_appendf(output, c!("%zu"), lit),
+                ImmediateValue::Name(name) => sb_appendf(output, c!("%s"), name),
+                ImmediateValue::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
+            };
+        }
+        sb_appendf(output, c!("\n"));
     }
 }
 
-//data is:
-//     u8[data.len()]
-pub unsafe fn generate_data_section(output: *mut Array<u8>, data: *const [u8]) {
-    append_u64(output, (*data).len().try_into().unwrap());
+pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
-        for i in (0..(*data).len()) {
-            append_u8(output, (*data)[i]);
+        sb_appendf(output, c!("\n"));
+        sb_appendf(output, c!("-- Data Section --\n"));
+        sb_appendf(output, c!("\n"));
+
+        const ROW_SIZE: usize = 12;
+        for i in (0..data.len()).step_by(ROW_SIZE) {
+            sb_appendf(output, c!("%04X:"), i as c_uint);
+            for j in i..(i+ROW_SIZE) {
+                if j < data.len() {
+                    sb_appendf(output, c!(" "));
+                    sb_appendf(output, c!("%02X"), (*data)[j] as c_uint);
+                } else {
+                    sb_appendf(output, c!("   "));
+                }
+            }
+
+            sb_appendf(output, c!(" | "));
+            for j in i..(i+ROW_SIZE).min(data.len()) {
+                let ch = (*data)[j] as char;
+                let c = if ch.is_ascii_whitespace() {
+                    // display all whitespace as a regular space
+                    // stops '\t', '\n', '\b' from messing up the formatting
+                    ' '
+                } else if ch.is_ascii_graphic() {
+                    ch
+                } else {
+                    // display all non-printable characters as '.' (eg. NULL)
+                    '.'
+                };
+                sb_appendf(output, c!("%c"), c as c_uint);
+            }
+
+            sb_appendf(output, c!("\n"));
         }
     }
 }
 
-const version: u8 = 0x00;
+pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+    for i in 0..asm_funcs.len() {
+        let asm_func = (*asm_funcs)[i];
+        sb_appendf(output, c!("%s(asm):\n"), asm_func.name);
+        for j in 0..asm_func.body.count {
+            let line = *asm_func.body.items.add(j);
+            sb_appendf(output, c!("    %s\n"), line);
+        }
+    }
+}
 
-
-// Get the last bytes of the pgram for the table
-pub unsafe fn generate_program(output: *mut Array<u8>, c: *const Compiler) {
-    append_u8(output, 0xDE);
-    append_u8(output, 0xBC);
-
-    //VERSION
-    da_append(output, version);
-    let extrn_pos = (*output).count;
-    generate_extrns(output, da_slice((*c).extrns));
-    let data_pos = (*output).count;
-    generate_data_section(output, da_slice((*c).data));
-    let globals_pos = (*output).count;
-    generate_globals(output, da_slice((*c).globals));
-    let funcs_pos = (*output).count;
+pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
     generate_funcs(output, da_slice((*c).funcs));
-
-    append_u64(output, extrn_pos.try_into().unwrap());
-    append_u64(output, data_pos.try_into().unwrap());
-    append_u64(output, globals_pos.try_into().unwrap());
-    append_u64(output, funcs_pos.try_into().unwrap());
+    generate_asm_funcs(output, da_slice((*c).asm_funcs));
+    generate_extrns(output, da_slice((*c).extrns));
+    generate_globals(output, da_slice((*c).globals));
+    generate_data_section(output, da_slice((*c).data));
 }
