@@ -59,15 +59,28 @@ pub unsafe fn run(output: *mut String_Builder, config: Config, output_path: *con
     fake6502::MEMORY[0xFFFD] = 0;
 
     while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
+        let prev_sp = fake6502::sp & 0xFF;
+        let opcode  = fake6502::MEMORY[fake6502::pc as usize];
         fake6502::step();
+
+        let curr_sp = fake6502::sp & 0xFF;
+        if opcode == 0x48 && curr_sp > prev_sp { // PHA instructions
+            printf(c!("[FATAL] Stack overflow detected\n[FATAL] SP changed from $%02X to $%02X after PHA instruction\n"),
+                   prev_sp as c_uint, curr_sp as c_uint);
+            return None;
+        }
+
         if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
             printf(c!("%c"), fake6502::a as c_uint);
             fake6502::rts();
         }
     }
     // print exit code (in Y:A)
-    printf(c!("Exited with code %hd\n"),
-           ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint);
+    let code = ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint;
+    printf(c!("Exited with code %hd\n"), code);
 
+    if code != 0 {
+        return None;
+    }
     Some(())
 }
