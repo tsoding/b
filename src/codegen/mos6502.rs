@@ -661,10 +661,33 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::Mod => missingf!(op.loc, c!("implement Mod\n")),
+                    Binop::Mod => {
+                        // !! TODO !! this should be implemented here and not as a B functions.
+                        // TODO: current mod implementation is linear, we can do better.
+                        load_arg(rhs, op.loc, output, asm);
+                        push16(output, asm);
+                        load_arg(lhs, op.loc, output, asm);
+
+                        write_byte(output, JSR);
+                        add_reloc(output, RelocationKind::External{name: c!("_rem"), offset: 0,
+                                                                   byte: Byte::Both}, asm);
+                        write_byte(output, TAX);
+                        pop16_discard(output, asm);
+                        write_byte(output, TXA);
+                    },
                     Binop::Div => {
-                        load_two_args(output, lhs, rhs, op, asm);
-                        missingf!(op.loc, c!("implement Div\n"))
+                        // !! TODO !! this should be implemented here and not as a B functions.
+                        // TODO: current div implementation is linear, we can do better.
+                        load_arg(rhs, op.loc, output, asm);
+                        push16(output, asm);
+                        load_arg(lhs, op.loc, output, asm);
+
+                        write_byte(output, JSR);
+                        add_reloc(output, RelocationKind::External{name: c!("_div"), offset: 0,
+                                                                   byte: Byte::Both}, asm);
+                        write_byte(output, TAX);
+                        pop16_discard(output, asm);
+                        write_byte(output, TXA);
                     },
                     Binop::Mult => {
                         load_two_args(output, lhs, rhs, op, asm);
