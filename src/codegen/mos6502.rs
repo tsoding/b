@@ -8,7 +8,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc, Loc, ImmediateValue};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, ImmediateValue, Arg, AsmFunc, Loc};
 use crate::nob::*;
 use crate::{missingf, diagf};
 use crate::crust::libc::*;
@@ -48,10 +48,12 @@ const LDY_ABS:   u8 = 0xAC;
 const LDY_IMM:   u8 = 0xA0;
 const LDY_X:     u8 = 0xBC;
 const LDY_ZP:    u8 = 0xA4;
+const NOP:       u8 = 0xEA;
+const ORA_ZP:    u8 = 0x05;
 const PHA:       u8 = 0x48;
 const PLA:       u8 = 0x68;
-const RTS:       u8 = 0x60;
 const ROL_ZP:    u8 = 0x26;
+const RTS:       u8 = 0x60;
 const SBC_ZP:    u8 = 0xE5;
 const SEC:       u8 = 0x38;
 const STA_ABS:   u8 = 0x8D;
@@ -67,8 +69,6 @@ const TSX:       u8 = 0xBA;
 const TXA:       u8 = 0x8A;
 const TXS:       u8 = 0x9A;
 const TYA:       u8 = 0x98;
-const NOP:       u8 = 0xEA;
-const ORA_ZP:    u8 = 0x05;
 
 // zero page addresses
 // TODO: Do we really have to use
@@ -91,10 +91,10 @@ const ZP_DEREF_FUN_1:   u8 = 13; // as we use this before argument loading
 const STACK_PAGE: u16 = 0x0100;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum LoadMode {
+pub enum Byte {
     Low,
     High,
-    Word
+    Both
 }
 
 #[derive(Clone, Copy)]
@@ -107,12 +107,12 @@ pub enum RelocationKind {
     }, // address from Assembler.addresses
     DataOffset {
         off: u16,
-        mode: LoadMode
+        byte: Byte,
     },
-    Extern {
+    External {
         name: *const c_char,
         offset: usize,
-        mode: LoadMode
+        byte: Byte,
     },
     Label {
         func_name: *const c_char,
@@ -122,8 +122,8 @@ pub enum RelocationKind {
 impl RelocationKind {
     pub fn is16(self) -> bool {
         match self {
-            RelocationKind::DataOffset{mode, ..} => mode == LoadMode::Word,
-            RelocationKind::Extern{mode, ..}     => mode == LoadMode::Word,
+            RelocationKind::DataOffset{byte, ..} => byte == Byte::Both,
+            RelocationKind::External{byte, ..}   => byte == Byte::Both,
             RelocationKind::Label{..}            => true,
             RelocationKind::AddressRel{..}       => false,
             RelocationKind::AddressAbs{..}       => true,
@@ -138,12 +138,6 @@ pub struct Relocation {
 }
 
 #[derive(Clone, Copy)]
-pub struct Extern {
-    pub name: *const c_char,
-    pub addr: u16,
-}
-
-#[derive(Clone, Copy)]
 pub struct Label {
     pub func_name: *const c_char,
     pub label: usize,
@@ -151,10 +145,16 @@ pub struct Label {
 }
 
 #[derive(Clone, Copy)]
+pub struct External {
+    pub name: *const c_char,
+    pub addr: u16,
+}
+
+#[derive(Clone, Copy)]
 pub struct Assembler {
     pub relocs: Array<Relocation>,
-    pub externs: Array<Extern>,
     pub op_labels: Array<Label>,
+    pub externals: Array<External>,
     pub addresses: Array<u16>,
     pub code_start: u16, // load address of code section
     pub frame_sz: u8, // current stack frame size in bytes, because 6502 has no base register
@@ -256,17 +256,17 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
         },
-        Arg::RefExternal(name)  => {
+        Arg::RefExternal(name) => {
             write_byte(output, LDA_IMM);
-            add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::Low}, asm);
+            add_reloc(output, RelocationKind::External {name, offset: 0, byte: Byte::Low}, asm);
             write_byte(output, LDY_IMM);
-            add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::High}, asm);
+            add_reloc(output, RelocationKind::External {name, offset: 0, byte: Byte::High}, asm);
         },
         Arg::External(name) => {
             write_byte(output, LDA_ABS);
-            add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::Word}, asm);
+            add_reloc(output, RelocationKind::External {name, offset: 0, byte: Byte::Both}, asm);
             write_byte(output, LDY_ABS);
-            add_reloc(output, RelocationKind::Extern {name, offset: 1, mode: LoadMode::Word}, asm);
+            add_reloc(output, RelocationKind::External {name, offset: 1, byte: Byte::Both}, asm);
         },
         Arg::AutoVar(index) => load_auto_var(output, index, asm),
         Arg::RefAutoVar(index) => load_auto_var_ref(output, index, asm),
@@ -282,11 +282,11 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
         Arg::DataOffset(offset) => {
             assert!(offset < 65536, "data offset out of range");
             write_byte(output, LDA_IMM);
-            add_reloc(output, RelocationKind::DataOffset{off: offset as u16, mode: LoadMode::Low}, asm);
+            add_reloc(output, RelocationKind::DataOffset{off: offset as u16, byte: Byte::Low}, asm);
             write_byte(output, LDY_IMM);
-            add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, mode: LoadMode::High}, asm);
+            add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, byte: Byte::High}, asm);
         },
-        Arg::Bogus => unreachable!(),
+        Arg::Bogus => unreachable!("bogus-amogus"),
     };
 }
 
@@ -434,7 +434,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                                 asm: *mut Assembler) {
     (*asm).frame_sz = 0;
     let fun_addr = (*output).count as u16;
-    da_append(&mut (*asm).externs, Extern {
+    da_append(&mut (*asm).externals, External {
         name,
         addr: fun_addr,
     });
@@ -520,9 +520,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             Op::ExternalAssign{name, arg} => {
                 load_arg(arg, op.loc, output, asm);
                 write_byte(output, STA_ABS);
-                add_reloc(output, RelocationKind::Extern {name, offset: 0, mode: LoadMode::Word}, asm);
+                add_reloc(output, RelocationKind::External {name, offset: 0, byte: Byte::Both}, asm);
                 write_byte(output, STY_ABS);
-                add_reloc(output, RelocationKind::Extern {name, offset: 1, mode: LoadMode::Word}, asm);
+                add_reloc(output, RelocationKind::External {name, offset: 1, byte: Byte::Both}, asm);
             },
             Op::AutoAssign{index, arg} => {
                 load_arg(arg, op.loc, output, asm);
@@ -581,7 +581,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Binop::BitOr => {
                         load_two_args(output, lhs, rhs, op, asm);
 
-                        write_byte(output, AND_ZP);
+                        write_byte(output, ORA_ZP);
                         write_byte(output, ZP_RHS_L);
                         write_byte(output, TAX);
                         write_byte(output, TYA);
@@ -648,7 +648,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::Minus => {
+                    Binop::Minus  => {
                         load_two_args(output, lhs, rhs, op, asm);
 
                         write_byte(output, SEC);
@@ -809,61 +809,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::GreaterEqual => { // A >= B <=> !(A < B)
-                        load_two_args(output, lhs, rhs, op, asm);
-                        // we subtract, then check sign
-
-                        write_byte(output, LDX_IMM);
-                        write_byte(output, 0);
-
-                        write_byte(output, SEC); // set carry
-                        // sub low byte
-                        write_byte(output, SBC_ZP);
-                        write_byte(output, ZP_RHS_L);
-                        // sub high byte
-                        write_byte(output, TYA);
-                        write_byte(output, SBC_ZP);
-                        write_byte(output, ZP_RHS_H);
-                        // high result in A, N flag if less.
-
-                        // if less skip, we already have X=0
-                        write_byte(output, BMI);
-                        write_byte(output, 1);
-
-                        write_byte(output, INX);
-
-                        write_byte(output, TXA);
-                        // zero extend result
-                        write_byte(output, LDY_IMM);
-                        write_byte(output, 0);
-                    },
-                    Binop::LessEqual => { // A <= B <=> B >= A <=> !(B < A)
-                        load_two_args(output, rhs, lhs, op, asm);
-
-                        write_byte(output, LDX_IMM);
-                        write_byte(output, 0);
-
-                        write_byte(output, SEC); // set carry
-                        // sub low byte
-                        write_byte(output, SBC_ZP);
-                        write_byte(output, ZP_RHS_L);
-                        // sub high byte
-                        write_byte(output, TYA);
-                        write_byte(output, SBC_ZP);
-                        write_byte(output, ZP_RHS_H);
-                        // high result in A, N flag if less.
-
-                        // if less skip, we already have X=0
-                        write_byte(output, BMI);
-                        write_byte(output, 1);
-
-                        write_byte(output, INX);
-
-                        write_byte(output, TXA);
-                        // zero extend result
-                        write_byte(output, LDY_IMM);
-                        write_byte(output, 0);
-                    },
                     Binop::Greater => { // A > B <=> B < A
                         load_two_args(output, rhs, lhs, op, asm);
                         // we subtract, then check sign
@@ -934,6 +879,62 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
+                    Binop::GreaterEqual => { // A >= B <=> !(A < B)
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=0
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::LessEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if greater skip, we already have X=0
+                        write_byte(output, BPL);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                 }
                 store_auto(output, index, asm);
             },
@@ -959,7 +960,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 match fun {
                     Arg::RefExternal(name) | Arg::External(name) => {
                         write_byte(output, JSR);
-                        add_reloc(output, RelocationKind::Extern{name, offset: 0, mode: LoadMode::Word}, asm);
+                        add_reloc(output, RelocationKind::External{name, offset: 0, byte: Byte::Both}, asm);
                     },
                     _ => { // function pointer already loaded in ZP_DEREF_FUN
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).
@@ -984,7 +985,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 store_auto(output, result, asm);
             },
-            Op::Asm {args: _} => unreachable!(),
+            Op::Asm {args: _} => missingf!(op.loc, c!("Inline assembly")),
             Op::Label{label} => {
                 // TODO: RE: https://github.com/tsoding/b/pull/147#issue-3154667157
                 // > For this thing I introduces a new NOP instruction because it would be a bit too
@@ -1053,29 +1054,13 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
         let reloc = *(*asm).relocs.items.add(i);
         let caddr = reloc.addr;
         match reloc.kind {
-            RelocationKind::DataOffset{off, mode} => {
+            RelocationKind::DataOffset{off, byte} => {
                 let faddr = data_start + off;
-                match mode {
-                    LoadMode::Low  => write_byte_at(output, faddr as u8, caddr),
-                    LoadMode::High => write_byte_at(output, (faddr >> 8) as u8, caddr),
-                    LoadMode::Word => write_word_at(output, faddr, caddr),
+                match byte {
+                    Byte::Low  => write_byte_at(output, faddr as u8, caddr),
+                    Byte::High => write_byte_at(output, (faddr >> 8) as u8, caddr),
+                    Byte::Both => write_word_at(output, faddr, caddr),
                 }
-            },
-            RelocationKind::Extern{name, offset, mode} => {
-                for i in 0..(*asm).externs.count {
-                    let label = *(*asm).externs.items.add(i);
-                    if strcmp(label.name, name) == 0 {
-                        let faddr = (*asm).code_start + label.addr + offset as u16;
-                        match mode {
-                            LoadMode::Low  => write_byte_at(output, faddr as u8, caddr),
-                            LoadMode::High => write_byte_at(output, (faddr >> 8) as u8, caddr),
-                            LoadMode::Word => write_word_at(output, faddr, caddr)
-                        }
-                        continue 'reloc_loop;
-                    }
-                }
-                printf(c!("linking failed. could not find extern `%s'\n"), name);
-                unreachable!();
             },
             RelocationKind::Label{func_name: name, label} => {
                 for i in 0..(*asm).op_labels.count {
@@ -1086,6 +1071,22 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
                     }
                 }
                 printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
+                unreachable!();
+            },
+            RelocationKind::External{name, offset, byte} => {
+                for i in 0..(*asm).externals.count {
+                    let label = *(*asm).externals.items.add(i);
+                    if strcmp(label.name, name) == 0 {
+                        let faddr = (*asm).code_start + label.addr + offset as u16;
+                        match byte {
+                            Byte::Low  => write_byte_at(output, faddr as u8, caddr),
+                            Byte::High => write_byte_at(output, (faddr >> 8) as u8, caddr),
+                            Byte::Both => write_word_at(output, faddr, caddr)
+                        }
+                        continue 'reloc_loop;
+                    }
+                }
+                printf(c!("linking failed. could not find extern `%s'\n"), name);
                 unreachable!();
             },
             RelocationKind::AddressRel{idx} => {
@@ -1126,7 +1127,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             // returns the ith character in a string pointed to by string, 0 based
 
             let fun_addr = (*output).count as u16;
-            da_append(&mut (*asm).externs, Extern {
+            da_append(&mut (*asm).externals, External {
                 name,
                 addr: fun_addr,
             });
@@ -1167,7 +1168,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             // returns the ith character in a string pointed to by string, 0 based
 
             let fun_addr = (*output).count as u16;
-            da_append(&mut (*asm).externs, Extern {
+            da_append(&mut (*asm).externals, External {
                 name,
                 addr: fun_addr,
             });
@@ -1214,12 +1215,10 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global], asm: *mut Assembler) {
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *mut [Global], asm: *mut Assembler) {
     for i in 0..globals.len() {
         let global = (*globals)[i];
-
-        da_append(&mut (*asm).externs, Extern {
+        da_append(&mut (*asm).externals, External {
             name: global.name,
             addr: (*output).count as u16,
         });
@@ -1231,17 +1230,14 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
         }
         for j in 0..global.values.count {
             match *global.values.items.add(j) {
-                ImmediateValue::Literal(lit) => {
-                    write_word(output, lit as u16);
-                }
-                ImmediateValue::Name(name) => {
-                    add_reloc(output, RelocationKind::Extern{name, offset: 0, mode: LoadMode::Word}, asm);
-                }
+                ImmediateValue::Literal(lit) => write_word(output, lit as u16),
+                ImmediateValue::Name(name) => add_reloc(output, RelocationKind::External{name, byte: Byte::Both, offset: 0}, asm),
                 ImmediateValue::DataOffset(offset) => {
-                    add_reloc(output, RelocationKind::DataOffset{off: offset as u16, mode: LoadMode::Word}, asm);
+                    add_reloc(output, RelocationKind::DataOffset{off: offset as u16, byte: Byte::Both}, asm);
                 }
             }
         }
+
         for _ in global.values.count..global.minimum_size {
             write_word(output, 0);
         }
@@ -1257,7 +1253,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 
 pub unsafe fn generate_entry(output: *mut String_Builder, asm: *mut Assembler) {
     write_byte(output, JSR);
-    add_reloc(output, RelocationKind::Extern{name: c!("main"), offset: 0, mode: LoadMode::Word}, asm);
+    add_reloc(output, RelocationKind::External{name: c!("main"), offset: 0, byte: Byte::Both}, asm);
 
     // exit code 0
     write_byte(output, JMP_IND);
