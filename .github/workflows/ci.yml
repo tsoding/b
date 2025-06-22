@@ -24,7 +24,7 @@ jobs:
 
       - name: Install/Restore Dependency Cache
         id: cache-deps
-        uses: awalsh128/cache-apt-pkgs-action@v1
+        uses: daaku/gh-action-apt-install@v4
         with:
           packages: clang make fasm mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
           version: 1.0 # version of the cache
