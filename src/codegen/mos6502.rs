@@ -963,7 +963,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
             Op::Funcall{result, fun, args} => {
                 match fun {
-                    Arg::RefExternal(_) | Arg::External(_) => {},
+                    Arg::RefExternal(_) | Arg::External(_) | Arg::Literal(_) => {},
                     arg => {
                         load_arg(arg, op.loc, output, asm);
                         write_byte(output, STA_ZP);
@@ -984,6 +984,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Arg::RefExternal(name) | Arg::External(name) => {
                         write_byte(output, JSR);
                         add_reloc(output, RelocationKind::External{name, offset: 0, byte: Byte::Both}, asm);
+                    },
+                    Arg::Literal(lit) => {
+                        write_byte(output, JSR);
+                        if lit >= 65536 {
+                            diagf!(op.loc, c!("WARNING: function address $`%x` out of range for 16 bits\n"), lit);
+                        }
+                        write_word(output, lit as u16);
                     },
                     _ => { // function pointer already loaded in ZP_DEREF_FUN
                         // there is no jsr (indirect), so emulate using jsr and jmp (indirect).

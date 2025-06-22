@@ -1,5 +1,5 @@
 exit(code) {
-    (*0xFFFC)(code);
+    0(code);
 }
 
 abort() {
