@@ -8,7 +8,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, Arg, AsmFunc, Loc};
+use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, ImmediateValue, Arg, AsmFunc, Loc};
 use crate::nob::*;
 use crate::{missingf, diagf};
 use crate::crust::libc::*;
@@ -18,6 +18,7 @@ const ADC_IMM:   u8 = 0x69;
 const ADC_X:     u8 = 0x7D;
 const ADC_ZP:    u8 = 0x65;
 const AND_ZP:    u8 = 0x25;
+const ORA_ZP:    u8 = 0x05;
 const ASL_ZP:    u8 = 0x06;
 const BCC:       u8 = 0x90;
 const BMI:       u8 = 0x30;
@@ -95,6 +96,13 @@ pub enum RelocationKind {
     Function {
         name: *const c_char
     },
+    External {
+        name: *const c_char,
+        byte: u8, // Indicates which address bytes to use for the relocation
+                  // 0 => First byte
+                  // 1 => Second byte
+                  // 2 => Use both bytes
+    },
     Label {
         func_name: *const c_char,
         label: usize
@@ -105,6 +113,13 @@ impl RelocationKind {
         match self {
             RelocationKind::DataOffset{..} => false,
             RelocationKind::Function{..}   => true,
+            RelocationKind::External{byte, ..} => {
+                match byte {
+                    0|1 => false,
+                    2 => true,
+                    _ => unreachable!(),
+                }
+            },
             RelocationKind::Label{..}      => true,
             RelocationKind::AddressRel{..} => false,
             RelocationKind::AddressAbs{..} => true,
@@ -132,10 +147,17 @@ pub struct Label {
 }
 
 #[derive(Clone, Copy)]
+pub struct External {
+    pub name: *const c_char,
+    pub addr: u16,
+}
+
+#[derive(Clone, Copy)]
 pub struct Assembler {
     pub relocs: Array<Relocation>,
     pub functions: Array<Function>,
     pub op_labels: Array<Label>,
+    pub externals: Array<External>,
     pub addresses: Array<u16>,
     pub code_start: u16, // load address of code section
     pub frame_sz: u8, // current stack frame size in bytes, because 6502 has no base register
@@ -227,9 +249,70 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDA_IND_X);
             write_byte(output, ZP_DEREF_0);
         },
-        Arg::RefAutoVar(_index)  => missingf!(loc, c!("RefAutoVar\n")),
-        Arg::RefExternal(_name)  => missingf!(loc, c!("RefExternal\n")),
-        Arg::External(_name)     => missingf!(loc, c!("External\n")),
+        Arg::RefAutoVar(index)  => {
+            let auto_var_address = STACK_PAGE + (*asm).frame_sz as u16 - (index-1) as u16 * 2 - 1;
+
+            // save current stack pointer
+            write_byte(output, TSX);
+
+            // load address low byte
+            write_byte(output, TXA);
+
+            write_byte(output, CLC);
+            write_byte(output, ADC_IMM);
+            write_byte(output, (auto_var_address & 0xFF) as u8);
+
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_TMP_0);
+
+            write_byte(output, LDA_IMM);
+            write_byte(output, 0);
+            write_byte(output, ADC_IMM);
+            write_byte(output, (auto_var_address >> 8) as u8);
+
+            write_byte(output, TAY);
+            write_byte(output, LDA_ZP);
+            write_byte(output, ZP_TMP_0);
+        }
+        Arg::RefExternal(name)  => {
+            // TODO: Understand why the test ref does not give the correct value to y
+            // where it should write 420 to it
+            // Output:
+            //     y: 410 410 410 410 410
+
+            // load address low byte
+            write_byte(output, LDA_IMM);
+            write_byte(output, 0);
+
+            write_byte(output, CLC);
+            write_byte(output, ADC_IMM);
+            add_reloc(output, RelocationKind::External{name, byte:0}, asm);
+
+            write_byte(output, STA_ZP);
+            write_byte(output, ZP_TMP_0);
+
+            write_byte(output, LDA_IMM);
+            write_byte(output, 0);
+            write_byte(output, ADC_IMM);
+            add_reloc(output, RelocationKind::External{name, byte:1}, asm);
+
+            write_byte(output, TAY);
+            write_byte(output, LDA_ZP);
+            write_byte(output, ZP_TMP_0);
+        },
+        Arg::External(name)     => {
+            write_byte(output, LDX_IMM);
+            write_byte(output, 0);
+
+            write_byte(output, LDA_X);
+            add_reloc(output, RelocationKind::External{name, byte: 2}, asm);
+
+            write_byte(output, LDX_IMM);
+            write_byte(output, 1);
+            // load high byte
+            write_byte(output, LDY_X);
+            add_reloc(output, RelocationKind::External{name, byte: 2}, asm);
+        },
         Arg::AutoVar(index)     => {
             load_auto_var(output, index, asm);
         },
@@ -249,7 +332,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDY_IMM);
             add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, low: false}, asm);
         },
-        Arg::Bogus => unreachable!(),
+        Arg::Bogus => unreachable!("bogus-amogus"),
     };
 }
 
@@ -416,10 +499,45 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 store_auto(output, index, asm);
             },
             Op::Negate {result: _, arg: _} => missingf!(op.loc, c!("implement Negate\n")),
-            Op::UnaryNot{result: _, arg: _} => missingf!(op.loc, c!("implement UnaryNot\n")),
+            Op::UnaryNot{result, arg} => {
+                load_arg(arg, op.loc, output, asm);
+
+                write_byte(output, LDX_IMM);
+                write_byte(output, 0);
+
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
+                write_byte(output, BNE);
+                write_byte(output, 6);
+
+                write_byte(output, TYA);
+                write_byte(output, CMP_IMM);
+                write_byte(output, 0);
+                write_byte(output, BNE);
+                write_byte(output, 1);
+
+                write_byte(output, INX);
+
+                write_byte(output, TXA);
+                write_byte(output, LDY_IMM);
+                write_byte(output, 0);
+
+                store_auto(output, result, asm);
+            },
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
-                    Binop::BitOr => missingf!(op.loc, c!("implement BitOr\n")),
+                    Binop::BitOr => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, ORA_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, ORA_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::BitAnd => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -447,7 +565,19 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, TAY);
                         write_byte(output, TXA);
                     },
-                    Binop::Minus  => missingf!(op.loc, c!("implement Minus\n")),
+                    Binop::Minus  => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, SEC);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, TAX);
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, TAY);
+                        write_byte(output, TXA);
+                    },
                     Binop::Mod => missingf!(op.loc, c!("implement Mod\n")),
                     Binop::Div => missingf!(op.loc, c!("implement Div\n")),
                     Binop::Mult => {
@@ -569,7 +699,33 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::Greater => missingf!(op.loc, c!("implement Greater\n")),
+                    Binop::Greater => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if greater skip, we already have X=1
+                        write_byte(output, BPL);
+                        write_byte(output, 1);
+
+                        write_byte(output, DEX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                     Binop::Equal => {
                         load_two_args(output, lhs, rhs, op, asm);
 
@@ -591,9 +747,82 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::NotEqual => missingf!(op.loc, c!("implement NotEqual\n")),
-                    Binop::GreaterEqual => missingf!(op.loc, c!("implement GreaterEqual\n")),
-                    Binop::LessEqual => missingf!(op.loc, c!("implement LessEqual\n")),
+                    Binop::NotEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 1);
+
+                        write_byte(output, CMP_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        write_byte(output, BNE);
+                        write_byte(output, 5);
+
+                        write_byte(output, CPY_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, BNE);
+                        write_byte(output, 1);
+
+                        write_byte(output, DEX);
+                        write_byte(output, TXA);
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::GreaterEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        write_byte(output, SEC); // set carry
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if less skip, we already have X=0
+                        write_byte(output, BMI);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
+                    Binop::LessEqual => {
+                        load_two_args(output, lhs, rhs, op, asm);
+                        // we subtract, then check sign
+
+                        write_byte(output, LDX_IMM);
+                        write_byte(output, 0);
+
+                        // sub low byte
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_L);
+                        // sub high byte
+                        write_byte(output, TYA);
+                        write_byte(output, SBC_ZP);
+                        write_byte(output, ZP_RHS_H);
+                        // high result in A, N flag if less.
+
+                        // if greater skip, we already have X=0
+                        write_byte(output, BPL);
+                        write_byte(output, 1);
+
+                        write_byte(output, INX);
+
+                        write_byte(output, TXA);
+                        // zero extend result
+                        write_byte(output, LDY_IMM);
+                        write_byte(output, 0);
+                    },
                 }
                 store_auto(output, index, asm);
             },
@@ -644,7 +873,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 store_auto(output, result, asm);
             },
-            Op::Asm {args: _} => unreachable!(),
+            Op::Asm {args: _} => missingf!(op.loc, c!("Inline assembly")),
             Op::Label{label} => {
                 // TODO: RE: https://github.com/tsoding/b/pull/147#issue-3154667157
                 // > For this thing I introduces a new NOP instruction because it would be a bit too
@@ -737,6 +966,29 @@ pub unsafe fn apply_relocations(output: *mut String_Builder, data_start: u16, as
                 printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
                 unreachable!();
             },
+            RelocationKind::External{name, byte} => {
+                for i in 0..(*asm).externals.count {
+                    let external = *(*asm).externals.items.add(i);
+                    if strcmp(external.name, name) == 0 {
+                        match byte {
+                            0 => {
+                                write_byte_at(output, (((*asm).code_start + external.addr) & 0xFF) as u8, caddr)
+                            },
+                            1 => {
+                                write_byte_at(output, (((*asm).code_start + external.addr) >> 8) as u8, caddr)
+                            },
+                            2 => {
+                                write_word_at(output, (*asm).code_start + external.addr, caddr)
+                            },
+                            _ => unreachable!(),
+                        }
+                        continue 'reloc_loop;
+                    }
+                }
+                printf(c!("linking failed. could not find label `%s'\n"), name);
+                unreachable!();
+
+            },
             RelocationKind::AddressRel{idx} => {
                 let jaddr = *(*asm).addresses.items.add(idx);
                 let rel: i16 = jaddr as i16 - (caddr + 1) as i16;
@@ -820,6 +1072,36 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *mut [Global], asm: *mut Assembler) {
+    for i in 0..globals.len() {
+        let global = (*globals)[i];
+        da_append(&mut (*asm).externals, External{
+            name: global.name,
+            addr: (*output).count as u16,
+        });
+
+        if global.values.count > 0 {
+            for j in 0..global.values.count {
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => write_word(output, lit as u16),
+                    ImmediateValue::Name(name) => add_reloc(output, RelocationKind::External{name, byte:2}, asm),
+                    ImmediateValue::DataOffset(offset) => {
+                        add_reloc(output, RelocationKind::DataOffset{off: offset as u16, low: true}, asm);
+                        add_reloc(output, RelocationKind::DataOffset{off: offset as u16, low: false}, asm);
+                    }
+                }
+            }
+
+        }
+
+        if global.values.count < global.minimum_size {
+            for _ in 0..(global.minimum_size - global.values.count) {
+                write_word(output, 0);
+            }
+        }
+    }
+}
+
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     for i in 0..data.len() {
         write_byte(output, (*data)[i]);
@@ -879,6 +1161,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
 
     let data_start = config.load_offset + (*output).count as u16;
     generate_data_section(output, da_slice((*c).data));
+    generate_globals(output, da_slice((*c).globals), &mut asm);
 
     apply_relocations(output, data_start, &mut asm);
     Some(())
