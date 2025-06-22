@@ -1334,6 +1334,8 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     generate_data_section(output, da_slice((*c).data));
     generate_globals(output, da_slice((*c).globals), &mut asm);
 
+    printf(c!("INFO: Generated size: 0x%x\n"), (*output).count as c_uint);
+
     apply_relocations(output, data_start, &mut asm);
     Some(())
 }

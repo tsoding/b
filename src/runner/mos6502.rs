@@ -2,7 +2,7 @@ use crate::nob::*;
 use crate::crust::libc::*;
 use core::ffi::*;
 
-pub const DEFAULT_LOAD_OFFSET: u16 = 0xE000;
+pub const DEFAULT_LOAD_OFFSET: u16 = 0x8000;
 
 #[derive(Clone, Copy)]
 pub struct Config {
