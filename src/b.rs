@@ -1124,8 +1124,55 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
 pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
     let path_exists = file_exists(path);
-    if path_exists < 0 { return None; }
+    if path_exists <= 0 { return None; }
     if path_exists > 0 { da_append(input_paths, path); }
+    Some(())
+}
+
+const LIBB_DIR_NAME: *const c_char = c!("libb/");
+
+pub unsafe fn check_libb_path(arena: *mut Arena, path: (isize, *const c_char)) -> Option<*mut c_char> {
+    let (path_len, path) = path;
+
+    let libb_path = arena::sprintf(arena, c!("%.*s/%s"), path_len, path, LIBB_DIR_NAME);
+    let libb_path_exist = file_exists(libb_path);
+    if libb_path_exist <= 0 { return None; }
+    Some(libb_path)
+}
+
+pub unsafe fn include_libb_if_found(input_paths: *mut Array<*const c_char>, c: *mut Compiler, target_name: *const c_char) -> Option<()> {
+    let path_delim = if cfg!(target_os = "windows") { ';' } else { ':' } as i32;
+
+    // TODO: not sure about windows when PATH contains
+    // any unicode though, considering that
+    // winapi actually splitted in ascii and utf-16 ones
+    // and libc aint gonna do a proper conv to utf-8
+    let mut path = getenv(c!("PATH"));
+    if path.is_null() { return None }
+
+    let mut libb_path = None;
+    while let None = libb_path {
+        let current_path = path;
+        path = strchr(path, path_delim);
+
+        if path.is_null() { break }
+
+        let current_path = (path.offset_from(current_path), current_path);
+        path = path.add(1); // skip delimiter
+
+        libb_path = check_libb_path(&mut (*c).arena_names, current_path);
+    }
+
+    let libb_path = match libb_path {
+        None => {
+            let path = c!(".");
+            check_libb_path(&mut (*c).arena_names, (strlen(path) as isize, path))?
+        },
+        Some(path) => path,
+    };
+
+    include_path_if_exists(&mut *input_paths, arena::sprintf(&mut (*c).arena_names, c!("%s/all.b"), libb_path));
+    include_path_if_exists(&mut *input_paths, arena::sprintf(&mut (*c).arena_names, c!("%s/%s.b"), libb_path, target_name));
     Some(())
 }
 
@@ -1209,25 +1256,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut c: Compiler = zeroed();
     c.target = target;
 
-    if !*nostdlib {
-        // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
-        //   And of course we should also enable the user to append additional paths via the command line.
-        //   Paths to potentially check by default:
-        //   - Current working directory (like right now)
-        //   - Directory where the b executable resides
-        //   - Some system paths like /usr/include/libb on Linux? (Not 100% sure about this one)
-        //   - Some sort of instalation prefix? (Requires making build system more complicated)
-        //
-        //     - rexim (2025-06-12 20:56:08)
-        let libb_path = c!("./libb");
-        let libb_path_exist = file_exists(libb_path);
-        if libb_path_exist < 0 { return None; }
-        if libb_path_exist == 0 {
-            fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
-            return None;
-        }
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s.b"), libb_path, *target_name));
+    if !*nostdlib && include_libb_if_found(&mut input_paths, &mut c, *target_name).is_none() {
+        fprintf(stderr(), c!("ERROR: No standard library path \"%s\" found. Please run the compiler from the same folder where \"%s\" is located or provide path in PATH variable. Or if you don't want to use the standard library pass the -%s flag.\n"), LIBB_DIR_NAME, LIBB_DIR_NAME, flag_name(nostdlib));
+        return None;
     }
 
     // Logging what files are actually being compiled so nothing is hidden from the user.
