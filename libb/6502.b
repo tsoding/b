@@ -1,3 +1,11 @@
+exit(code) {
+    0xFFFC(code);
+}
+
+abort() {
+    0xFFFC(69);
+}
+
 putchar(c) {
     0xFFEF(c);
 }
@@ -34,7 +42,7 @@ printn(n, b) {
 
     // Simple implementation of the reminder (because too
     // difficult to implement directly in assembly)
-    
+
     if(a=div(n, b)) /* assignment, not test for equality */
         printn(a, b); /* recursive */
     c = rem(n,b) + '0';
@@ -117,4 +125,3 @@ lchar(str, i, c) {
     *ptr = *ptr&0xFF00;
     *ptr += c;
 }
-

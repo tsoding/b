@@ -1065,29 +1065,6 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_byte(output, DEY);
 
             write_byte(output, RTS);
-        } else if strcmp(name, c!("exit")) == 0 {
-            let fun_addr = (*output).count as u16;
-            da_append(&mut (*asm).functions, Function {
-                name,
-                addr: fun_addr,
-            });
-
-            // exit code already stored in A
-            write_byte(output, JMP_IND);
-            write_word(output, 0xFFFC);
-        } else if strcmp(name, c!("abort")) == 0 {
-            let fun_addr = (*output).count as u16;
-            da_append(&mut (*asm).functions, Function {
-                name,
-                addr: fun_addr,
-            });
-
-            // exit code 69
-            write_byte(output, LDA_IMM);
-            write_byte(output, 69);
-
-            write_byte(output, JMP_IND);
-            write_word(output, 0xFFFC);
         } else {
             fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
             abort();
