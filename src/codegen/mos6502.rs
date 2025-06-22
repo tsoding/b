@@ -937,8 +937,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_IMM);
                         write_byte(output, 0);
                     },
-                    Binop::LessEqual => {
-                        load_two_args(output, lhs, rhs, op, asm);
+                    Binop::LessEqual => { // X <= Y <=> Y >= X <=> !(Y < X)
+                        load_two_args(output, rhs, lhs, op, asm);
                         // we subtract, then check sign
 
                         write_byte(output, LDX_IMM);
@@ -955,7 +955,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         // high result in A, N flag if less.
 
                         // if greater skip, we already have X=0
-                        write_byte(output, BPL);
+                        write_byte(output, BMI);
                         write_byte(output, 1);
 
                         write_byte(output, INX);
