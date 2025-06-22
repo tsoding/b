@@ -1129,6 +1129,16 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
     Some(())
 }
 
+static mut QUIET: *mut bool = ptr::null_mut();
+
+macro_rules! log_info {
+    ($($arg:tt)*) => {{
+        if !*QUIET {
+            printf($($arg)*);
+        }
+    }};
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
@@ -1154,6 +1164,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
+    QUIET           = flag_bool(c!("q"), false, c!("Don't do logging"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1205,6 +1216,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         fprintf(stderr(), c!("ERROR: no inputs are provided\n"));
         return None;
     }
+    
+    if *QUIET {
+        // Didn't know if errors would be ignored, so nob is still logging errors
+        MINIMAL_LOG_LEVEL = LogLevel::Error;
+    }
 
     let mut c: Compiler = zeroed();
     c.target = target;
@@ -1239,13 +1255,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     //   But I do plan to have similar testing tool written in Crust.
     //
     //     - rexim (2025-06-12 20:18:02)
-    printf(c!("INFO: Compiling files "));
+    log_info!(c!("INFO: Compiling files "));
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
-        if i > 0 { printf(c!(" ")); }
-        printf(c!("%s"), input_path);
+        if i > 0 { log_info!(c!(" ")); }
+        log_info!(c!("%s"), input_path);
     }
-    printf(c!("\n"));
+    log_info!(c!("\n"));
 
     let mut input: String_Builder = zeroed();
 
@@ -1272,7 +1288,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     if *ir {
         codegen::ir::generate_program(&mut output, &c);
         da_append(&mut output, 0);
-        printf(c!("%s"), output.items);
+        log_info!(c!("%s"), output.items);
         return Some(())
     }
 
@@ -1293,7 +1309,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log_info!(c!("INFO: Generated %s\n"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
                 (c!("as"), c!("cc"))
@@ -1308,7 +1324,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 &mut cmd,
                 gas, c!("-o"), output_obj_path, output_asm_path,
             }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if !cmd_with_controlled_output(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
@@ -1325,7 +1341,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     *(*linker).items.add(i),
                 }
             }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if !cmd_with_controlled_output(&mut cmd) { return None; }
             if *run {
                 runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
@@ -1346,7 +1362,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log_info!(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
@@ -1359,7 +1375,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
             }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if !cmd_with_controlled_output(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
                 c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
@@ -1376,7 +1392,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     *(*linker).items.add(i),
                 }
             }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if !cmd_with_controlled_output(&mut cmd) { return None; }
             if *run {
                 runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
             }
@@ -1403,7 +1419,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log_info!(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
@@ -1416,7 +1432,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
             }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if !cmd_with_controlled_output(&mut cmd) { return None; }
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
@@ -1433,7 +1449,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                     *(*linker).items.add(i),
                 }
             }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if !cmd_with_controlled_output(&mut cmd) { return None; }
             if *run {
                 runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
@@ -1451,7 +1467,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            log_info!(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args))?;
             }
@@ -1470,7 +1486,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            log_info!(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 runner::mos6502::run(&mut output, config, effective_output_path)?;
             }
