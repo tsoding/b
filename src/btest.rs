@@ -73,8 +73,6 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
     Status::Ok
 }
 
-
-
 pub unsafe fn usage() {
     fprintf(stderr(), c!("Usage: %s [OPTIONS]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));

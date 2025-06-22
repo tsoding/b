@@ -367,37 +367,32 @@ pub unsafe fn loc(l: *mut Lexer) -> Loc {
     }
 }
 
-pub unsafe fn parse_escape_sequence(l: *mut Lexer, delim: c_char, escape_char: c_char) -> Option<()> {
-        skip_char(l);
-        let Some(x) = peek_char(l) else {
-            (*l).token = Token::ParseError;
-            diagf!(loc(l), c!("LEXER ERROR: Unfinished escape sequence\n"));
-            return None;
-        };
-        let x = match x {
-            x if x == '0'   as c_char => '\0' as c_char,
-            x if x == 'n'   as c_char => '\n' as c_char,
-            x if x == 't'   as c_char => '\t' as c_char,
-            x if x == delim           => delim,
-            x if x == escape_char => escape_char,
-            x => {
-                (*l).token = Token::ParseError;
-                diagf!(loc(l), c!("LEXER ERROR: Unknown escape sequence starting with `%c`\n"), x as c_int);
-                return None;
-            }
-      };
-      da_append(&mut (*l).string_storage, x);
-      skip_char(l);
-      return Some(());
-}
-
 pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<()> {
     let escape_char = if !(*l).historical { '\\' } else {'*'} as c_char;
 
     while let Some(x) = peek_char(l) {
         match x {
-            x if (x == escape_char) => {
-                parse_escape_sequence(l, delim, escape_char)?;
+            x if x == escape_char => {
+                skip_char(l);
+                let Some(x) = peek_char(l) else {
+                    (*l).token = Token::ParseError;
+                    diagf!(loc(l), c!("LEXER ERROR: Unfinished escape sequence\n"));
+                    return None;
+                };
+                let x = match x {
+                    x if x == '0'   as c_char => '\0' as c_char,
+                    x if x == 'n'   as c_char => '\n' as c_char,
+                    x if x == 't'   as c_char => '\t' as c_char,
+                    x if x == delim           => delim,
+                    x if x == escape_char     => escape_char,
+                    x => {
+                        (*l).token = Token::ParseError;
+                        diagf!(loc(l), c!("LEXER ERROR: Unknown escape sequence starting with `%c`\n"), x as c_int);
+                        return None;
+                    }
+                };
+                da_append(&mut (*l).string_storage, x);
+                skip_char(l);
             },
             x if x == delim => break,
             _ => {
