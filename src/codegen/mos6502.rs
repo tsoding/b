@@ -276,7 +276,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
         }
         Arg::RefExternal(name)  => {
             // TODO: Understand why the test ref does not give the correct value to y
-            // where it should write 420 to it 
+            // where it should write 420 to it
             // Output:
             //     y: 410 410 410 410 410
 
@@ -332,7 +332,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
             write_byte(output, LDY_IMM);
             add_reloc(output, RelocationKind::DataOffset{off: (offset + 1) as u16, low: false}, asm);
         },
-        Arg::Bogus => unreachable!(),
+        Arg::Bogus => unreachable!("bogus-amogus"),
     };
 }
 
@@ -873,7 +873,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 store_auto(output, result, asm);
             },
-            Op::Asm {args: _} => unreachable!(),
+            Op::Asm {args: _} => missingf!(op.loc, c!("Inline assembly")),
             Op::Label{label} => {
                 // TODO: RE: https://github.com/tsoding/b/pull/147#issue-3154667157
                 // > For this thing I introduces a new NOP instruction because it would be a bit too
