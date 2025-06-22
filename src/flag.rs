@@ -5,6 +5,7 @@ type Flag_List = crate::nob::Array<*const c_char>;
 
 extern "C" {
     pub fn flag_bool(name: *const c_char, def: bool, desc: *const c_char) -> *mut bool;
+    pub fn flag_uint64(name: *const c_char, def: u64, desc: *const c_char) -> *mut u64;
     pub fn flag_str(name: *const c_char, def: *const c_char, desc: *const c_char) -> *mut*mut c_char;
     pub fn flag_parse(argc: c_int, argv: *mut*mut c_char) -> bool;
     pub fn flag_rest_argc() -> c_int;

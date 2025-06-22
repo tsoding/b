@@ -2,12 +2,36 @@ use core::ffi::*;
 use core::slice;
 use crate::crust::libc;
 
+#[cfg(target_os = "windows")]
+pub type Child_Process = *mut c_void;
+#[cfg(not(target_os = "windows"))]
+pub type Child_Process = i32;
+
+#[cfg(target_os = "windows")]
+pub const INVALID_PROC: Child_Process = core::ptr::null_mut();
+#[cfg(not(target_os = "windows"))]
+pub const INVALID_PROC: Child_Process = -1;
+
+#[cfg(target_os = "windows")]
+pub type Nob_Fd = *mut c_void;
+#[cfg(not(target_os = "windows"))]
+pub type Nob_Fd = i32;
+
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Array<T> {
     pub items: *mut T,
     pub count: usize,
     pub capacity: usize,
+}
+
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Nob_Cmd_Redirect {
+    pub fdin: *mut Nob_Fd,
+    pub fdout: *mut Nob_Fd,
+    pub fderr: *mut Nob_Fd,
 }
 
 pub unsafe fn da_last<T>(xs: *const Array<T>) -> Option<*const T> {
@@ -62,6 +86,19 @@ pub unsafe fn da_append_many<T: Clone + Copy>(xs: *mut Array<T>, items: *const [
     }
 }
 
+pub unsafe fn da_pop_first<T>(xs: *mut Array<T>) -> Option<T> {
+    if (*xs).count > 0 {
+        let result = (*xs).items.read();
+        (*xs).count -= 1;
+        if (*xs).count > 0 {
+            libc::memmove((*xs).items as _, (*xs).items.add(1) as _, (*xs).count * core::mem::size_of::<T>());
+        }
+        Some(result)
+    } else {
+        None
+    }
+}
+
 #[macro_export]
 macro_rules! shift {
     ($ptr:ident, $len:ident) => {{
@@ -86,6 +123,15 @@ macro_rules! cmd_append {
 extern "C" {
     #[link_name = "nob_cmd_run_sync_and_reset"]
     pub fn cmd_run_sync_and_reset(cmd: *mut Cmd) -> bool;
+    #[link_name = "nob_cmd_run_async_redirect"]
+    fn nob_cmd_run_async_redirect(cmd: Cmd, redirect: Nob_Cmd_Redirect) -> Child_Process;
+    #[link_name = "nob_proc_wait"]
+    pub fn child_process_wait(proc: Child_Process) -> bool;
+}
+
+pub unsafe fn cmd_run_async(cmd: *mut Cmd) -> Child_Process {
+    let redirect: Nob_Cmd_Redirect = core::mem::zeroed();
+    nob_cmd_run_async_redirect(*cmd, redirect)
 }
 
 pub type String_Builder = Array<c_char>;

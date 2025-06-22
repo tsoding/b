@@ -29,6 +29,7 @@ pub mod libc {
         pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
 
         pub fn abort() -> !;
+        pub fn memmove(dest: *mut c_void, src: *const c_void, size: usize) -> *mut c_void;
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn printf(fmt: *const c_char, ...) -> c_int;
         pub fn fprintf(stream: *mut FILE, fmt: *const c_char, ...) -> c_int;

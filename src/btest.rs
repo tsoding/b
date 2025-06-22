@@ -38,41 +38,6 @@ struct Report {
     statuses: Array<Status>,
 }
 
-pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target) -> Status {
-    // TODO: add timeouts for running and building in case they go into infinite loop or something
-    let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
-    let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
-        Target::Fasm_x86_64_Windows => c!("exe"),
-        Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
-        Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
-        Target::Uxn                 => c!("rom"),
-        Target::Mos6502             => c!("6502"),
-    });
-    cmd_append! {
-        cmd,
-        c!("./build/b"),
-        input_path,
-        c!("-t"), name_of_target(target).unwrap(),
-        c!("-o"), output_path,
-    }
-    if !cmd_run_sync_and_reset(cmd) {
-        return Status::BuildFail;
-    }
-    let run_result = match target {
-        Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
-        Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
-        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
-        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
-        Target::Mos6502             => runner::mos6502::run(output, Config {
-            load_offset: DEFAULT_LOAD_OFFSET
-        }, output_path),
-    };
-    if let None = run_result {
-        return Status::RunFail;
-    }
-    Status::Ok
-}
-
 pub unsafe fn usage() {
     fprintf(stderr(), c!("Usage: %s [OPTIONS]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
@@ -91,11 +56,19 @@ struct Stats {
     rs: usize,
 }
 
+#[derive(Clone, Copy)]
+struct Job {
+    child: Child_Process,
+    case_index: usize,
+    target_index: usize,
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
     let cases_flags  = flag_list(c!("c"), c!("Test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
+    let jobs_count   = flag_uint64(c!("j"), 4, c!("Amount of jobs to run in parallel."));
     // TODO: flag to print the list of tests
     // TODO: flag to print the list of targets
     // TODO: select test cases and targets by a glob pattern
@@ -112,8 +85,6 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    let mut sb: String_Builder = zeroed();
-    let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
 
     let mut targets: Array<Target> = zeroed();
@@ -155,20 +126,137 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
 
-    // TODO: Parallelize the test runner.
-    // Probably using `cmd_run_async_and_reset`.
-    // Also don't forget to add the `-j` flag.
+    let mut jobs: Array<Job> = zeroed();
+
+    // pre-fill
     for i in 0..cases.count {
         let test_name = *cases.items.add(i);
-        let mut report = Report {
+        da_append(&mut reports, Report {
             name: test_name,
             statuses: zeroed(),
-        };
+        });
+        for _ in 0..targets.count {
+            da_append(&mut (*reports.items.add(i)).statuses, Status::Ok);
+        }
+    }
+
+    // build
+    for i in 0..cases.count {
+        let test_name = *cases.items.add(i);
         for j in 0..targets.count {
             let target = *targets.items.add(j);
-            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target));
+
+            let mut cmd: Cmd = zeroed();
+            let input_path = temp_sprintf(c!("%s/%s.b"), *test_folder, test_name);
+            let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, test_name, match target {
+                Target::Fasm_x86_64_Windows => c!("exe"),
+                Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
+                Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+                Target::Uxn                 => c!("rom"),
+                Target::Mos6502             => c!("6502"),
+            });
+            cmd_append! {
+                &mut cmd,
+                c!("./build/b"),
+                input_path,
+                c!("-t"), name_of_target(target).unwrap(),
+                c!("-o"), output_path,
+            }
+
+            let child = cmd_run_async(&mut cmd);
+            if child == INVALID_PROC {
+                *(*reports.items.add(i)).statuses.items.add(j) = Status::BuildFail;
+                continue;
+            };
+
+            da_append(&mut jobs, Job { child, case_index: i, target_index: j });
+
+            if jobs.count >= *jobs_count as usize {
+                if let Some(job) = da_pop_first(&mut jobs) {
+                    if !child_process_wait(job.child) {
+                        *(*reports.items.add(job.case_index)).statuses.items.add(job.target_index) = Status::BuildFail;
+                    }
+                }
+            }
         }
-        da_append(&mut reports, report);
+    }
+
+    // wait for all jobs
+    while jobs.count > 0 {
+        if let Some(job) = da_pop_first(&mut jobs) {
+            if !child_process_wait(job.child) {
+                *(*reports.items.add(job.case_index)).statuses.items.add(job.target_index) = Status::BuildFail;
+            }
+        }
+    }
+
+    // run
+    let mut sb: String_Builder = zeroed();
+    for i in 0..cases.count {
+        for j in 0..targets.count {
+            if *(*reports.items.add(i)).statuses.items.add(j) as u32 != Status::Ok as u32 {
+                continue;
+            }
+
+            let test_name = *cases.items.add(i);
+            let target = *targets.items.add(j);
+            let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, test_name, match target {
+                Target::Fasm_x86_64_Windows => c!("exe"),
+                Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
+                Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+                Target::Uxn                 => c!("rom"),
+                Target::Mos6502             => c!("6502"),
+            });
+
+            let mut cmd: Cmd = zeroed();
+            let mut is_async = true;
+
+            match target {
+                Target::Fasm_x86_64_Linux | Target::Fasm_x86_64_Windows => {
+                    cmd_append!(&mut cmd, output_path,);
+                }
+                Target::Gas_AArch64_Linux => {
+                    cmd_append!(&mut cmd, c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"), output_path,);
+                }
+                Target::Uxn => {
+                    cmd_append!(&mut cmd, c!("uxncli"), output_path,);
+                }
+                Target::Mos6502 => {
+                    is_async = false;
+                    let run_result = runner::mos6502::run(&mut sb, Config {
+                        load_offset: DEFAULT_LOAD_OFFSET
+                    }, output_path);
+                    if run_result.is_none() {
+                        *(*reports.items.add(i)).statuses.items.add(j) = Status::RunFail;
+                    }
+                }
+            }
+
+            if is_async {
+                let child = cmd_run_async(&mut cmd);
+                if child == INVALID_PROC {
+                    *(*reports.items.add(i)).statuses.items.add(j) = Status::RunFail;
+                } else {
+                    da_append(&mut jobs, Job { child, case_index: i, target_index: j });
+                }
+            }
+
+            if jobs.count >= *jobs_count as usize {
+                if let Some(job) = da_pop_first(&mut jobs) {
+                    if !child_process_wait(job.child) {
+                        *(*reports.items.add(job.case_index)).statuses.items.add(job.target_index) = Status::RunFail;
+                    }
+                }
+            }
+        }
+    }
+
+    while jobs.count > 0 {
+        if let Some(job) = da_pop_first(&mut jobs) {
+            if !child_process_wait(job.child) {
+                *(*reports.items.add(job.case_index)).statuses.items.add(job.target_index) = Status::RunFail;
+            }
+        }
     }
 
     // TODO: generate HTML reports and deploy them somewhere automatically
