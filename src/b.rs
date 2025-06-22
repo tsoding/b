@@ -1152,13 +1152,18 @@ pub unsafe fn include_libb_if_found(input_paths: *mut Array<*const c_char>, c: *
 
     let mut libb_path = None;
     while let None = libb_path {
+        if path.is_null() { break }
+
         let current_path = path;
         path = strchr(path, path_delim);
 
-        if path.is_null() { break }
-
-        let current_path = (path.offset_from(current_path), current_path);
-        path = path.add(1); // skip delimiter
+        let current_path = if path.is_null() {
+            (strlen(current_path) as isize, current_path)
+        } else {
+            let new_path = (path.offset_from(current_path), current_path);
+            path = path.add(1); // skip delimiter
+            new_path
+        };
 
         libb_path = check_libb_path(&mut (*c).arena_names, current_path);
     }
