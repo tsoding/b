@@ -159,7 +159,7 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
     }
 }
 
-// IMPORTANT! The order of PUNCTS is important because they are checked as prefixes of input sequentially.
+// IMPORTANT! The order of PUNCTS and HISTORICAL_PUNCTS is important because they are checked as prefixes of input sequentially.
 //   It's important to keep `+=` before `+` because otherwise `+=` may end up getting tokenized as `+` and `=`.
 //   As a rule of thumb, if one token is a substring of another one, keep the array index of the longer one lower
 //   so it's checked earlier.
