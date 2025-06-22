@@ -413,9 +413,14 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
     'comments: loop {
         skip_whitespaces(l);
 
-        // TODO: C++ style comments are not particularly historically accurate
-       //       Migrate it to be gone behind (*l).historical 
-        if skip_prefix(l, c!("//")) && !(*l).historical {
+        let saved_point = (*l).parse_point;
+        if skip_prefix(l, c!("//")) {
+            if (*l).historical {
+                (*l).parse_point = saved_point;
+                diagf!(loc(l), c!("LEXER ERROR: C++ style comments are not available in the historical mode.\n"));
+                (*l).token = Token::ParseError;
+                return None;
+            }
             skip_until(l, c!("\n"));
             continue 'comments;
         }
@@ -469,7 +474,15 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         return Some(())
     }
 
-    if skip_prefix(l, c!("0x")) && !((*l).historical){
+    let saved_point = (*l).parse_point;
+    if skip_prefix(l, c!("0x")) {
+        if (*l).historical {
+            (*l).parse_point = saved_point;
+            diagf!(loc(l), c!("LEXER ERROR: hex literals are not available in the historical mode.\n"));
+            (*l).token = Token::ParseError;
+            return None;
+        }
+
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
         while let Some(x) = peek_char(l) {
