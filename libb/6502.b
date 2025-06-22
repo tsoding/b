@@ -22,8 +22,11 @@ malloc() {
 
 /* TODO: Try to implement this function with assembly
    Problem with this implementation is that it is not
-   mapped to the operator */
-div (a, b) {
+   mapped to the operator
+   We cannot call this function `div` as it conflicts
+   with the `divmod` test
+*/
+_div(a, b) {
     auto d;
     d = 0; while(a >= b) {
         a = a - b;
@@ -35,7 +38,7 @@ div (a, b) {
 /* TODO: Try to implement this function with assembly
    Problem with this implementation is that it is not
    mapped to the operator */
-rem (a, b) {
+_rem (a, b) {
     auto d;
     while(a >= b) {
         a = a - b;
@@ -46,12 +49,14 @@ rem (a, b) {
 printn(n, b) {
     auto a, c, d;
 
-    // Simple implementation of the reminder (because too
-    // difficult to implement directly in assembly)
+    if (n < 0) {
+        putchar('-');
+        n = -n;
+    }
 
-    if(a=div(n, b)) /* assignment, not test for equality */
+    if(a=_div(n, b)) /* assignment, not test for equality */
         printn(a, b); /* recursive */
-    c = rem(n,b) + '0';
+    c = _rem(n,b) + '0';
     if (c > '9') c += 7;
     putchar(c);
 }
