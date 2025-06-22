@@ -1,3 +1,5 @@
+// TODO: Make btest test historical mode
+
 #![no_main]
 #![no_std]
 #![allow(non_upper_case_globals)]
@@ -81,6 +83,14 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
     strcmp(*(a as *const *const c_char), *(b as *const *const c_char))
 }
 
+// TODO: Each field of Stats corresponds to an enum value of Status.
+#[derive(Clone, Copy)]
+struct Stats {
+    ks: usize,
+    bs: usize,
+    rs: usize,
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
     let cases_flags  = flag_list(c!("c"), c!("Test cases"));
@@ -102,7 +112,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    let mut output: String_Builder = zeroed();
+    let mut sb: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
 
@@ -156,12 +166,26 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         };
         for j in 0..targets.count {
             let target = *targets.items.add(j);
-            da_append(&mut report.statuses, run_test(&mut cmd, &mut output, *test_folder, test_name, target));
+            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target));
         }
         da_append(&mut reports, report);
     }
 
     // TODO: generate HTML reports and deploy them somewhere automatically
+
+    let mut stats_by_target: Array<Stats> = zeroed();
+    for j in 0..targets.count {
+        let mut stats: Stats = zeroed();
+        for i in 0..reports.count {
+            let report = *reports.items.add(i);
+            match *report.statuses.items.add(j) {
+                Status::Ok        => stats.ks += 1,
+                Status::BuildFail => stats.bs += 1,
+                Status::RunFail   => stats.rs += 1,
+            }
+        }
+        da_append(&mut stats_by_target, stats);
+    }
 
     let mut width = 0;
     for i in 0..reports.count {
@@ -174,13 +198,24 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
     printf(c!("\n"));
 
+    let mut target_column_width = 0;
     for j in 0..targets.count {
         let target = *targets.items.add(j);
+        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
+        if width > target_column_width {
+            target_column_width = width;
+        }
+    }
+
+    for j in 0..targets.count {
+        let target = *targets.items.add(j);
+        let stats = *stats_by_target.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
         for _ in 0..j {
             printf(c!("│ "));
         }
-        printf(c!("┌─%s\n"), name_of_target(target).unwrap(), j);
+        printf(c!("┌─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
     }
 
     for i in 0..reports.count {
@@ -199,11 +234,13 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     for j in (0..targets.count).rev() {
         let target = *targets.items.add(j);
+        let stats = *stats_by_target.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
         for _ in 0..j {
             printf(c!("│ "));
         }
-        printf(c!("└─%s\n"), name_of_target(target).unwrap(), j);
+        printf(c!("└─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
     }
 
     printf(c!("\n"));

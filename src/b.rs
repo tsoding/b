@@ -982,6 +982,7 @@ pub struct Compiler {
     pub arena_labels: Arena,
     pub target: Target,
     pub error_count: usize,
+    pub historical: bool
 }
 
 pub const MAX_ERROR_COUNT: usize = 100;
@@ -1073,7 +1074,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             // TODO: This code is ugly
             // couldn't find a better way to write it while keeping accurate error messages
-            get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
 
             if (*l).token == Token::OBracket {
                 global.is_vec = true;
@@ -1082,11 +1083,15 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     global.minimum_size = (*l).int_number as usize;
                     get_and_expect_token_but_continue(l, c, Token::CBracket)?;
                 }
-                get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
             }
 
             while (*l).token != Token::SemiColon {
                 let value = match (*l).token {
+                    Token::Minus => {
+                        get_and_expect_token(l, Token::IntLit)?;
+                        ImmediateValue::Literal(!(*l).int_number + 1)
+                    }
                     Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                     Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                     Token::ID => {
@@ -1105,7 +1110,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 if (*l).token == Token::Comma {
-                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                    get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
                 } else {
                     break;
                 }
@@ -1165,6 +1170,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
     QUIET           = flag_bool(c!("q"), false, c!("Don't do logging"));
+    let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1224,6 +1230,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let mut c: Compiler = zeroed();
     c.target = target;
+    c.historical = *historical;
 
     if !*nostdlib {
         // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
@@ -1272,7 +1279,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
 
-        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
+        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
 
         compile_program(&mut l, &mut c)?;
     }
