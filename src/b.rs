@@ -1182,7 +1182,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if (*target_name).is_null() {
         usage();
-        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag."), flag_name(target_name));
+        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag.\n"), flag_name(target_name));
         return None;
     }
 
