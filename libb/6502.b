@@ -16,8 +16,21 @@ fputc(c, fd) {
 }
 
 /* TODO: actually allocate something */
-malloc() {
-    return(0x0200);
+__heap_ptr 0x0200;
+malloc(size) {
+    extrn printf;
+    auto ptr;
+    ptr = __heap_ptr;
+    __heap_ptr += size;
+    if (__heap_ptr >= 0x1000) {
+        printf("Allocation reached end: %p\nTODO: allow allocating more, implement free\n", __heap_ptr);
+        abort();
+    }
+    return (ptr);
+}
+/* TODO: free someting? */
+realloc(ptr, size) {
+    return (malloc(size));
 }
 
 /* TODO: Try to implement this function with assembly
@@ -46,22 +59,22 @@ _rem (a, b) {
     return (a);
 }
 
-printn(n, b) {
+printn(n, b, sign) {
     auto a, c, d;
 
-    if (n < 0) {
+    if (sign && n < 0) {
         putchar('-');
         n = -n;
     }
 
     if(a=_div(n, b)) /* assignment, not test for equality */
-        printn(a, b); /* recursive */
+        printn(a, b, 0); /* recursive */
     c = _rem(n,b) + '0';
     if (c > '9') c += 7;
     putchar(c);
 }
 
-printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
+printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10) {
     extrn char;
     auto i, j, arg, c;
     i = 0;
@@ -81,25 +94,32 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9) {
             if (c == 0) {
                 return;
             } else if (c == 'd') {
-                printn(*arg, 10);
+                printn(*arg, 10, 1);
+            } else if (c == 'u') {
+                printn(*arg, 10, 0);
             } else if (c == 'p') {
-                printn(*arg, 16);
+                putchar('$');
+                printn(*arg, 16, 0);
             } else if (c == 'c') {
                 putchar(*arg);
             } else if (c == 's') { /* clobbers `c`, the last one */
                 while (c = char(*arg, j++)) {
                     putchar(c);
                 }
+            } else if (c == 'z') { /* hack for %zu */
+                c = '%';
+                goto while_end;
             } else {
                 putchar('%');
                 arg += 2; /* word size */
             }
             arg -= 2; /* word size */
         } else {
-            putchar(c); // ECHO
+            putchar(c); /* ECHO */
         }
         i++;
         c = char(str, i);
+        while_end:
     }
 }
 
@@ -114,4 +134,16 @@ strlen(s) {
 toupper(c) {
     if ('a' <= c && c <= 'z') return (c - 'a' + 'A');
     return (c);
+}
+
+
+/* memory related functions */
+memset(addr, val, size) {
+    extrn lchar;
+    auto i;
+    i = 0;
+    while (i < size) {
+        lchar(addr, i, val);
+        i += 1;
+    }
 }
