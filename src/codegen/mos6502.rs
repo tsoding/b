@@ -988,7 +988,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Arg::Literal(lit) => {
                         write_byte(output, JSR);
                         if lit >= 65536 {
-                            diagf!(op.loc, c!("WARNING: function address $`%x` out of range for 16 bits\n"), lit);
+                            diagf!(op.loc, c!("ERROR: function address $%X out of range for 16 bits\n"), lit);
+                            abort();
                         }
                         write_word(output, lit as u16);
                     },
