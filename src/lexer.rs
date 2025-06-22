@@ -383,6 +383,7 @@ pub unsafe fn parse_string_into_storage(l: *mut Lexer, delim: c_char) -> Option<
                     x if x == '0'   as c_char => '\0' as c_char,
                     x if x == 'n'   as c_char => '\n' as c_char,
                     x if x == 't'   as c_char => '\t' as c_char,
+                    x if x == 'r'   as c_char => '\r' as c_char,
                     x if x == delim           => delim,
                     x if x == escape_char     => escape_char,
                     x => {

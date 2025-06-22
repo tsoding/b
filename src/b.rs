@@ -1074,7 +1074,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             // TODO: This code is ugly
             // couldn't find a better way to write it while keeping accurate error messages
-            get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
 
             if (*l).token == Token::OBracket {
                 global.is_vec = true;
@@ -1083,11 +1083,15 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     global.minimum_size = (*l).int_number as usize;
                     get_and_expect_token_but_continue(l, c, Token::CBracket)?;
                 }
-                get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
             }
 
             while (*l).token != Token::SemiColon {
                 let value = match (*l).token {
+                    Token::Minus => {
+                        get_and_expect_token(l, Token::IntLit)?;
+                        ImmediateValue::Literal(!(*l).int_number + 1)
+                    }
                     Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                     Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                     Token::ID => {
@@ -1106,7 +1110,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 if (*l).token == Token::Comma {
-                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                    get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
                 } else {
                     break;
                 }
