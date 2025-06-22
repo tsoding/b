@@ -29,6 +29,7 @@ const CMP_IMM:   u8 = 0xC9;
 const CMP_ZP:    u8 = 0xC5;
 const CPY_IMM:   u8 = 0xC0;
 const CPY_ZP:    u8 = 0xC4;
+const DEC_ZP:    u8 = 0xC6;
 const DEX:       u8 = 0xCA;
 const DEY:       u8 = 0x88;
 const EOR_IMM:   u8 = 0x49;
@@ -85,6 +86,7 @@ const ZP_TMP_1:         u8 = 7;
 const ZP_TMP_2:         u8 = 8;
 const ZP_TMP_3:         u8 = 9;
 const ZP_TMP_4:         u8 = 10;
+const ZP_TMP_5:         u8 = 11;
 const ZP_DEREF_FUN_0:   u8 = 12; // can't be the same as ZP_DEREF,
 const ZP_DEREF_FUN_1:   u8 = 13; // as we use this before argument loading
 
@@ -705,6 +707,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, STY_ZP);
                         write_byte(output, ZP_TMP_1);
 
+                        // shift 16 times
+                        write_byte(output, LDA_IMM);
+                        write_byte(output, 16);
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_5);
+
                         ops::save_and_remove_signs(output, asm);
 
                         // from here on: unsigned multiplication
@@ -721,13 +729,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         let cont = create_address_label(asm);
                         let finished = create_address_label(asm);
 
-                        // if both zero [-> A = 0], we are finished
+                        // if shifted 16 times, we are finished
                         write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_RHS_L);
-                        write_byte(output, BNE);
-                        add_reloc(output, RelocationKind::AddressRel{idx: cont}, asm);
-                        write_byte(output, LDA_ZP);
-                        write_byte(output, ZP_RHS_H);
+                        write_byte(output, ZP_TMP_5);
                         write_byte(output, BNE);
                         add_reloc(output, RelocationKind::AddressRel{idx: cont}, asm);
 
@@ -735,6 +739,9 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         add_reloc(output, RelocationKind::AddressAbs{idx: finished}, asm);
 
                         link_address_label_here(cont, output, asm);
+
+                        write_byte(output, DEC_ZP);
+                        write_byte(output, ZP_TMP_5);
 
                         // shift left current accumulater between single adds
                         write_byte(output, ASL_ZP);
