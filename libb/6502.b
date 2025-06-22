@@ -110,14 +110,3 @@ toupper(c) {
     if ('a' <= c && c <= 'z') return (c - 'a' + 'A');
     return (c);
 }
-
-// TODO: see how to implement it with assembly
-// to understand if there is better memory usage.
-// This will probably generate more instructions
-// then needed.
-lchar(str, i, c) {
-    auto ptr;
-    ptr = str + i;
-    *ptr = *ptr&0xFF00;
-    *ptr += c;
-}
