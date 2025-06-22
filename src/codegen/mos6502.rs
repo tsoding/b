@@ -49,11 +49,13 @@ const LDY_ABS:   u8 = 0xAC;
 const LDY_IMM:   u8 = 0xA0;
 const LDY_X:     u8 = 0xBC;
 const LDY_ZP:    u8 = 0xA4;
+const LSR_ZP:    u8 = 0x46;
 const NOP:       u8 = 0xEA;
 const ORA_ZP:    u8 = 0x05;
 const PHA:       u8 = 0x48;
 const PLA:       u8 = 0x68;
 const ROL_ZP:    u8 = 0x26;
+const ROR_ZP:    u8 = 0x66;
 const RTS:       u8 = 0x60;
 const SBC_ZP:    u8 = 0xE5;
 const SEC:       u8 = 0x38;
@@ -636,7 +638,38 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         write_byte(output, LDY_ZP);
                         write_byte(output, ZP_TMP_1);
                     },
-                    Binop::BitShr => missingf!(op.loc, c!("implement BitShr\n")),
+                    Binop::BitShr => {
+                        load_two_args(output, lhs, rhs, op, asm);
+
+                        write_byte(output, STA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, STY_ZP);
+                        write_byte(output, ZP_TMP_1);
+
+                        // as maximum shift is 16, Y can be ignored.
+                        // TODO: only shift 16 times if value > 16 provided
+                        // TODO: do we have to handle negative shifts?
+                        write_byte(output, LDX_ZP);
+                        write_byte(output, ZP_RHS_L);
+
+                        let loop_start = create_address_label_here(output, asm);
+                        write_byte(output, BEQ);
+                        write_byte(output, 8);
+
+                        write_byte(output, LSR_ZP);
+                        write_byte(output, ZP_TMP_1);
+                        write_byte(output, ROR_ZP);
+                        write_byte(output, ZP_TMP_0);
+
+                        write_byte(output, DEX);
+                        write_byte(output, JMP_ABS);
+                        add_reloc(output, RelocationKind::AddressAbs{idx: loop_start}, asm);
+
+                        write_byte(output, LDA_ZP);
+                        write_byte(output, ZP_TMP_0);
+                        write_byte(output, LDY_ZP);
+                        write_byte(output, ZP_TMP_1);
+                    },
                     Binop::Plus => {
                         load_two_args(output, lhs, rhs, op, asm);
 
