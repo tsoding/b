@@ -64,7 +64,7 @@ pub unsafe fn run(output: *mut String_Builder, config: Config, output_path: *con
         fake6502::step();
 
         let curr_sp = fake6502::sp & 0xFF;
-        if opcode == 0x48 && curr_sp > prev_sp { // PHA instructions
+        if opcode == 0x48 && curr_sp > prev_sp { // PHA instruction
             printf(c!("[FATAL] Stack overflow detected\n[FATAL] SP changed from $%02X to $%02X after PHA instruction\n"),
                    prev_sp as c_uint, curr_sp as c_uint);
             return None;
