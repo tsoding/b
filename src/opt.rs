@@ -11,70 +11,83 @@ pub unsafe fn optimize_func(c: *mut Compiler,f:*mut Func){
 	//when we see the first label that means someone may actually jump from a new context
 	//this means we can constant fold all autovar assigments here and its fine
 
-	///right before a return we can dead code eliminate for similar reasons
-
 	let start = *(*f).body.items;
 	let mut block = constant_fold_block(c,f,0);
+
+	//rest is normal
 	while block < (*f).body.count {
 		block=normal_block(c,f,block);
 	}
 
 }
 
-pub unsafe fn normal_block(c: *mut Compiler,f: *mut Func,mut block: usize) -> usize{
-	while block < (*f).body.count {
+pub unsafe fn normal_block(c: *mut Compiler,f: *mut Func, block: usize) -> usize{
+	let mut id = block;
+	while id < (*f).body.count {
 
-		let spot = (*f).body.items.add(block);
+		let spot = (*f).body.items.add(id);
 		match (*spot).opcode {
-			Op::Label{ .. } | Op::Asm{..} | Op::Funcall{..}  => return block+1,
-			Op::JmpLabel{..} | Op::Return{..} => {
-				return eliminate_block_end(c,f,block+1);
+			Op::Label{ .. } | Op::Asm{..} | Op::Funcall{..}  => return id+1,
+			Op::Return{..} => {
+				///since this is returning out no one can possibly read the autovars
+				//because autovars are function local
+				//in fact this is an even more agressive type of constant folding we could do here
 
-			}
+				return constant_fold_block(c,f,block);
+
+			},
+			Op::JmpLabel{..} => {
+				return eliminate_block_end(c,f,id+1)
+
+			},
 			_ => {}
 		};
 
-		block+=1;
+		id+=1;
 	}
 
-	block
+	id
 }
 
-pub unsafe fn eliminate_block_end(c: *mut Compiler,f: *mut Func,mut block: usize) -> usize {
-	while block < (*f).body.count {
+pub unsafe fn eliminate_block_end(c: *mut Compiler,f: *mut Func, block: usize) -> usize {
+	let mut id = block;
+	
+	while id < (*f).body.count {
 
-		let spot = (*f).body.items.add(block);
+		let spot = (*f).body.items.add(id);
 		match (*spot).opcode {
-			Op::Label{..}  => return block,
+			Op::Label{..}  => return id,
 			Op::Asm{..} => {}
 			_=>{(*spot).opcode = Op::NoOp;}
 		};
 
-		block+=1;
+		id+=1;
 	}
 
-	block
+	id
 }
 
-pub unsafe fn constant_fold_block(c: *mut Compiler,f: *mut Func,mut block: usize) -> usize {	
-	while block < (*f).body.count {
-		let spot = (*f).body.items.add(block);
+pub unsafe fn constant_fold_block(c: *mut Compiler,f: *mut Func, block: usize) -> usize {	
+	let mut id = block;
+	
+	while id < (*f).body.count {
+		let spot = (*f).body.items.add(id);
 
 		(*spot).opcode = eval_constant_op((*spot).opcode,(*c).target);
 
 		match (*spot).opcode {
-			Op::Label{ .. } | Op::Asm{..} | Op::Funcall{..}  => return block+1,
+			Op::Label{ .. } | Op::Asm{..} | Op::Funcall{..}  => return id+1,
 			Op::JmpLabel{..} | Op::Return{..} => {
-				return eliminate_block_end(c,f,block+1);
+				return eliminate_block_end(c,f,id+1);
 
 			}
 			_ => {}
 		};
 
-		block+=1;
+		id+=1;
 	}
 
-	block
+	id
 }
 
 pub unsafe fn negate_literal(lit: u64,target: Target) -> u64 {
