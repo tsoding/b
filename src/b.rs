@@ -1317,9 +1317,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 } else {
                     c!("-no-pie")
                 },
-            }
-            cmd_append! {
-                &mut cmd,
                 c!("-o"), effective_output_path, output_obj_path,
             }
             if *nostdlib {
