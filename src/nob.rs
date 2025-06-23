@@ -1,5 +1,6 @@
 use core::ffi::*;
 use core::slice;
+use core::ptr;
 use crate::crust::libc;
 
 #[repr(C)]
@@ -83,9 +84,27 @@ macro_rules! cmd_append {
     }
 }
 
+#[repr(C)]
+pub struct CmdRedirect {
+    pub fdin: *mut Fd,
+    pub fdout: *mut Fd,
+    pub fderr: *mut Fd,
+}
+
+#[repr(C)]
+pub enum LogLevel {
+    Info,
+    Warning,
+    Error,
+    NoLogs,
+}
+
 extern "C" {
     #[link_name = "nob_cmd_run_sync_and_reset"]
     pub fn cmd_run_sync_and_reset(cmd: *mut Cmd) -> bool;
+
+    #[link_name = "nob_cmd_run_sync_redirect_and_reset"]
+    pub fn cmd_run_sync_redirect_and_reset(cmd: *mut Cmd, redirect: CmdRedirect) -> bool;
 }
 
 pub type String_Builder = Array<c_char>;
@@ -98,6 +117,7 @@ pub struct String_View {
 }
 
 pub type File_Paths = Array<*const c_char>;
+pub type Fd = c_int;
 
 extern "C" {
     #[link_name = "nob_read_entire_file"]
@@ -124,6 +144,30 @@ extern "C" {
     pub fn mkdir_if_not_exists(path: *const c_char) -> bool;
     #[link_name = "nob_read_entire_dir"]
     pub fn read_entire_dir(parent: *const c_char, children: *mut File_Paths) -> bool;
+    #[link_name = "nob_minimal_log_level"]
+    pub static mut MINIMAL_LOG_LEVEL: LogLevel;
+    #[link_name = "nob_fd_open_for_write"]
+    pub fn fd_open_for_write(path: *const c_char) -> Fd;
+    #[link_name = "nob_fd_close"]
+    pub fn fd_close(fd: Fd);
+}
+
+pub unsafe fn cmd_with_controlled_output(cmd: *mut Cmd) -> bool {
+    if !matches!(MINIMAL_LOG_LEVEL, LogLevel::Error | LogLevel::NoLogs) {
+        cmd_run_sync_and_reset(cmd)
+    } else {
+        // Someone could optimize this to only open /dev/null at the start of the program
+        // but I'm not sure if the performance increase would be worth it
+        let mut out_fd = fd_open_for_write("/dev/null".as_ptr() as *const c_char);
+        let redirect = CmdRedirect {
+            fdin: ptr::null_mut(),
+            fdout: &mut out_fd,
+            fderr: ptr::null_mut(),
+        };
+        let res = cmd_run_sync_redirect_and_reset(cmd, redirect);
+        fd_close(out_fd);
+        res
+    }
 }
 
 // TODO: This is a generally useful function. Consider making it a part of nob.h
