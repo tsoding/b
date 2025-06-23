@@ -747,7 +747,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                 declare_var(c, name, (*l).loc, Storage::Auto {index})?;
-                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
+                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit, Token::Eq])?;
                 if (*l).token == Token::IntLit || (*l).token == Token::CharLit {
                     let size = (*l).int_number as usize;
                     if size == 0 {
@@ -760,6 +760,12 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     //   instead find a way for the target to decide that?
                     //   See TODO(2025-06-05 17:45:36)
                     let arg = Arg::RefAutoVar(index + size);
+                    push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
+                    get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                } else if (*l).token == Token::Eq {
+                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit])?;
+                    let arg = Arg::Literal((*l).int_number);
+
                     push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
