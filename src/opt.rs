@@ -14,35 +14,21 @@ pub unsafe fn optimize_func(c: *mut Compiler,f:*mut Func){
 	///right before a return we can dead code eliminate for similar reasons
 
 	let start = *(*f).body.items;
-	let _ = constant_fold_block(c,f,0);
+	let mut block = constant_fold_block(c,f,0);
+	while block < (*f).body.count {
+		block=normal_block(c,f,block);
+	}
+
 }
 
-pub unsafe fn constant_fold_block(c: *mut Compiler,f: *mut Func,mut block: usize) -> Option<usize> {	
+pub unsafe fn normal_block(c: *mut Compiler,f: *mut Func,mut block: usize) -> usize{
 	while block < (*f).body.count {
+
 		let spot = (*f).body.items.add(block);
-
-		(*spot).opcode = eval_constant_op((*spot).opcode,(*c).target);
-
 		match (*spot).opcode {
-			Op::Label{ label } => return Some(label),
-			Op::Asm{..} | Op::Funcall{..} | Op::Return{..} => return None,
-			Op::JmpIfNotLabel{..} => return None,
-			Op::JmpLabel{label} => {
-				//everything under this which is before the next label is unreachble
-				block+=1;
-				while block < (*f).body.count {
-					
-					let spot = (*f).body.items.add(block);
-					match (*spot).opcode {
-						Op::Label{..} | Op::Asm{..} => return None,
-						_=>{}
-					};
-
-					// (*spot).opcode = Op::NoOp;
-					block+=1;
-				}
-
-				return None;
+			Op::Label{ .. } | Op::Asm{..} | Op::Funcall{..}  => return block+1,
+			Op::JmpLabel{..} | Op::Return{..} => {
+				return eliminate_block_end(c,f,block+1);
 
 			}
 			_ => {}
@@ -51,7 +37,44 @@ pub unsafe fn constant_fold_block(c: *mut Compiler,f: *mut Func,mut block: usize
 		block+=1;
 	}
 
-	None
+	block
+}
+
+pub unsafe fn eliminate_block_end(c: *mut Compiler,f: *mut Func,mut block: usize) -> usize {
+	while block < (*f).body.count {
+
+		let spot = (*f).body.items.add(block);
+		match (*spot).opcode {
+			Op::Label{..}  => return block,
+			Op::Asm{..} => {}
+			_=>{(*spot).opcode = Op::NoOp;}
+		};
+
+		block+=1;
+	}
+
+	block
+}
+
+pub unsafe fn constant_fold_block(c: *mut Compiler,f: *mut Func,mut block: usize) -> usize {	
+	while block < (*f).body.count {
+		let spot = (*f).body.items.add(block);
+
+		(*spot).opcode = eval_constant_op((*spot).opcode,(*c).target);
+
+		match (*spot).opcode {
+			Op::Label{ .. } | Op::Asm{..} | Op::Funcall{..}  => return block+1,
+			Op::JmpLabel{..} | Op::Return{..} => {
+				return eliminate_block_end(c,f,block+1);
+
+			}
+			_ => {}
+		};
+
+		block+=1;
+	}
+
+	block
 }
 
 pub unsafe fn negate_literal(lit: u64,target: Target) -> u64 {
