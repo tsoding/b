@@ -5,6 +5,7 @@ CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 
 RSS=\
 	$(SRC)/arena.rs \
+	$(SRC)/opt.rs \
 	$(SRC)/b.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
