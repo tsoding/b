@@ -42,8 +42,8 @@ main() {
   memset(input_buf, 0, BUF_LEN);
 
   while (!stop) {
-    auto cmdslen; cmdslen = 0;
-    auto input_cursor; input_cursor = 0;
+    auto cmdslen = 0;
+    auto input_cursor = 0;
 
     printf("# ");
     fflush(0);
@@ -56,7 +56,7 @@ main() {
     }
 
     while(input_cursor < cmdslen) {
-      auto cmd, fullfilled; fullfilled = 0;
+      auto cmd, fullfilled = 0;
       cmd = *(input_buf + input_cursor) & 0xFF;
 
       if ((!fullfilled) & (cmd == '>')) {
@@ -90,7 +90,7 @@ main() {
       }
 
       if (cmd == ',') {
-        auto char_val; char_val = getchar();
+        auto char_val = getchar();
         memory[cursor] = char_val;
         fullfilled = 1;
       }

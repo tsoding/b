@@ -20,9 +20,9 @@ set(b, x, y, v) {
 }
 
 count_neighbours(b, x, y) {
-	auto count; count = 0;
-	auto dy; dy = -1; while (dy <= 1) {
-		auto dx; dx = -1; while (dx <= 1) {
+	auto count = 0;
+	auto dy = -1; while (dy <= 1) {
+		auto dx = -1; while (dx <= 1) {
 			if (dx != 0 | dy != 0) count += get(b, x+dx, y+dy);
 			dx += 1;
 		}
@@ -60,8 +60,8 @@ print() {
 
 step() {
 	extrn printf;
-	auto y; y = 0; while (y < height) {
-		auto x; x = 0; while (x < width) {
+	auto y = 0; while (y < height) {
+		auto x = 0; while (x < width) {
 			auto a, n, r;
 			n = count_neighbours(*board, x, y);
 			a = get(*board, x,y);
