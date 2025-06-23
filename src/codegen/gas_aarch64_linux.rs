@@ -109,6 +109,8 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
+            Op::NoOp => {},
+
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("x0"), output, op.loc);

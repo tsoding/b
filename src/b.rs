@@ -308,6 +308,9 @@ impl Binop {
 #[derive(Clone, Copy)]
 pub enum Op {
     Bogus,
+
+    NoOp,
+
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
     Asm            {args: Array<*const c_char>},

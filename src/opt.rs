@@ -21,13 +21,31 @@ pub unsafe fn constant_fold_block(c: *mut Compiler,f: *mut Func,mut block: usize
 	while block < (*f).body.count {
 		let spot = (*f).body.items.add(block);
 
+		(*spot).opcode = eval_constant_op((*spot).opcode,(*c).target);
+
 		match (*spot).opcode {
 			Op::Label{ label } => return Some(label),
 			Op::Asm{..} | Op::Funcall{..} | Op::Return{..} => return None,
-			Op::JmpLabel{..} | Op::JmpIfNotLabel{..} => return None,
-			_ => {
-				(*spot).opcode = eval_constant_op((*spot).opcode,(*c).target);
+			Op::JmpIfNotLabel{..} => return None,
+			Op::JmpLabel{label} => {
+				//everything under this which is before the next label is unreachble
+				block+=1;
+				while block < (*f).body.count {
+					
+					let spot = (*f).body.items.add(block);
+					match (*spot).opcode {
+						Op::Label{..} | Op::Asm{..} => return None,
+						_=>{}
+					};
+
+					// (*spot).opcode = Op::NoOp;
+					block+=1;
+				}
+
+				return None;
+
 			}
+			_ => {}
 		};
 
 		block+=1;
@@ -76,10 +94,13 @@ pub unsafe fn eval_constant_op(op:Op,target:Target) -> Op {
 
             Op::AutoAssign { index, arg: Arg::Literal(val) }
         },
-        // Op::UnaryNot { result, arg:Arg::Literal(lit)} => Op::Bogus,
-		// Op::Negate { result, arg:Arg::Literal(lit)} => Op::Bogus,
-		// Op::Binop { binop, index, lhs: Arg::Literal(a), rhs: Arg::Literal(b) } => Op::Bogus,
-
+        Op::JmpIfNotLabel{label,arg:Arg::Literal(lit)} => {
+        	if lit == 0 {
+        		Op::JmpLabel{label}
+        	}else{
+        		Op::NoOp
+        	}
+        }
 		_ => op
 
 	}
