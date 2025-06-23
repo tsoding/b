@@ -763,8 +763,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 } else if (*l).token == Token::Eq {
-                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit])?;
-                    let arg = Arg::Literal((*l).int_number);
+                    let (arg, _) = compile_expression(l, c)?;
 
                     push_opcode(Op::AutoAssign {index, arg}, (*l).loc, c);
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
