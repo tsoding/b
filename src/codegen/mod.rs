@@ -1,4 +1,5 @@
 pub mod gas_aarch64_linux;
+pub mod gas_sh4dsp_prizm;
 pub mod fasm_x86_64;
 pub mod ir;
 pub mod mos6502;

@@ -8,6 +8,7 @@ pub enum Target {
     Fasm_x86_64_Windows,
     Fasm_x86_64_Linux,
     Gas_AArch64_Linux,
+    Gas_SH4_Prizm,
     Uxn,
     Mos6502,
 }
@@ -28,6 +29,7 @@ pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("fasm-x86_64-windows"), target: Target::Fasm_x86_64_Windows },
     Target_Name { name: c!("fasm-x86_64-linux"),   target: Target::Fasm_x86_64_Linux   },
     Target_Name { name: c!("gas-aarch64-linux"),   target: Target::Gas_AArch64_Linux   },
+    Target_Name { name: c!("gas-sh4dsp-prizm"),    target: Target::Gas_SH4_Prizm       },
     Target_Name { name: c!("uxn"),                 target: Target::Uxn                 },
     Target_Name { name: c!("6502"),                target: Target::Mos6502             },
 ];
@@ -57,5 +59,6 @@ pub unsafe fn target_word_size(target: Target) -> u64 {
         Target::Gas_AArch64_Linux   => 8,
         Target::Uxn                 => 2,
         Target::Mos6502             => 2,
+        Target::Gas_SH4_Prizm       => 4,
     }
 }

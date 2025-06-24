@@ -76,6 +76,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const 
         Target::Fasm_x86_64_Windows => c!(".exe"),
         Target::Fasm_x86_64_Linux   => c!(".fasm-x86_64-linux"),
         Target::Gas_AArch64_Linux   => c!(".gas-aarch64-linux"),
+        Target::Gas_SH4_Prizm       => c!(".g3a"),
         Target::Uxn                 => c!(".rom"),
         Target::Mos6502             => c!(".6502"),
     });
@@ -97,6 +98,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const 
         Target::Mos6502             => runner::mos6502::run(output, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, output_path),
+        Target::Gas_SH4_Prizm       => None
     };
     if let None = run_result {
         return Status::RunFail;

@@ -13,6 +13,7 @@ RSS=\
 	$(SRC)/targets.rs \
 	$(SRC)/codegen/fasm_x86_64.rs \
 	$(SRC)/codegen/gas_aarch64_linux.rs \
+	$(SRC)/codegen/gas_sh4dsp_prizm.rs \
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs \
