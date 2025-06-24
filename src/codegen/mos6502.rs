@@ -318,7 +318,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, output: *mut String_Builder, asm: *mu
         },
         Arg::Literal(value) => {
             if value >= 65536 {
-                diagf!(loc, c!("WARNING: contant `%d` out of range for 16 bits\n"), value);
+                diagf!(loc, c!("WARNING: constant `%llu` out of range for 16 bits\n"), value);
             }
             write_byte(output, LDA_IMM);
             write_byte(output, value as u8);
