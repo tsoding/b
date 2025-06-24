@@ -1136,7 +1136,7 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
-    if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+    if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
         default_target = Some(Target::Gas_AArch64_Linux);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
         default_target = Some(Target::Fasm_x86_64_Linux);
@@ -1302,7 +1302,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
                 (c!("as"), c!("cc"))
             } else {
                 // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
@@ -1316,9 +1316,15 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 gas, c!("-o"), output_obj_path, output_asm_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
             cmd_append! {
                 &mut cmd,
-                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), effective_output_path, output_obj_path,
             }
             if *nostdlib {
                 cmd_append! {
