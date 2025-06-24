@@ -222,14 +222,14 @@ pub enum Binop {
     Plus,
     Minus,
     Mult,
-    Mod,
     Div,
-    Less,
-    Greater,
+    Mod,
     Equal,
     NotEqual,
-    GreaterEqual,
+    Less,
     LessEqual,
+    Greater,
+    GreaterEqual,
     BitOr,
     BitAnd,
     BitShl,
@@ -254,15 +254,15 @@ impl Binop {
     pub fn from_assign_token(token: Token) -> Option<Option<Self>> {
         match token {
             Token::Eq      => Some(None),
-            Token::ShlEq   => Some(Some(Binop::BitShl)),
-            Token::ShrEq   => Some(Some(Binop::BitShr)),
-            Token::ModEq   => Some(Some(Binop::Mod)),
-            Token::OrEq    => Some(Some(Binop::BitOr)),
-            Token::AndEq   => Some(Some(Binop::BitAnd)),
             Token::PlusEq  => Some(Some(Binop::Plus)),
             Token::MinusEq => Some(Some(Binop::Minus)),
             Token::MulEq   => Some(Some(Binop::Mult)),
             Token::DivEq   => Some(Some(Binop::Div)),
+            Token::ModEq   => Some(Some(Binop::Mod)),
+            Token::ShlEq   => Some(Some(Binop::BitShl)),
+            Token::ShrEq   => Some(Some(Binop::BitShr)),
+            Token::OrEq    => Some(Some(Binop::BitOr)),
+            Token::AndEq   => Some(Some(Binop::BitAnd)),
             _              => None,
         }
     }
@@ -274,16 +274,16 @@ impl Binop {
             Token::Mul       => Some(Binop::Mult),
             Token::Div       => Some(Binop::Div),
             Token::Mod       => Some(Binop::Mod),
+            Token::EqEq      => Some(Binop::Equal),
+            Token::NotEq     => Some(Binop::NotEqual),
             Token::Less      => Some(Binop::Less),
+            Token::LessEq    => Some(Binop::LessEqual),
             Token::Greater   => Some(Binop::Greater),
             Token::GreaterEq => Some(Binop::GreaterEqual),
-            Token::LessEq    => Some(Binop::LessEqual),
             Token::Or        => Some(Binop::BitOr),
             Token::And       => Some(Binop::BitAnd),
             Token::Shl       => Some(Binop::BitShl),
             Token::Shr       => Some(Binop::BitShr),
-            Token::EqEq      => Some(Binop::Equal),
-            Token::NotEq     => Some(Binop::NotEqual),
             _ => None,
         }
     }
@@ -920,17 +920,6 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     }
 }
 
-pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Option<*const c_char> {
-    let mut sv = sv_from_cstr(s);
-    let suffix_len = strlen(suffix);
-    if sv_end_with(sv, suffix) {
-        sv.count -= suffix_len;
-        Some(temp_sv_to_cstr(sv))
-    } else {
-        None
-    }
-}
-
 pub unsafe fn usage() {
     fprintf(stderr(), c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
@@ -993,6 +982,7 @@ pub struct Compiler {
     pub arena_labels: Arena,
     pub target: Target,
     pub error_count: usize,
+    pub historical: bool
 }
 
 pub const MAX_ERROR_COUNT: usize = 100;
@@ -1084,7 +1074,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             // TODO: This code is ugly
             // couldn't find a better way to write it while keeping accurate error messages
-            get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
 
             if (*l).token == Token::OBracket {
                 global.is_vec = true;
@@ -1093,11 +1083,15 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     global.minimum_size = (*l).int_number as usize;
                     get_and_expect_token_but_continue(l, c, Token::CBracket)?;
                 }
-                get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
             }
 
             while (*l).token != Token::SemiColon {
                 let value = match (*l).token {
+                    Token::Minus => {
+                        get_and_expect_token(l, Token::IntLit)?;
+                        ImmediateValue::Literal(!(*l).int_number + 1)
+                    }
                     Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                     Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                     Token::ID => {
@@ -1116,7 +1110,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 if (*l).token == Token::Comma {
-                    get_and_expect_tokens(l, &[Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                    get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
                 } else {
                     break;
                 }
@@ -1142,7 +1136,7 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
-    if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+    if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
         default_target = Some(Target::Gas_AArch64_Linux);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
         default_target = Some(Target::Fasm_x86_64_Linux);
@@ -1165,6 +1159,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
+    let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1193,7 +1188,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if (*target_name).is_null() {
         usage();
-        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag."), flag_name(target_name));
+        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag.\n"), flag_name(target_name));
         return None;
     }
 
@@ -1219,6 +1214,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let mut c: Compiler = zeroed();
     c.target = target;
+    c.historical = *historical;
 
     if !*nostdlib {
         // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
@@ -1267,7 +1263,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         input.count = 0;
         if !read_entire_file(input_path, &mut input) { return None; }
 
-        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count));
+        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
 
         compile_program(&mut l, &mut c)?;
     }
@@ -1383,7 +1379,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && cfg!(target_os = "linux") {
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
                 (c!("as"), c!("cc"))
             } else {
                 // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
@@ -1395,6 +1391,120 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            cmd_append! {
+                &mut cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+            }
+        }
+        Target::Gas_x86_64_Linux => {
+            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
+                // TODO: think how to approach cross-compilation
+                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
+            }
+        }
+        Target::Gas_x86_64_Windows => {
+            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
+                c!("cc")
+            } else {
+                c!("x86_64-w64-mingw32-gcc")
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            cmd_append! {
+                &mut cmd,
+                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             cmd_append! {
@@ -1415,9 +1525,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
-        },
+        }
         Target::Fasm_x86_64_Linux => {
             codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 

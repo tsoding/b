@@ -7,6 +7,8 @@ use crate::strcmp;
 pub enum Target {
     Fasm_x86_64_Windows,
     Fasm_x86_64_Linux,
+    Gas_x86_64_Windows,
+    Gas_x86_64_Linux,
     Gas_AArch64_Linux,
     Gas_SH4_Prizm,
     Uxn,
@@ -28,6 +30,8 @@ pub struct Target_Name {
 pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("fasm-x86_64-windows"), target: Target::Fasm_x86_64_Windows },
     Target_Name { name: c!("fasm-x86_64-linux"),   target: Target::Fasm_x86_64_Linux   },
+    Target_Name { name: c!("gas-x86_64-windows"),  target: Target::Gas_x86_64_Windows  },
+    Target_Name { name: c!("gas-x86_64-linux"),    target: Target::Gas_x86_64_Linux    },
     Target_Name { name: c!("gas-aarch64-linux"),   target: Target::Gas_AArch64_Linux   },
     Target_Name { name: c!("gas-sh4dsp-prizm"),    target: Target::Gas_SH4_Prizm       },
     Target_Name { name: c!("uxn"),                 target: Target::Uxn                 },
@@ -56,6 +60,8 @@ pub unsafe fn target_word_size(target: Target) -> u64 {
     match target {
         Target::Fasm_x86_64_Windows => 8,
         Target::Fasm_x86_64_Linux   => 8,
+        Target::Gas_x86_64_Windows  => 8,
+        Target::Gas_x86_64_Linux    => 8,
         Target::Gas_AArch64_Linux   => 8,
         Target::Uxn                 => 2,
         Target::Mos6502             => 2,

@@ -1,3 +1,5 @@
+// TODO: Make btest test historical mode
+
 #![no_main]
 #![no_std]
 #![allow(non_upper_case_globals)]
@@ -14,48 +16,14 @@ pub mod flag;
 
 use core::ffi::*;
 use core::cmp;
-use core::mem::zeroed;
+use core::mem::{zeroed, size_of};
 use crust::libc::*;
 use nob::*;
 use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 
-// TODO: build examples too
-// TODO: read all the tests directly from the ./tests/ folder
-const TEST_NAMES: *const [*const c_char] = &[
-    c!("args11-extrn"),
-    c!("args11"),
-    c!("args6"),
-    c!("asm_fasm_x86_64_linux"),
-    c!("asm_func_fasm_x86_64_linux"),
-    c!("call_stack_args"),
-    c!("compare"),
-    c!("deref_assign"),
-    c!("divmod"),
-    c!("e"),
-    c!("forward-declare"),
-    c!("globals"),
-    c!("goto"),
-    c!("hello"),
-    c!("inc_dec"),
-    c!("lexer"),
-    c!("literals"),
-    c!("minus_2"),
-    c!("multiple-postfix"),
-    c!("recursion"),
-    c!("ref"),
-    c!("return"),
-    c!("rvalue_call"),
-    c!("stack_alloc"),
-    c!("switch"),
-    c!("ternary-assign"),
-    c!("ternary-side-effect"),
-    c!("ternary"),
-    c!("unary_priority"),
-    c!("upper"),
-    c!("vector"),
-];
+const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
 #[derive(Copy, Clone)]
 pub enum Status {
@@ -70,15 +38,18 @@ struct Report {
     statuses: Array<Status>,
 }
 
-pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const c_char, target: Target) -> Status {
-    let input_path = temp_sprintf(c!("./tests/%s.b"), name);
-    let output_path = temp_sprintf(c!("./build/tests/%s%s"), name, match target {
-        Target::Fasm_x86_64_Windows => c!(".exe"),
-        Target::Fasm_x86_64_Linux   => c!(".fasm-x86_64-linux"),
-        Target::Gas_AArch64_Linux   => c!(".gas-aarch64-linux"),
-        Target::Gas_SH4_Prizm       => c!(".g3a"),
-        Target::Uxn                 => c!(".rom"),
-        Target::Mos6502             => c!(".6502"),
+pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target) -> Status {
+    // TODO: add timeouts for running and building in case they go into infinite loop or something
+    let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
+    let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
+        Target::Fasm_x86_64_Windows => c!("exe"),
+        Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
+        Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+        Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
+        Target::Gas_x86_64_Windows  => c!("exe"),
+        Target::Gas_SH4_Prizm       => c!("g3a"),
+        Target::Uxn                 => c!("rom"),
+        Target::Mos6502             => c!("6502"),
     });
     cmd_append! {
         cmd,
@@ -94,6 +65,8 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, name: *const 
         Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
         Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
         Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
+        Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, output_path, &[]),
+        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, output_path, &[]),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
         Target::Mos6502             => runner::mos6502::run(output, Config {
             load_offset: DEFAULT_LOAD_OFFSET
@@ -112,10 +85,23 @@ pub unsafe fn usage() {
     flag_print_options(stderr());
 }
 
+pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_int {
+    strcmp(*(a as *const *const c_char), *(b as *const *const c_char))
+}
+
+// TODO: Each field of Stats corresponds to an enum value of Status.
+#[derive(Clone, Copy)]
+struct Stats {
+    ks: usize,
+    bs: usize,
+    rs: usize,
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
-    let cases_flags = flag_list(c!("c"), c!("Test cases"));
-    let help = flag_bool(c!("help"), false, c!("Print this help message"));
+    let cases_flags  = flag_list(c!("c"), c!("Test cases"));
+    let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
+    let help         = flag_bool(c!("help"), false, c!("Print this help message"));
     // TODO: flag to print the list of tests
     // TODO: flag to print the list of targets
     // TODO: select test cases and targets by a glob pattern
@@ -132,7 +118,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
-    let mut output: String_Builder = zeroed();
+    let mut sb: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
 
@@ -156,8 +142,15 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     let mut cases: Array<*const c_char> = zeroed();
     if (*cases_flags).count == 0 {
-        for i in 0..TEST_NAMES.len() {
-            da_append(&mut cases, (*TEST_NAMES)[i]);
+        let mut test_files: File_Paths = zeroed();
+        if !read_entire_dir(*test_folder, &mut test_files) { return None; }
+        qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
+
+        for i in 0..test_files.count {
+            let test_file = *test_files.items.add(i);
+            if *test_file == '.' as c_char { continue; }
+            let Some(case_name) = temp_strip_suffix(test_file, c!(".b")) else { continue; };
+            da_append(&mut cases, case_name);
         }
     } else {
         for i in 0..(*cases_flags).count {
@@ -166,7 +159,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
-    if !mkdir_if_not_exists(c!("./build/tests/")) { return None; }
+    if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
 
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
@@ -179,12 +172,26 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         };
         for j in 0..targets.count {
             let target = *targets.items.add(j);
-            da_append(&mut report.statuses, run_test(&mut cmd, &mut output, test_name, target));
+            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target));
         }
         da_append(&mut reports, report);
     }
 
     // TODO: generate HTML reports and deploy them somewhere automatically
+
+    let mut stats_by_target: Array<Stats> = zeroed();
+    for j in 0..targets.count {
+        let mut stats: Stats = zeroed();
+        for i in 0..reports.count {
+            let report = *reports.items.add(i);
+            match *report.statuses.items.add(j) {
+                Status::Ok        => stats.ks += 1,
+                Status::BuildFail => stats.bs += 1,
+                Status::RunFail   => stats.rs += 1,
+            }
+        }
+        da_append(&mut stats_by_target, stats);
+    }
 
     let mut width = 0;
     for i in 0..reports.count {
@@ -197,13 +204,24 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
     printf(c!("\n"));
 
+    let mut target_column_width = 0;
     for j in 0..targets.count {
         let target = *targets.items.add(j);
+        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
+        if width > target_column_width {
+            target_column_width = width;
+        }
+    }
+
+    for j in 0..targets.count {
+        let target = *targets.items.add(j);
+        let stats = *stats_by_target.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
         for _ in 0..j {
             printf(c!("│ "));
         }
-        printf(c!("┌─%s\n"), name_of_target(target).unwrap(), j);
+        printf(c!("┌─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
     }
 
     for i in 0..reports.count {
@@ -222,11 +240,13 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     for j in (0..targets.count).rev() {
         let target = *targets.items.add(j);
+        let stats = *stats_by_target.items.add(j);
         printf(c!("%*s"), width + 2, c!(""));
         for _ in 0..j {
             printf(c!("│ "));
         }
-        printf(c!("└─%s\n"), name_of_target(target).unwrap(), j);
+        printf(c!("└─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
     }
 
     printf(c!("\n"));
