@@ -399,7 +399,11 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         Token::Minus => {
             let (arg, _) = compile_primary_expression(l, c)?;
             let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
+            if let Arg::Literal(v) = arg {
+                push_opcode(Op::Store {index, arg: Arg::Literal(!v + 1)}, (*l).loc, c);
+            } else {
+                push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
+            }
             Some((Arg::AutoVar(index), false))
         }
         Token::And => {
