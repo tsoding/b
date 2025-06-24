@@ -1298,7 +1298,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let base_path = temp_strip_suffix(effective_output_path, c!(".g3a")).unwrap_or(effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            let output_elf_path = temp_sprintf(c!("%s.elf"), base_path);
+            let output_bin_path = temp_sprintf(c!("%s.bin"), base_path);
+            let output_g3a_path = temp_sprintf(c!("%s.g3a"), base_path);
             if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1306,10 +1311,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             // a working GNU sh4 toolchain
             let (gas, cc, objcopy) = (c!("sh-elf-as"), c!("sh-elf-gcc"), c!("sh-elf-objcopy"));
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
-            let output_elf_path = temp_sprintf(c!("%s.elf"), effective_output_path);
-            let output_bin_path = temp_sprintf(c!("%s.bin"), effective_output_path);
-            let output_g3a_path = temp_sprintf(c!("%s.g3a"), effective_output_path);
             cmd_append! {
                 &mut cmd,
                 gas, c!("-o"), output_obj_path, output_asm_path,
@@ -1319,12 +1320,32 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             // and use mkg3a/linker magic to generate a proper .g3a raw executable
             cmd_append! {
                 &mut cmd,
-                cc, c!("-no-pie"), c!("-o"), output_elf_path, output_obj_path,
+                cc, c!("-no-pie"),
+            }
+            if !*nostdlib {
+                // We purposefully introduce a linker script within libb
+                // TODO: As said previously by rexim, we need to worry about the path of libb.
+                cmd_append! {
+                    &mut cmd,
+                    c!("-T"), c!("./libb/gas-sh4dsp-prizm.ld"),
+                }
             }
             cmd_append! {
                 &mut cmd,
-                c!("-Wl,-Ttext=0x300000"),
+                c!("-o"), output_elf_path, output_obj_path,
             }
+
+            if *nostdlib {
+                // No order without a stdlib
+                cmd_append! {
+                    &mut cmd,
+                    c!("-Wl,-Ttext=0x300000"),
+                    c!("-e"), c!("start"),
+                }
+            }
+
+            // Aside from the OS syscalls and libb (and fxlibc but I'm not dealing with fxlibc), we have no
+            // proper stdlib.
             cmd_append! {
                 &mut cmd,
                 c!("-nostdlib"),
@@ -1340,8 +1361,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             cmd_append! {
                 &mut cmd,
                 objcopy, output_elf_path, 
-                c!("-j"), c!(".text"), 
-                c!("-j"), c!(".data"),
+                c!("-j"), c!(".text*"), 
+                c!("-j"), c!(".data*"),
                 c!("-O"), c!("binary"),
                 output_bin_path,
             }
