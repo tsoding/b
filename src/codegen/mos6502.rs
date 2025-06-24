@@ -59,7 +59,7 @@ instr_enum! {
         PHA, PHP, PLA, PLP,
         ROL, ROR,
         RTI, RTS,
-        SBC,    
+        SBC,
         SEC, SED, SEI,
         STA, STX, STY,
         TAX, TAY, TSX, TXA, TXS, TYA
@@ -487,7 +487,7 @@ pub unsafe fn load_two_args(out: *mut String_Builder, lhs: Arg, rhs: Arg, op: Op
 }
 
 // TODO: maybe recover from errors?
-pub unsafe fn parse_num(mut line: *const c_char, loc: Loc) -> (u16, *const c_char) {
+pub unsafe fn parse_num(line_begin: *const c_char, mut line: *const c_char, mut loc: Loc) -> (u16, *const c_char) {
     while isspace(*line as i32) != 0 {line = line.add(1);}
     let (v, mut end) = match *line as u8 {
         b'$' => {
@@ -501,12 +501,14 @@ pub unsafe fn parse_num(mut line: *const c_char, loc: Loc) -> (u16, *const c_cha
             (v, end)
         },
         c => {
+            loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
             diagf!(loc, c!("ERROR: unexpected character `%c` in __asm__ number literal\n"),
                    c as c_int);
             abort();
         }
     };
     if v > 0xFFFF {
+        loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
         diagf!(loc, c!("ERROR: contant $%X out of range for 16 bits\n"), v);
         abort();
     }
@@ -515,8 +517,11 @@ pub unsafe fn parse_num(mut line: *const c_char, loc: Loc) -> (u16, *const c_cha
 }
 
 pub unsafe fn assemble_statement(out: *mut String_Builder,
-                                 mut line: *const c_char, loc: Loc) {
+                                 mut line: *const c_char, mut loc: Loc) {
 
+    let line_begin = line;
+    // TODO: IMPORTANT! What we are doing in here is basically lexing.
+    // Consider maybe reusing and adapting our B lexer in here?
     while isspace(*line as i32) != 0 {
         line = line.add(1);
     }
@@ -534,6 +539,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
     let instr = match instr_from_string(buf.as_ptr()) {
         Some(v) => v,
         None => {
+            loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
             diagf!(loc, c!("ERROR: invalid instruction mnemonic `%s`\n"), buf.as_ptr());
             abort();
         }
@@ -550,8 +556,9 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
             line = line.add(1);
 
             let num;
-            (num, line) = parse_num(line, loc);
+            (num, line) = parse_num(line_begin, line, loc);
             if num > 0xFF {
+                loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                 diagf!(loc, c!("ERROR: constant $%X out of range for 8 bit immediate\n"),
                        num as c_uint);
                 abort();
@@ -561,7 +568,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
         },
         b'0'..=b'9' | b'$' => {
             let num;
-            (num, line) = parse_num(line, loc);
+            (num, line) = parse_num(line_begin, line, loc);
 
             arg16 = Some(num);
             if *line as u8 == b',' {
@@ -584,10 +591,11 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
         b'(' => {
             line = line.add(1);
             let num;
-            (num, line) = parse_num(line, loc);
+            (num, line) = parse_num(line_begin, line, loc);
 
             if *line as u8 == b',' {
                 if num > 0xFF {
+                    loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                     diagf!(loc, c!("ERROR: constant $%X out of 8-bit range for indirect X\n"),
                            num as c_uint);
                     abort();
@@ -597,12 +605,14 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
                 line = line.add(1);
                 while isspace(*line as i32) != 0 {line = line.add(1);}
                 if toupper(*line as i32) as u8 != b'X' {
+                    loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                     diagf!(loc, c!("ERROR: X expected for indirect addressing mode __asm__\n"), *line as c_int);
                     abort();
                 }
                 line = line.add(1);
                 while isspace(*line as i32) != 0 {line = line.add(1);}
                 if toupper(*line as i32) as u8 != b')' {
+                    loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                     diagf!(loc, c!("ERROR: ) expected in __asm__\n"), *line as c_int);
                     abort();
                 }
@@ -610,6 +620,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
                 IND_X
             } else {
                 if *line as u8 != b')' {
+                    loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                     diagf!(loc, c!("ERROR: expected ',' or ')' after indirect address __asm__\n"), *line as c_int);
                     abort();
                 }
@@ -618,6 +629,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
 
                 if *line as u8 == b',' {
                     if num > 0xFF {
+                        loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                         diagf!(loc, c!("ERROR: constant $%X out of 8-bit range for indirect Y\n"),
                                num as c_uint);
                         abort();
@@ -627,6 +639,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
                     line = line.add(1);
                     while isspace(*line as i32) != 0 {line = line.add(1);}
                     if toupper(*line as i32) as u8 != b'Y' {
+                        loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
                         diagf!(loc, c!("ERROR: Y expected for indirect addressing mode __asm__\n"), *line as c_int);
                         abort();
                     }
@@ -639,7 +652,8 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
             }
         },
         c => {
-            diagf!(loc, c!("ERROR: unexpected character `%c` in __asm__\n"), c as c_int);
+            loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
+            diagf!(loc, c!("ERROR: unexpected character `%c`\n"), c as c_int);
             abort();
         }
     };
@@ -663,6 +677,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
 
     let opcode = OPCODES[instr as usize][mode as usize];
     if opcode == INVL {
+        loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
         diagf!(loc, c!("ERROR: invalid combination of instruction `%s` and operand `%s`\n"),
                buf.as_ptr(), operand);
         abort();
@@ -676,6 +691,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
     }
 
     if *line != 0 {
+        loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
         diagf!(loc, c!("ERROR: trailing garbage: `%s`\n"), line);
         abort();
     }
@@ -1059,10 +1075,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 store_auto(out, result, asm);
             },
-            Op::Asm {args} => {
-                for i in 0..args.count {
-                    let arg = *args.items.add(i);
-                    assemble_statement(out, arg, op.loc);
+            Op::Asm {stmts} => {
+                for i in 0..stmts.count {
+                    let stmt = *stmts.items.add(i);
+                    assemble_statement(out, stmt.line, stmt.loc);
                 }
             },
             Op::Label{label} => {
@@ -1327,7 +1343,8 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
         });
 
         for j in 0..asm_func.body.count {
-            assemble_statement(out, *asm_func.body.items.add(j), asm_func.name_loc);
+            let stmt = *asm_func.body.items.add(j);
+            assemble_statement(out, stmt.line, stmt.loc);
         }
     }
 }
