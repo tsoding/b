@@ -266,10 +266,10 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
                 sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_args_size);
             },
-            Op::Asm {args} => {
-                for i in 0..args.count {
-                    let arg = *args.items.add(i);
-                    sb_appendf(output, c!("    %s\n"), arg);
+            Op::Asm {stmts} => {
+                for i in 0..stmts.count {
+                    let stmt = *stmts.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), stmt.line);
                 }
             }
             Op::Label {label} => {
@@ -350,7 +350,8 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
         sb_appendf(output, c!(".global %s\n"), asm_func.name);
         sb_appendf(output, c!("%s:\n"), asm_func.name);
         for j in 0..asm_func.body.count {
-            sb_appendf(output, c!("    %s\n"), *asm_func.body.items.add(j));
+            let stmt = *asm_func.body.items.add(j);
+            sb_appendf(output, c!("    %s\n"), stmt.line);
         }
     }
 }
