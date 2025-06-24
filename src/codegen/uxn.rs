@@ -474,7 +474,7 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::JMI);
                 write_label_rel(output, *labels.items.add(label), assembler, 0);
             }
-            Op::JmpIfNotLabel {label, arg} => {
+            Op::JmpUnlessLabel {label, arg} => {
                 load_arg(arg, output, assembler);
                 write_lit2(output, 0);
                 write_op(output, UxnOp::EQU2);
