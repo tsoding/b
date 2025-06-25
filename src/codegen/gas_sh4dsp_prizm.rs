@@ -14,7 +14,11 @@ pub struct Littset {
 }
 
 pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, consts: *mut Array<u64>, litts: *mut Littset, funcname: *const c_char) {
-    load_arg_to_reg(arg, c!("r0"), output, loc, consts, litts, funcname);
+    // The extra flag is because arg doesnt use references to a symbol but the symbol itself,
+    // which then causes some fun issues, as load_arg_to_reg will try to dereference a value that 
+    // should NOT be dereferenced... this should be fixed in another PR >_>
+    //                  - LDA: June 25th, 2025
+    load_arg_to_reg(arg, c!("r0"), output, loc, consts, litts, funcname, true);
     sb_appendf(output, c!("    jsr @r0\n"));
     sb_appendf(output, c!("    nop\n"));
 }
@@ -23,7 +27,7 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
     let sliteral = literal as i64;
 
     // Literals that can fit in a byte are well-supported on SH-4    
-    if (sliteral >= -128) & (sliteral < 127) {
+    if (sliteral >= -128) & (sliteral <= 127) {
         sb_appendf(output, c!("    mov #%d, %s\n"), literal, reg);
         return;
     }
@@ -37,12 +41,15 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
     sb_appendf(output, c!("    mov.l .L_%sC%d, %s\n"), name, index as u32, reg);
 }
 // let mut littset: Array<*const i8> = zeroed();
-pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder, loc: Loc, consts: *mut Array<u64>, litts: *mut Littset, funcname: *const c_char) {
+pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder, loc: Loc, consts: *mut Array<u64>, litts: *mut Littset, funcname: *const c_char, is_call: bool) {
     match arg {
         Arg::External(name) => {
             let index = (*litts).cntr;
             sb_appendf(&mut (*litts).data, c!(".L_%sCL%d: .long %s\n"), funcname, index as u32, name);
-            sb_appendf(output, c!("    mov.l .L_%sCL%d, %s\n"), funcname, index as u32, reg);
+            sb_appendf(output, c!("    mov.l .L_%sCL%d, %s ! %s\n"), funcname, index as u32, reg, name);
+            if !is_call {
+                sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
+            }
             (*litts).cntr += 1;
             // TODO: Littset
         },
@@ -60,8 +67,8 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
         Arg::RefExternal(name) => {
             let index = (*litts).cntr;
             sb_appendf(&mut (*litts).data, c!(".L_%sCL%d: .long %s\n"), funcname, index as u32, name);
-            sb_appendf(output, c!("    mov.l .L_%sCL%d, %s\n"), funcname, index as u32, reg);
-            sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
+            sb_appendf(output, c!("    mov.l .L_%sCL%d, %s ! %s\n"), funcname, index as u32, reg, name);
+            //sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
             (*litts).cntr += 1;
         },
         Arg::AutoVar(index) => {
@@ -76,7 +83,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             if offset >= 255 {
                 missingf!(loc, c!("Data offsets bigger than 255 are not supported yet\n"));
             } else {
-                sb_appendf(output, c!("    mov.l .L_%sCL0, %s\n"), funcname, reg);
+                sb_appendf(output, c!("    mov.l .L_%sCL0, %s ! hai\n"), funcname, reg);
                 if offset != 0 { sb_appendf(output, c!("    add #%d, %s\n"), offset, reg); }
             }
         },
@@ -100,18 +107,20 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     // TODO: Get a &mut constset
     let mut constset: Array<u64> = zeroed();
     let mut littset: Littset = Littset { data: zeroed(), cntr: 0 };
+    let funcname = name;
 
     // Put each symbol in its own section
-    if strcmp(name, c!("start")) == 0 {
-        sb_appendf(output, c!(".section .text.start\n"), name);
-    }
+    sb_appendf(output, c!(".text\n"));
+    sb_appendf(output, c!(".section .text.%s,\"ax\",@progbits\n"), name);
+    sb_appendf(output, c!(".align 4\n"));
     sb_appendf(output, c!(".global %s\n"), name);
+    sb_appendf(output, c!(".type %s, @function\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
 
     // TODO: Manage the data section properly. (CL0 is reserved for it at the moment)
     let index = littset.cntr;
     sb_appendf(&mut littset.data, c!(".L_%sCL%d: .long %s\n"), name, index as u32, ".dat");
-    (littset).cntr += 1;
+    littset.cntr += 1;
     // Save Everything
     
     // KRIS, Get The PR System Register
@@ -159,7 +168,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return {arg} => {
                 if let Some(arg) = arg {
-                    load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                    load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                 }
                 sb_appendf(output, c!("    mov r14, r15\n"));
                 sb_appendf(output, c!("    lds.l @r15+, pr\n"));
@@ -177,7 +186,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("    nop\n"));
             }
             Op::Negate {result, arg} => {
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                 sb_appendf(output, c!("    neg r0, r0\n"));
                 write_r0(output, result);
             }
@@ -185,7 +194,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 // This is probably not the most efficient way to do things, and it 
                 // also thrashes T, so yeah. but then again the B compiler doesn't seem 
                 // to be something that cares about processor flags all that much.
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                 sb_appendf(output, c!("    cmp/eq #0, r0\n"));
                 sb_appendf(output, c!("    movt r0\n"));
                 sb_appendf(output, c!("    xor #1, r0\n"));
@@ -194,14 +203,14 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
                     Binop::BitOr => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    or r1, r0\n"));
                         write_r0(output, index);
                     },
                     Binop::BitAnd => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    and r1, r0\n"));
                         write_r0(output, index);
                     },
@@ -217,15 +226,15 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                         // TODO
                     },
                     Binop::Plus => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    add r1, r0\n"));
                         write_r0(output, index);
                     }
                     Binop::Minus => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
-                        sb_appendf(output, c!("    add r1, r0\n"));
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
+                        sb_appendf(output, c!("    sub r1, r0\n"));
                         write_r0(output, index);
                     },
 
@@ -239,46 +248,46 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     
                     // This sounds more reasonable to implement
                     Binop::Mult => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    mul.l r0, r1\n"));
                         sb_appendf(output, c!("    sts macl, r0\n"));
                         write_r0(output, index);
                     },
                     Binop::Less => {
                         // a < b <=> not (b >= a)
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    cmp/ge r0, r1\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         sb_appendf(output, c!("    xor #1, r0\n"));
                         write_r0(output, index);
                     }
                     Binop::Greater => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
-                        sb_appendf(output, c!("    cmp/ge r1, r0\n"));      // Signed
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
+                        sb_appendf(output, c!("    cmp/gt r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
                     }
                     Binop::Equal => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    cmp/eq r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
                     }
                     Binop::NotEqual => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    cmp/eq r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         sb_appendf(output, c!("    xor #1, r0\n"));
                         write_r0(output, index);
                     }
                     Binop::GreaterEqual => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constset, &mut littset, name, false);
                         sb_appendf(output, c!("    cmp/ge r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
@@ -291,20 +300,20 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::ExternalAssign{name, arg} => {
                 // I'm just going to add it to the littset to make sure everything's okay
                 let index = littset.cntr;
-                sb_appendf(&mut littset.data, c!(".L_CL%d: .long %s\n"), index as u32, name);
+                sb_appendf(&mut littset.data, c!(".L_%sCL%d: .long %s\n"), funcname, index as u32, name);
 
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
-                sb_appendf(output, c!("    mov.l .L_CL%d, r1\n"), name);
-                sb_appendf(output, c!("    mov.l r0, @r1\n"), name);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, funcname, false);
+                sb_appendf(output, c!("    mov.l .L_%sCL%d, r1 ! %s\n"), funcname, index as c_uint, name);
+                sb_appendf(output, c!("    mov.l r0, @r1\n"));
                 littset.cntr += 1;
             }
             Op::AutoAssign {index, arg} => {
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                 write_r0(output, index);
             },
             Op::Store {index, arg} => {
                 // TODO
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                 write_r0(output, index);
             },
             Op::Funcall {result, fun, args} => {
@@ -320,11 +329,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     // why is it called add???
                     sb_appendf(output, c!("    ! loading %d\n"), i);
                     //sb_appendf(output, c!("    mov #0, %s\n"), reg);
-                    load_arg_to_reg(*args.items.add(i), reg, output, op.loc, &mut constset, &mut littset, name);
+                    load_arg_to_reg(*args.items.add(i), reg, output, op.loc, &mut constset, &mut littset, name, false);
                 }
                 for i in 0..stack_args_count {
                     sb_appendf(output, c!("    ! loading stack %d\n"), i);
-                    load_arg_to_reg(*args.items.add(i), c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                    load_arg_to_reg(*args.items.add(i), c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                     sb_appendf(output, c!("    mov.l r0, @-r15\n"));
                     sb_appendf(output, c!("    \n"));
                 }
@@ -350,7 +359,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("    nop\n"));
             }
             Op::JmpIfNotLabel {label, arg} => {
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constset, &mut littset, name, false);
                 sb_appendf(output, c!("    tst r0, r0\n"));
                 sb_appendf(output, c!("    bt %s.label_%zu\n"), name, label);
             }
@@ -399,7 +408,7 @@ pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], 
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     // TODO: Setting it as the data segment causes many problems as of now.
-    //sb_appendf(output, c!(".data\n"));
+    sb_appendf(output, c!(".data\n"));
     sb_appendf(output, c!(".dat:"));
     if data.len() > 0 {
         sb_appendf(output, c!(" .byte "));
@@ -423,18 +432,18 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
             sb_appendf(output, c!(".global %s\n"), global.name);
             sb_appendf(output, c!("%s:\n"), global.name);
             if global.is_vec {
-                sb_appendf(output, c!("    .quad .+8\n"), global.name);
+                sb_appendf(output, c!("    .long .+8\n"), global.name);
             }
             for j in 0..global.values.count {
                 match *global.values.items.add(j) {
                     ImmediateValue::Literal(lit) => {
-                        sb_appendf(output, c!("    .quad %zu\n"), lit);
+                        sb_appendf(output, c!("    .long %zu\n"), lit);
                     }
                     ImmediateValue::Name(name) => {
-                        sb_appendf(output, c!("    .quad %s\n"), name);
+                        sb_appendf(output, c!("    .long %s\n"), name);
                     }
                     ImmediateValue::DataOffset(offset) => {
-                        sb_appendf(output, c!("    .quad .dat+%zu\n"), offset);
+                        sb_appendf(output, c!("    .long .dat+%zu\n"), offset);
                     }
                 }
             }

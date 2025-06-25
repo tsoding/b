@@ -2,15 +2,44 @@ start() {
     // This is the part where we're left to manage most pre-init things
     // like enabling 16-bit colors (the OS makes the display run in a limited 8-color mode before anything ever 
     // happens).
-    extrn Bdisp_AllClr_VRAM;
-    extrn Bdisp_EnableColor;
+    extrn Bdisp_AllClr_VRAM, Bdisp_EnableColor;
+    extrn memcpy, memset;
+
+    extrn data_phystart, data_vrtstart, data_size;
+    extrn bss_vrtstart, bss_size;
+
+    // Load in the data section
+    memcpy(&data_vrtstart, &data_phystart, &data_size);
+    memset(&bss_vrtstart, 0, &bss_size);
 
     Bdisp_EnableColor(1);
     Bdisp_AllClr_VRAM();
 
-    while (1) {}
-
     return (main());
+}
+
+
+// getmchar(addr)
+getmchar __asm__( "mov.b @r4, r0", "rts", "nop" );
+// setmchar(addr, val)
+setmchar __asm__( "mov.b r5, @r4", "rts", "nop" );
+
+memset(vrt, byte, size) {
+    while (size >= 0) {
+        setmchar(vrt, byte);
+        vrt = vrt + 1;
+        size = size - 1;
+    }
+}
+memcpy(vrt, phy, size) {
+    auto byte;
+    while (size >= 0) {
+        byte = getmchar(phy);
+        setmchar(vrt, byte);
+        phy = phy + 1;
+        vrt = vrt + 1;
+        size = size - 1;
+    }
 }
 toupper(c) {
     if (c < 'a') {

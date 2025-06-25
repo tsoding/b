@@ -1374,6 +1374,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("-n"), c!("B addin"), 
                 output_bin_path, output_g3a_path,
             }
+            if !*nostdlib {
+                // Also add the default icon
+                cmd_append! {
+                    &mut cmd,
+                    c!("--icon-uns=./libb/gas-sh4dsp-prizm-uns.png"), 
+                    c!("--icon-sel=./libb/gas-sh4dsp-prizm-sel.png"), 
+                }
+            }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
                 // TODO: since I kind of want to use the calculator's native ""syscall"" """interface""" instead 

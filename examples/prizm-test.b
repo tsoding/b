@@ -1,4 +1,7 @@
 // -*- mode: simpc -*-
+y;
+str;
+
 main() {
     extrn Bdisp_AllClr_VRAM;
     extrn Bdisp_Fill_VRAM;
@@ -6,9 +9,7 @@ main() {
     extrn Bdisp_EnableColor;
     extrn PrintPixXY;
     extrn Bdisp_Rectangle;
-    auto str;
     auto color;
-    auto y;
 
     color = 0;
     y = 0;
