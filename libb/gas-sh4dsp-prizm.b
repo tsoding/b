@@ -41,7 +41,7 @@ start() {
     txt_x = 1;
     txt_y = 1;
 
-    return (main());
+    return (main(0, 0));
 }
 store_pr(pr) {
     start_osaddress = pr;
@@ -57,7 +57,6 @@ setmchar __asm__( "mov.b r5, @r4", "rts", "nop" );
 // Regular libb functions
 char(string, idx)
 {
-    // GBR-indirect mode would make sense here but I'm just goig to use getmchar
     return (getmchar(string + idx));
 }
 lchar(string, i, ch) {
@@ -81,6 +80,15 @@ memcpy(vrt, phy, size) {
         size = size - 1;
     }
 }
+tolower(c) {
+    if (c < 'A') {
+        return (c);
+    }
+    if (c > 'Z') {
+        return (c);
+    }
+    return (c - 'A' + 'a');
+}
 toupper(c) {
     if (c < 'a') {
         return (c);
@@ -91,6 +99,10 @@ toupper(c) {
     return (c - 'a' + 'A');
 }
 exit(code) {
+    extrn abort;
+    abort();
+}
+abort() {
     // TODO: this function is broken...
     __asm__ ( 
         "mov r4, r0",
@@ -128,8 +140,16 @@ putchar(ch) {
     Bdisp_PutDisp_DD();
 }
 
-// TODO: More than 4 arguments, based on the 6502 printf
-printf(str, x1, x2, x3) {
+printn(n, b) {
+    auto a, c, d;
+
+    if(a=n/b) /* assignment, not test for equality */
+        printn(a, b); /* recursive */
+    c = (n%b) + '0';
+    if (c > '9') c += 7;
+    putchar(c);
+}
+printf(str, x1, x2, x3, s4, s5, s6, s7, s8, s9, s10, s11, s12) {
     extrn char;
     auto i, j, arg, c;
     i = 0;
@@ -144,6 +164,12 @@ printf(str, x1, x2, x3) {
             c = char(str, i);
             if (c == 0) {
                 return;
+            } else if (c == 'd') {
+                printn(*arg, 10);
+            } else if (c == 'p') {
+                printn(*arg, 16);
+            } else if (c == 'c') {
+                putchar(*arg);
             } else if (c == 's') { /* clobbers `c`, the last one */
                 while (c = char(*arg, j++)) {
                     putchar(c);
@@ -281,3 +307,21 @@ Print_OS __asm__(
     "1: .long 0x80020070",
     "2:   .long 0x01F9"
 );
+
+// TODO: malloc/free
+
+// Intrisic maths (division/modulo)
+intrisic_div (a, b) {
+    // TODO: This could be implemented with DSP loops(do we have these enabled by default?) and div1
+    auto d;
+    d = 0; while(a >= b) {
+        a = a - b;
+        d++;
+    }
+    return (d);
+}
+intrisic_mod (a, b) {
+    auto q;
+    q = intrisic_div(a, b);
+    return (a - (b * q));
+}
