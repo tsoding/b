@@ -62,7 +62,7 @@ _rem (a, b) {
 printn(n, b, sign) {
     auto a, c, d;
 
-    if (sign && n < 0) {
+    if (sign & n < 0) {
         putchar('-');
         n = -n;
     }
