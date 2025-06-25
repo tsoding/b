@@ -89,10 +89,48 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
 
 // TODO: Each field of Stats corresponds to an enum value of Status.
 #[derive(Clone, Copy)]
-struct Stats {
-    ks: usize,
-    bs: usize,
-    rs: usize,
+pub struct Stats {
+    pub ks: usize,
+    pub bs: usize,
+    pub rs: usize,
+}
+
+const K: *const c_char = c!("\x1b[32mK\x1b[0m");
+const B: *const c_char = c!("\x1b[33mB\x1b[0m");
+const R: *const c_char = c!("\x1b[31mR\x1b[0m");
+
+pub unsafe fn print_legend(row_width: usize) {
+    printf(c!("%*s%s - success\n"),         row_width + 2, c!(""), K);
+    printf(c!("%*s%s - failed to build\n"), row_width + 2, c!(""), B);
+    printf(c!("%*s%s - runtime error\n"),   row_width + 2, c!(""), R);
+}
+
+pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
+    assert!(targets.len() == stats_by_target.len());
+    for j in 0..targets.len() {
+        let target = (*targets)[j];
+        let stats = (*stats_by_target)[j];
+        printf(c!("%*s"), row_width + 2, c!(""));
+        for _ in 0..j {
+            printf(c!("│ "));
+        }
+        printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
+    }
+}
+
+pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
+    assert!(targets.len() == stats_by_target.len());
+    for j in (0..targets.len()).rev() {
+        let target = (*targets)[j];
+        let stats = (*stats_by_target)[j];
+        printf(c!("%*s"), row_width + 2, c!(""));
+        for _ in 0..j {
+            printf(c!("│ "));
+        }
+        printf(c!("└─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
+    }
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
@@ -191,66 +229,38 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         da_append(&mut stats_by_target, stats);
     }
 
-    let mut width = 0;
+    let mut row_width = 0;
     for i in 0..reports.count {
         let report = *reports.items.add(i);
-        width = cmp::max(width, strlen(report.name));
+        row_width = cmp::max(row_width, strlen(report.name));
     }
 
-    printf(c!("%*s\x1b[32mK\x1b[0m - success\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[33mB\x1b[0m - failed to build\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
-    printf(c!("\n"));
-
-    let mut target_column_width = 0;
+    let mut col_width = 0;
     for j in 0..targets.count {
         let target = *targets.items.add(j);
         let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
-        if width > target_column_width {
-            target_column_width = width;
-        }
+        col_width = cmp::max(col_width, width);
     }
 
-    for j in 0..targets.count {
-        let target = *targets.items.add(j);
-        let stats = *stats_by_target.items.add(j);
-        printf(c!("%*s"), width + 2, c!(""));
-        for _ in 0..j {
-            printf(c!("│ "));
-        }
-        printf(c!("┌─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
-    }
-
+    print_legend(row_width);
+    printf(c!("\n"));
+    print_top_labels(da_slice(targets), da_slice(stats_by_target), row_width, col_width);
     for i in 0..reports.count {
         let report = *reports.items.add(i);
-        printf(c!("%*s:"), width, report.name);
+        printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
             let status = *report.statuses.items.add(j);
             match status {
-                Status::Ok        => printf(c!(" \x1b[32mK\x1b[0m")),
-                Status::BuildFail => printf(c!(" \x1b[33mB\x1b[0m")),
-                Status::RunFail   => printf(c!(" \x1b[31mR\x1b[0m")),
+                Status::Ok        => printf(c!(" %s"), K),
+                Status::BuildFail => printf(c!(" %s"), B),
+                Status::RunFail   => printf(c!(" %s"), R),
             };
         }
         printf(c!("\n"));
     }
-
-    for j in (0..targets.count).rev() {
-        let target = *targets.items.add(j);
-        let stats = *stats_by_target.items.add(j);
-        printf(c!("%*s"), width + 2, c!(""));
-        for _ in 0..j {
-            printf(c!("│ "));
-        }
-        printf(c!("└─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
-    }
-
+    print_bottom_labels(da_slice(targets), da_slice(stats_by_target), row_width, col_width);
     printf(c!("\n"));
-    printf(c!("%*s\x1b[32mK\x1b[0m - success\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[33mB\x1b[0m - failed to build\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
+    print_legend(row_width);
 
     Some(())
 }
