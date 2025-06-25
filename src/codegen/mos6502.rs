@@ -1390,22 +1390,20 @@ pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c
 
             instr(out, TSX);
             instr(out, CLC);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 1); // low
 
             // load address to buffer in ZP to dereference, because registers
             // only 8 bits
+            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 1); // low
             instr8(out, STA, ZP, ZP_DEREF_0);
 
             instr(out, TYA);
             instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 2); // high
             instr8(out, STA, ZP, ZP_DEREF_1);
 
-            instr8(out, LDY, IMM, 0);
-
             instr16(out, LDA, ABS_X, STACK_PAGE + 2*2 + 1); // low
-            instr16(out, LDY, ABS_X, STACK_PAGE + 2*2 + 1); // high
-
-            instr8(out, STA, IND_X, ZP_DEREF_0);
+            // instr16(out, LDY, ABS_X, STACK_PAGE + 2*2 + 1); // high
+            instr8(out, LDY, IMM, 0);
+            instr8(out, STA, IND_Y, ZP_DEREF_0);
 
             // TODO: maybe sign extend Y, if we expect signed chars?
             // instr8(output, CMP, IMM, 0);
