@@ -374,7 +374,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, out: *mut String_Builder, asm: *mut A
             instr0(out, LDA, IMM);
             add_reloc(out, RelocationKind::DataOffset{off: offset as u16, byte: Byte::Low}, asm);
             instr0(out, LDY, IMM);
-            add_reloc(out, RelocationKind::DataOffset{off: (offset + 1) as u16, byte: Byte::High}, asm);
+            add_reloc(out, RelocationKind::DataOffset{off: offset as u16, byte: Byte::High}, asm);
         },
         Arg::Bogus => unreachable!("bogus-amogus"),
     };
