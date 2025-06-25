@@ -170,7 +170,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             if let Some(target) = target_by_name(target_name) {
                 da_append(&mut targets, target);
             } else {
-                fprintf(stderr(), c!("ERRRO: unknown target `%s`\n"), target_name);
+                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
                 return None;
             }
         }
