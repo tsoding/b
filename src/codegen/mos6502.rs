@@ -1345,7 +1345,7 @@ pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c
             }
         }
 
-        // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it
+        // TODO: consider implementing all these intrinsics in __asm__ if possible
         if strcmp(name, c!("char")) == 0 {
             // ch = char(string, i);
             // returns the ith character in a string pointed to by string, 0 based
