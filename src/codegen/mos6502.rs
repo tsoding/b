@@ -459,7 +459,7 @@ pub unsafe fn parse_num(line_begin: *const c_char, mut line: *const c_char, mut 
         },
         c => {
             loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
-            diagf!(loc, c!("ERROR: unexpected character `%c` in __asm__ number literal\n"),
+            diagf!(loc, c!("ERROR: unexpected character `%c` in numberic literal\n"),
                    c as c_int);
             abort();
         }
@@ -563,14 +563,14 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
                 while isspace(*line as i32) != 0 {line = line.add(1);}
                 if toupper(*line as i32) as u8 != b'X' {
                     loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
-                    diagf!(loc, c!("ERROR: X expected for indirect addressing mode __asm__\n"), *line as c_int);
+                    diagf!(loc, c!("ERROR: X expected for indirect addressing mode\n"), *line as c_int);
                     abort();
                 }
                 line = line.add(1);
                 while isspace(*line as i32) != 0 {line = line.add(1);}
                 if toupper(*line as i32) as u8 != b')' {
                     loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
-                    diagf!(loc, c!("ERROR: ) expected in __asm__\n"), *line as c_int);
+                    diagf!(loc, c!("ERROR: ) expected after X-indirect address\n"), *line as c_int);
                     abort();
                 }
                 line = line.add(1);
@@ -578,7 +578,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
             } else {
                 if *line as u8 != b')' {
                     loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
-                    diagf!(loc, c!("ERROR: expected ',' or ')' after indirect address __asm__\n"), *line as c_int);
+                    diagf!(loc, c!("ERROR: expected ',' or ')' after indirect address\n"), *line as c_int);
                     abort();
                 }
                 line = line.add(1);
@@ -597,7 +597,7 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
                     while isspace(*line as i32) != 0 {line = line.add(1);}
                     if toupper(*line as i32) as u8 != b'Y' {
                         loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
-                        diagf!(loc, c!("ERROR: Y expected for indirect addressing mode __asm__\n"), *line as c_int);
+                        diagf!(loc, c!("ERROR: Y expected for Y-indirect addressing mode\n"), *line as c_int);
                         abort();
                     }
                     line = line.add(1);
