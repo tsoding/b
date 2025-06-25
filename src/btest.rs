@@ -135,11 +135,11 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
+    let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
     let cases_flags  = flag_list(c!("c"), c!("Test cases"));
+    let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
-    // TODO: flag to print the list of tests
-    // TODO: flag to print the list of targets
     // TODO: select test cases and targets by a glob pattern
     // See if https://github.com/tsoding/glob.h can be used here
 
@@ -159,7 +159,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut reports: Array<Report> = zeroed();
 
     let mut targets: Array<Target> = zeroed();
-    if (*target_flags).count == 0 {
+    if *list_targets || (*target_flags).count == 0 {
         for j in 0..TARGET_NAMES.len() {
             let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
             da_append(&mut targets, target);
@@ -176,8 +176,17 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
+    if *list_targets {
+        fprintf(stderr(), c!("Compilation targets:\n"));
+        for i in 0..targets.count {
+            let target = *targets.items.add(i);
+            fprintf(stderr(), c!("    %s\n"), name_of_target(target).unwrap());
+        }
+        return Some(());
+    }
+
     let mut cases: Array<*const c_char> = zeroed();
-    if (*cases_flags).count == 0 {
+    if *list_cases || (*cases_flags).count == 0 {
         let mut test_files: File_Paths = zeroed();
         if !read_entire_dir(*test_folder, &mut test_files) { return None; }
         qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
@@ -193,6 +202,15 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let case_name = *(*cases_flags).items.add(i);
             da_append(&mut cases, case_name);
         }
+    }
+
+    if *list_cases {
+        fprintf(stderr(), c!("Test cases:\n"));
+        for i in 0..cases.count {
+            let case = *cases.items.add(i);
+            fprintf(stderr(), c!("    %s\n"), case);
+        }
+        return Some(());
     }
 
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
