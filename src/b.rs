@@ -222,14 +222,14 @@ pub enum Binop {
     Plus,
     Minus,
     Mult,
-    Mod,
     Div,
-    Less,
-    Greater,
+    Mod,
     Equal,
     NotEqual,
-    GreaterEqual,
+    Less,
     LessEqual,
+    Greater,
+    GreaterEqual,
     BitOr,
     BitAnd,
     BitShl,
@@ -254,15 +254,15 @@ impl Binop {
     pub fn from_assign_token(token: Token) -> Option<Option<Self>> {
         match token {
             Token::Eq      => Some(None),
-            Token::ShlEq   => Some(Some(Binop::BitShl)),
-            Token::ShrEq   => Some(Some(Binop::BitShr)),
-            Token::ModEq   => Some(Some(Binop::Mod)),
-            Token::OrEq    => Some(Some(Binop::BitOr)),
-            Token::AndEq   => Some(Some(Binop::BitAnd)),
             Token::PlusEq  => Some(Some(Binop::Plus)),
             Token::MinusEq => Some(Some(Binop::Minus)),
             Token::MulEq   => Some(Some(Binop::Mult)),
             Token::DivEq   => Some(Some(Binop::Div)),
+            Token::ModEq   => Some(Some(Binop::Mod)),
+            Token::ShlEq   => Some(Some(Binop::BitShl)),
+            Token::ShrEq   => Some(Some(Binop::BitShr)),
+            Token::OrEq    => Some(Some(Binop::BitOr)),
+            Token::AndEq   => Some(Some(Binop::BitAnd)),
             _              => None,
         }
     }
@@ -274,16 +274,16 @@ impl Binop {
             Token::Mul       => Some(Binop::Mult),
             Token::Div       => Some(Binop::Div),
             Token::Mod       => Some(Binop::Mod),
+            Token::EqEq      => Some(Binop::Equal),
+            Token::NotEq     => Some(Binop::NotEqual),
             Token::Less      => Some(Binop::Less),
+            Token::LessEq    => Some(Binop::LessEqual),
             Token::Greater   => Some(Binop::Greater),
             Token::GreaterEq => Some(Binop::GreaterEqual),
-            Token::LessEq    => Some(Binop::LessEqual),
             Token::Or        => Some(Binop::BitOr),
             Token::And       => Some(Binop::BitAnd),
             Token::Shl       => Some(Binop::BitShl),
             Token::Shr       => Some(Binop::BitShr),
-            Token::EqEq      => Some(Binop::Equal),
-            Token::NotEq     => Some(Binop::NotEqual),
             _ => None,
         }
     }
@@ -302,11 +302,17 @@ impl Binop {
 }
 
 #[derive(Clone, Copy)]
+pub struct AsmStmt {
+    line: *const c_char,
+    loc: Loc,
+}
+
+#[derive(Clone, Copy)]
 pub enum Op {
     Bogus,
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
-    Asm            {args: Array<*const c_char>},
+    Asm            {stmts: Array<AsmStmt>},
     Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
@@ -690,7 +696,7 @@ pub unsafe fn name_declare_if_not_exists(names: *mut Array<*const c_char>, name:
     da_append(names, name)
 }
 
-pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array<*const c_char>) -> Option<()> {
+pub unsafe fn compile_asm_stmts(l: *mut Lexer, c: *mut Compiler, stmts: *mut Array<AsmStmt>) -> Option<()> {
     get_and_expect_token_but_continue(l, c, Token::OParen)?;
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
@@ -699,8 +705,12 @@ pub unsafe fn compile_asm_args(l: *mut Lexer, c: *mut Compiler, args: *mut Array
         loop {
             get_and_expect_token(l, Token::String)?;
             match (*l).token {
-                Token::String => da_append(args, arena::strdup(&mut (*c).arena_names, (*l).string)),
-                _             => unreachable!(),
+                Token::String => {
+                    let line = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    let loc = (*l).loc;
+                    da_append(stmts, AsmStmt { line, loc });
+                }
+                _ => unreachable!(),
             }
 
             get_and_expect_tokens(l, &[Token::Comma, Token::CParen])?;
@@ -836,9 +846,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Some(())
         }
         Token::Asm => {
-            let mut args: Array<*const c_char> = zeroed();
-            compile_asm_args(l, c, &mut args)?;
-            push_opcode(Op::Asm {args}, (*l).loc, c);
+            let loc = (*l).loc;
+            let mut stmts: Array<AsmStmt> = zeroed();
+            compile_asm_stmts(l, c, &mut stmts)?;
+            push_opcode(Op::Asm {stmts}, loc, c);
             Some(())
         }
         Token::Case => {
@@ -930,7 +941,7 @@ pub unsafe fn usage() {
 pub struct AsmFunc {
     name: *const c_char,
     name_loc: Loc,
-    body: Array<*const c_char>,
+    body: Array<AsmStmt>,
 }
 
 #[derive(Clone, Copy)]
@@ -1059,8 +1070,8 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
             (*c).op_label_count = 0;
         } else if (*l).token == Token::Asm { // Assembly function definition
-            let mut body: Array<*const c_char> = zeroed();
-            compile_asm_args(l, c, &mut body)?;
+            let mut body: Array<AsmStmt> = zeroed();
+            compile_asm_stmts(l, c, &mut body)?;
             da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
         } else { // Variable definition
             (*l).parse_point = saved_point;

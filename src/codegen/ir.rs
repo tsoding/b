@@ -98,11 +98,11 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 sb_appendf(output, c!(")\n"));
             }
-            Op::Asm {args} => {
+            Op::Asm {stmts} => {
                 sb_appendf(output, c!("   __asm__(\n"));
-                for i in 0..args.count {
-                    let arg = *args.items.add(i);
-                    sb_appendf(output, c!("    %s\n"), arg);
+                for i in 0..stmts.count {
+                    let stmt = *stmts.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), stmt.line);
                 }
                 sb_appendf(output, c!(")\n"));
             }
@@ -206,8 +206,8 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
         let asm_func = (*asm_funcs)[i];
         sb_appendf(output, c!("%s(asm):\n"), asm_func.name);
         for j in 0..asm_func.body.count {
-            let line = *asm_func.body.items.add(j);
-            sb_appendf(output, c!("    %s\n"), line);
+            let stmt = *asm_func.body.items.add(j);
+            sb_appendf(output, c!("    %s\n"), stmt.line);
         }
     }
 }
