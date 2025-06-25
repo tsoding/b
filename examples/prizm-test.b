@@ -10,12 +10,12 @@ main() {
     extrn PrintPixXY;
     extrn Bdisp_Rectangle;
     auto color;
+    extrn exit;
 
     color = 0;
     y = 0;
     str = "  Hello World from B!";
-
-
+    
     while (1) {
         //Bdisp_AllClr_VRAM();
         Bdisp_Fill_VRAM(7, 4);

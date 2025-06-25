@@ -58,7 +58,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    mov r14, r2\n"));
             sb_appendf(output, c!("    add #-%d, r2\n"), index*4);
             sb_appendf(output, c!("    mov.l @r2, %s\n"), reg);
-            sb_appendf(output, c!("    mov.l @%s, %s\n"), reg);
+            sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
         },
         Arg::RefAutoVar(index) => {
             sb_appendf(output, c!("    mov r14, %s\n"), reg);
@@ -241,9 +241,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     // Oh god. God no. Don't let me put the 32 div1 jumpscare.
                     Binop::Mod => {
                         // TODO
+                        missingf!(op.loc, c!("mod operator is unimplemented\n"));
                     }
                     Binop::Div => {
                         // TODO
+                        missingf!(op.loc, c!("div operator is unimplemented\n"));
                     }
                     
                     // This sounds more reasonable to implement
@@ -389,7 +391,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
 
     sb_appendf(output, c!(".align 4\n"));
     for i in 0..constset.count {
-        sb_appendf(output, c!(".L_%sC%d:  .long %d\n"), i, name, constset.items.add(i));
+        sb_appendf(output, c!(".L_%sC%d:  .long %d\n"), name, i, constset.items.add(i));
     }
     if littset.cntr != 0 {
         sb_appendf(output, c!("%s\n"), littset.data.items);
