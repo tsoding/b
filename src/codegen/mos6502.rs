@@ -484,9 +484,9 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
     }
 
     // all instruction mnemonics are 3 characters.
-    let mut buf = [0i8; 4];
+    let mut buf: [c_char; 4] = [0; 4];
     for i in 0 .. 3 {
-        buf[i] = toupper(*line as i32) as i8;
+        buf[i] = toupper(*line as i32) as c_char;
         if *line == 0 {
             break;
         }
