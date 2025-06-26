@@ -38,7 +38,7 @@ MINGW32_OBJS=\
 	$(BUILD)/flag.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
-	$(BUILD)/fake6502.linux.o
+	$(BUILD)/fake6502.mingw32.o
 
 .PHONY: all
 all: $(BUILD)/b $(BUILD)/btest
