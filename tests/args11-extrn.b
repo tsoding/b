@@ -1,4 +1,3 @@
-// TODO: incorrect output on uxn
 main() {
     extrn printf;
     printf("Testing how well passing 11 arguments works.\n");
