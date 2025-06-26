@@ -1,6 +1,6 @@
 // -*- mode: simpc -*-
 y;
-str;
+str[6];
 
 main() {
     extrn Bdisp_AllClr_VRAM;
@@ -14,13 +14,13 @@ main() {
 
     color = 0;
     y = 0;
-    str = "  Hello World from B!";
+    str[0] = "  Hello World from B!";
     
     while (1) {
         //Bdisp_AllClr_VRAM();
         Bdisp_Fill_VRAM(7, 4);
         Bdisp_Rectangle(16 + y, 16 + 2 * y, 64 + y, 64 + 2 * y, 7 - color);
-        PrintPixXY(1,y,str,color);
+        PrintPixXY(1,y,str[0],color);
         Bdisp_PutDisp_DD();
         color = color + 1;
         if (color > 7) {

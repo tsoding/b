@@ -309,6 +309,9 @@ Print_OS __asm__(
 );
 
 // TODO: malloc/free
+malloc(size) {
+    printf("No malloc?!\n");
+}
 
 // Intrisic maths (division/modulo)
 intrisic_div (a, b) {

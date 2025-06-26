@@ -72,9 +72,9 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
         Arg::Deref(index) => {
             // TODO
             sb_appendf(output, c!("    ! dereference of argument[%d]\n"), index);
-            sb_appendf(output, c!("    mov r14, r2\n"));
-            sb_appendf(output, c!("    add #-%d, r2\n"), index*4);
-            sb_appendf(output, c!("    mov.l @r2, %s\n"), reg);
+            sb_appendf(output, c!("    mov r14, r8\n"));
+            sb_appendf(output, c!("    add #-%d, r8\n"), index*4);
+            sb_appendf(output, c!("    mov.l @r8, %s\n"), reg);
             sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
         },
         Arg::RefAutoVar(index) => {
@@ -87,9 +87,9 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             //sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
         },
         Arg::AutoVar(index) => {
-            sb_appendf(output, c!("    mov r14, r2\n"));
-            sb_appendf(output, c!("    add #-%d, r2\n"), index*4);
-            sb_appendf(output, c!("    mov.l @r2, %s\n"), reg);
+            sb_appendf(output, c!("    mov r14, r8\n"));
+            sb_appendf(output, c!("    add #-%d, r8\n"), index*4);
+            sb_appendf(output, c!("    mov.l @r8, %s\n"), reg);
         },
         Arg::Literal(value) => {
             load_literal_to_reg(output, reg, value as u32, consts, funcname);
@@ -107,11 +107,11 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
 }
 
 pub unsafe fn write_r0(output: *mut String_Builder, argument: usize) {
-    sb_appendf(output, c!("    ! Loading argument[%zu]\n"), argument);
+    sb_appendf(output, c!("    ! Storing into argument[%zu]\n"), argument);
     if argument > 0 {
-        sb_appendf(output, c!("    mov r0, r3\n"));
+        sb_appendf(output, c!("    mov r0, r8\n"));
         sb_appendf(output, c!("    mov #-%d, r0\n"), argument*4);
-        sb_appendf(output, c!("    mov.l r3, @(r0,r14)\n"));
+        sb_appendf(output, c!("    mov.l r8, @(r0,r14)\n"));
     } else {
         // ?!
         sb_appendf(output, c!("    mov.l r0, @r14\n"));
@@ -337,11 +337,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 write_r0(output, index);
             },
             Op::Store {index, arg} => {
-                // TODO
                 sb_appendf(output, c!("    ! STORE ARGUMENT INTO INDEX\n"));
                 load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
                 sb_appendf(output, c!("    mov r14, r1\n"));
                 sb_appendf(output, c!("    add #-%d, r1\n"), index * 4);
+                sb_appendf(output, c!("    mov.l @r1, r1\n"));
                 sb_appendf(output, c!("    mov.l r0, @r1\n"));
             },
             Op::Funcall {result, fun, args} => {
@@ -461,7 +461,7 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
             sb_appendf(output, c!(".global %s\n"), global.name);
             sb_appendf(output, c!("%s:\n"), global.name);
             if global.is_vec {
-                sb_appendf(output, c!("    .long .+8\n"), global.name);
+                sb_appendf(output, c!("    .long .+4 ! (address into veczone)\n"), global.name);
             }
             for j in 0..global.values.count {
                 match *global.values.items.add(j) {
@@ -477,7 +477,7 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
                 }
             }
             if global.values.count < global.minimum_size {
-                sb_appendf(output, c!("    .zero %zu\n"), 8*(global.minimum_size - global.values.count));
+                sb_appendf(output, c!("    .zero %zu\n"), 4*(global.minimum_size - global.values.count));
             }
         }
     }
