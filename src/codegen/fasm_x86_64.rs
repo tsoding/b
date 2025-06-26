@@ -64,6 +64,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
+            Op::NoOp => {},
+            
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("rax"), output);
