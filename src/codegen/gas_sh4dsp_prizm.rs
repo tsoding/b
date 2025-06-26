@@ -1,6 +1,5 @@
 use core::ffi::*;
 use core::cmp;
-use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc};
@@ -8,42 +7,57 @@ use crate::{missingf, Loc};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
-pub struct Littset {
-    pub cntr: u16,
-    pub data: String_Builder,
-}
-
-#[repr(C)]
-#[derive(Clone, Copy)]
-pub struct ConstantCtx {
+pub struct Assembler {
     pub funcname: *const c_char,
-    pub littset : Littset
+    pub output: *mut String_Builder,
+    pub next_trampoline : usize,
+    pub next_litteral : usize
 }
 
-pub unsafe fn next_litteral(consts: *mut ConstantCtx, lit: u32) -> u16 {
-    let index = (*consts).littset.cntr;
-    sb_appendf(&mut (*consts).littset.data, c!(".L_%sCL%d: .long %d\n"), (*consts).funcname, index as u32, lit);
-    (*consts).littset.cntr += 1;
-    index as u16
+pub unsafe fn write_nextsym(assembler: *mut Assembler) {
+    let index = (*assembler).next_litteral;
+    sb_appendf((*assembler).output, c!(".L_%sCL%d"), (*assembler).funcname, index as c_int);
 }
-pub unsafe fn next_symbol(consts: *mut ConstantCtx, sym: *const c_char) -> u16 {
-    let index = (*consts).littset.cntr;
-    sb_appendf(&mut (*consts).littset.data, c!(".L_%sCL%d: .long %s\n"), (*consts).funcname, index as u32, sym);
-    (*consts).littset.cntr += 1;
-    index as u16
+pub unsafe fn next_litteral(assembler: *mut Assembler, lit: u32) -> usize {
+    let index = (*assembler).next_litteral;
+    let next_trampoline = (*assembler).next_trampoline;
+    // Write a dirty "trampoline"
+    sb_appendf((*assembler).output, c!("    bra .L%sTrampoline%d\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!(".L_%sCL%d: .long %d\n"), (*assembler).funcname, index as c_int, lit);
+    sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!(".L%sTrampoline%d:\n"), (*assembler).funcname, next_trampoline);
+
+    (*assembler).next_litteral += 1;
+    (*assembler).next_trampoline += 1;
+    index
+}
+pub unsafe fn next_symbol(assembler: *mut Assembler, sym: *const c_char) -> usize {
+    let index = (*assembler).next_litteral;
+    let next_trampoline = (*assembler).next_trampoline;
+    // Write a dirty "trampoline"
+    sb_appendf((*assembler).output, c!("    bra .L%sTrampoline%d\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!(".L_%sCL%d: .long %s\n"), (*assembler).funcname, index as c_int, sym);
+    sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!(".L%sTrampoline%d:\n"), (*assembler).funcname, next_trampoline);
+
+    (*assembler).next_litteral += 1;
+    (*assembler).next_trampoline += 1;
+    index
 }
 
-pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, consts: *mut ConstantCtx, funcname: *const c_char) {
+pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assembler: *mut Assembler) {
     // The extra flag is because arg doesnt use references to a symbol but the symbol itself,
     // which then causes some fun issues, as load_arg_to_reg will try to dereference a value that 
     // should NOT be dereferenced... this should be fixed in another PR >_>
     //                  - LDA: June 25th, 2025
-    load_arg_to_reg(arg, c!("r0"), output, loc, consts, funcname, true);
+    load_arg_to_reg(arg, c!("r0"), output, loc, assembler, true);
     sb_appendf(output, c!("    jsr @r0\n"));
     sb_appendf(output, c!("    nop\n"));
 }
 
-pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u32, consts: *mut ConstantCtx, name: *const c_char) {
+pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u32, assembler: *mut Assembler) {
     let sliteral = literal as i32;
 
     // Literals that can fit in a byte are well-supported on SH-4    
@@ -51,23 +65,22 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
         sb_appendf(output, c!("    mov #%d, %s\n"), literal, reg);
         return;
     }
-    // Now, we have to deal with literals fitting in a 32-bit word.
-    // The problem is that the generally accepted method is to declare a new symbol.
-    //
-    // TODO: Worry about very problematic PCrel stuff (probably by splitting functions into 
-    // chunks (which are joined together by branches)
-    let index = next_litteral(consts, literal);
-    sb_appendf(output, c!("    mov.l .L_%sCL%d, %s\n"), name, index as u32, reg);
+    sb_appendf(output, c!("    mov.l "));
+    write_nextsym(assembler);
+    sb_appendf(output, c!(", %s\n"), reg);
+
+    next_litteral(assembler, literal);
 }
-pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder, loc: Loc, consts: *mut ConstantCtx, funcname: *const c_char, is_call: bool) {
+pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder, loc: Loc, assembler: *mut Assembler, is_call: bool) {
     match arg {
         Arg::External(name) => {
-            let index = next_symbol(consts, name);
-            sb_appendf(output, c!("    mov.l .L_%sCL%d, %s ! %s\n"), funcname, index as u32, reg, name);
+            sb_appendf(output, c!("    mov.l "));
+            write_nextsym(assembler);
+            sb_appendf(output, c!(", %s ! %s\n"), reg, name);
             if !is_call {
                 sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
             }
-            // TODO: Littset
+            next_symbol(assembler, name);
         },
         Arg::Deref(index) => {
             // TODO
@@ -82,9 +95,10 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    add #-%d, %s\n"), index*4, reg);
         },
         Arg::RefExternal(name) => {
-            let index = next_symbol(consts, name);
-            sb_appendf(output, c!("    mov.l .L_%sCL%d, %s ! %s\n"), funcname, index as u32, reg, name);
-            //sb_appendf(output, c!("    mov.l @%s, %s\n"), reg, reg);
+            sb_appendf(output, c!("    mov.l "));
+            write_nextsym(assembler);
+            sb_appendf(output, c!(", %s ! %s\n"), reg, name);
+            next_symbol(assembler, name);
         },
         Arg::AutoVar(index) => {
             sb_appendf(output, c!("    mov r14, r8\n"));
@@ -92,14 +106,20 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             sb_appendf(output, c!("    mov.l @r8, %s\n"), reg);
         },
         Arg::Literal(value) => {
-            load_literal_to_reg(output, reg, value as u32, consts, funcname);
+            load_literal_to_reg(output, reg, value as u32, assembler);
         },
         Arg::DataOffset(offset) => {
             if offset >= 255 {
                 missingf!(loc, c!("Data offsets bigger than 255 are not supported yet\n"));
             } else {
-                sb_appendf(output, c!("    mov.l .L_%sCL0, %s ! hai\n"), funcname, reg);
+                sb_appendf(output, c!("    mov.l "));
+                write_nextsym(assembler);
+                sb_appendf(output, c!(", %s ! %s\n"), reg, "<data zone>");
+
+                // TODO: Manage this through loading a literal into a register and adding it if
+                // possible
                 if offset != 0 { sb_appendf(output, c!("    add #%d, %s\n"), offset, reg); }
+                next_symbol(assembler, c!(".dat"));
             }
         },
         Arg::Bogus => unreachable!("bogus-amogus")
@@ -119,11 +139,11 @@ pub unsafe fn write_r0(output: *mut String_Builder, argument: usize) {
     sb_appendf(output, c!("    \n"));
 }
 pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, _c: *const Compiler) {
-    let mut constlit: ConstantCtx = ConstantCtx { 
-        littset: Littset { data: zeroed(), cntr: 0 },
-        funcname: name
+    let mut assembler: Assembler = Assembler { 
+        funcname: name,
+        output: output,
+        next_trampoline: 0, next_litteral: 0
     };
-    let funcname = name;
 
     // Put each symbol in its own section
     sb_appendf(output, c!(".text\n"));
@@ -134,7 +154,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     sb_appendf(output, c!(".type %s, @function\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
 
-    next_symbol(&mut constlit, c!(".dat"));
+    next_symbol(&mut assembler, c!(".dat"));
     
     sb_appendf(output, c!("    mov.l r8, @-r15\n"));
     sb_appendf(output, c!("    mov.l r9, @-r15\n"));
@@ -179,7 +199,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return {arg} => {
                 if let Some(arg) = arg {
-                    load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
+                    load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 }
                 sb_appendf(output, c!("    mov r14, r15\n"));
                 sb_appendf(output, c!("    lds.l @r15+, pr\n"));
@@ -197,7 +217,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("    nop\n"));
             }
             Op::Negate {result, arg} => {
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 sb_appendf(output, c!("    neg r0, r0\n"));
                 write_r0(output, result);
             }
@@ -205,7 +225,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 // This is probably not the most efficient way to do things, and it 
                 // also thrashes T, so yeah. but then again the B compiler doesn't seem 
                 // to be something that cares about processor flags all that much.
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 sb_appendf(output, c!("    cmp/eq #0, r0\n"));
                 sb_appendf(output, c!("    movt r0\n"));
                 sb_appendf(output, c!("    xor #1, r0\n"));
@@ -214,14 +234,14 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::Binop {binop, index, lhs, rhs} => {
                 match binop {
                     Binop::BitOr => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    or r1, r0\n"));
                         write_r0(output, index);
                     },
                     Binop::BitAnd => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    and r1, r0\n"));
                         write_r0(output, index);
                     },
@@ -238,14 +258,14 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     },
                     Binop::Plus => {
                         sb_appendf(output, c!("    ! +\n"));
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    add r1, r0\n"));
                         write_r0(output, index);
                     }
                     Binop::Minus => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    sub r1, r0\n"));
                         write_r0(output, index);
                     },
@@ -253,23 +273,23 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     // Oh god. God no. Don't let me put the 32 div1 jumpscare.
                     Binop::Mod => {
                         // TODO
-                        load_arg_to_reg(lhs, c!("r4"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r5"), output, op.loc, &mut constlit, name, false);
-                        call_arg(Arg::External(c!("intrisic_mod")), op.loc, output, &mut constlit, name);
+                        load_arg_to_reg(lhs, c!("r4"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r5"), output, op.loc, &mut assembler, false);
+                        call_arg(Arg::External(c!("intrisic_mod")), op.loc, output, &mut assembler);
                         write_r0(output, index);
                     }
                     Binop::Div => {
                         // TODO
-                        load_arg_to_reg(lhs, c!("r4"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r5"), output, op.loc, &mut constlit, name, false);
-                        call_arg(Arg::External(c!("intrisic_div")), op.loc, output, &mut constlit, name);
+                        load_arg_to_reg(lhs, c!("r4"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r5"), output, op.loc, &mut assembler, false);
+                        call_arg(Arg::External(c!("intrisic_div")), op.loc, output, &mut assembler);
                         write_r0(output, index);
                     }
                     
                     // This sounds more reasonable to implement
                     Binop::Mult => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    mul.l r0, r1\n"));
                         sb_appendf(output, c!("    sts macl, r0\n"));
                         write_r0(output, index);
@@ -277,45 +297,45 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
 
                     // TODO: Test these out
                     Binop::Less => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    cmp/gt r0, r1\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
                     }
                     Binop::Greater => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    cmp/gt r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
                     }
                     Binop::Equal => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    cmp/eq r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
                     }
                     Binop::NotEqual => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    cmp/eq r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         sb_appendf(output, c!("    xor #1, r0\n"));
                         write_r0(output, index);
                     }
                     Binop::GreaterEqual => {
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    cmp/ge r1, r0\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
                     },
                     Binop::LessEqual => {
                         // TODO: Make sure these work well
-                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut constlit, name, false);
-                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut constlit, name, false);
+                        load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                        load_arg_to_reg(rhs, c!("r1"), output, op.loc, &mut assembler, false);
                         sb_appendf(output, c!("    cmp/ge r0, r1\n"));      // Signed
                         sb_appendf(output, c!("    movt r0\n"));
                         write_r0(output, index);
@@ -323,22 +343,22 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 }
             }
             Op::ExternalAssign{name, arg} => {
-                // I'm just going to add it to the constlit.littset to make sure everything's okay
-                let index = constlit.littset.cntr;
-                sb_appendf(&mut constlit.littset.data, c!(".L_%sCL%d: .long %s\n"), funcname, index as u32, name);
-
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, funcname, false);
-                sb_appendf(output, c!("    mov.l .L_%sCL%d, r1 ! %s\n"), funcname, index as c_uint, name);
+                // I'm just going to add it to the assembler.littset to make sure everything's okay
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
+                sb_appendf(output, c!("    mov.l "));
+                write_nextsym(&mut assembler);
+                sb_appendf(output, c!(", r1 ! %s\n"), name);
                 sb_appendf(output, c!("    mov.l r0, @r1\n"));
-                constlit.littset.cntr += 1;
+
+                next_symbol(&mut assembler, name);
             }
             Op::AutoAssign {index, arg} => {
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 write_r0(output, index);
             },
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("    ! STORE ARGUMENT INTO INDEX\n"));
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 sb_appendf(output, c!("    mov r14, r1\n"));
                 sb_appendf(output, c!("    add #-%d, r1\n"), index * 4);
                 sb_appendf(output, c!("    mov.l @r1, r1\n"));
@@ -357,16 +377,16 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                     // why is it called add???
                     sb_appendf(output, c!("    ! loading %d\n"), i);
                     //sb_appendf(output, c!("    mov #0, %s\n"), reg);
-                    load_arg_to_reg(*args.items.add(i), reg, output, op.loc, &mut constlit, name, false);
+                    load_arg_to_reg(*args.items.add(i), reg, output, op.loc, &mut assembler, false);
                 }
                 for i in 0..stack_args_count {
                     let j = stack_args_count - i - 1;
                     sb_appendf(output, c!("    ! loading stack %d\n"), i);
-                    load_arg_to_reg(*args.items.add(reg_args_count+j), c!("r0"), output, op.loc, &mut constlit, name, false);
+                    load_arg_to_reg(*args.items.add(reg_args_count+j), c!("r0"), output, op.loc, &mut assembler, false);
                     sb_appendf(output, c!("    mov.l r0, @-r15\n"));
                     sb_appendf(output, c!("    \n"));
                 }
-                call_arg(fun, op.loc, output, &mut constlit, name);
+                call_arg(fun, op.loc, output, &mut assembler);
                 write_r0(output, result);
                 if stack_args_count > 0 {
                     sb_appendf(output, c!("    add #%d, r15\n"), 4*stack_args_count);
@@ -383,7 +403,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("%s.label_%zu:\n"), name, label);
             }
             Op::JmpLabel {label} => {
-                // TODO: Deal with PCrel nonsense
+                // TODO: Deal with __more__ PCrel nonsense
                 // (well, to be frank, GNU as, by default, does some "trampoline" magic 
                 // to ensure those jumps are always addressible (but I still think they should 
                 // be managed properly :3)
@@ -391,7 +411,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 sb_appendf(output, c!("    nop\n"));
             }
             Op::JmpIfNotLabel {label, arg} => {
-                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut constlit, name, false);
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 sb_appendf(output, c!("    tst r0, r0\n"));
                 sb_appendf(output, c!("    bt %s.label_%zu\n"), name, label);
             }
@@ -418,11 +438,6 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     sb_appendf(output, c!("    rts\n"));
     sb_appendf(output, c!("    nop\n"));
     // Restore every register, but backwards
-
-    sb_appendf(output, c!(".align 4\n"));
-    if constlit.littset.cntr != 0 {
-        sb_appendf(output, c!("%s\n"), constlit.littset.data.items);
-    }
     if strcmp(name, c!("start")) == 0 {
         sb_appendf(output, c!(".section .text\n"));
     }
