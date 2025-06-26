@@ -38,7 +38,7 @@ struct Report {
     statuses: Array<Status>,
 }
 
-pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target) -> Status {
+pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target, build_only: bool) -> Status {
     // TODO: add timeouts for running and building in case they go into infinite loop or something
     let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
     let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
@@ -60,19 +60,21 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
     if !cmd_run_sync_and_reset(cmd) {
         return Status::BuildFail;
     }
-    let run_result = match target {
-        Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
-        Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
-        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
-        Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, output_path, &[]),
-        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, output_path, &[]),
-        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
-        Target::Mos6502             => runner::mos6502::run(output, Config {
-            load_offset: DEFAULT_LOAD_OFFSET
-        }, output_path),
-    };
-    if let None = run_result {
-        return Status::RunFail;
+    if !build_only {
+        let run_result = match target {
+            Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
+            Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
+            Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
+            Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, output_path, &[]),
+            Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, output_path, &[]),
+            Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
+            Target::Mos6502             => runner::mos6502::run(output, Config {
+                load_offset: DEFAULT_LOAD_OFFSET
+            }, output_path),
+        };
+        if let None = run_result {
+            return Status::RunFail;
+        }
     }
     Status::Ok
 }
@@ -140,6 +142,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let cases_flags  = flag_list(c!("c"), c!("Test cases"));
     let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
+    let build_only   = flag_bool(c!("build-only"), false, c!("Only build the tests but don't run them"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
     // TODO: select test cases and targets by a glob pattern
     // See if https://github.com/tsoding/glob.h can be used here
@@ -227,7 +230,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         };
         for j in 0..targets.count {
             let target = *targets.items.add(j);
-            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target));
+            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target, *build_only));
         }
         da_append(&mut reports, report);
     }

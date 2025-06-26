@@ -9,8 +9,6 @@ on:
       - main
 
 # TODO: add jobs that test on different host platforms (windows, aarch64, etc)
-# TODO: build examples with btest on CI
-#   Some of them are interactive so there should be some way to just build things without running them
 
 jobs:
   btest:
@@ -31,3 +29,4 @@ jobs:
         run: |
           make -B
           PATH=$(realpath uxn11/bin):$PATH ./build/btest
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -dir ./examples/ -build-only
