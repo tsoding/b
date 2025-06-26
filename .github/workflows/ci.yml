@@ -31,6 +31,6 @@ jobs:
       - name: Run Tests
         run: |
           PATH=$(realpath uxn11/bin):$PATH ./build/btest
-      - name: Build Examples:
+      - name: Build Examples
         run: |
           PATH=$(realpath uxn11/bin):$PATH ./build/btest -dir ./examples/ -build-only
