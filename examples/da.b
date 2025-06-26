@@ -27,7 +27,7 @@ main() {
     da[COUNT]    = 0;
     da[CAPACITY] = 0;
 
-    auto n; n = 10;
+    auto n = 10;
     i = 0; while (i < n) da_append(da, (++i)*2);
 
     extrn printf;

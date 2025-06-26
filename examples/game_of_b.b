@@ -64,7 +64,7 @@ init_globals() {
     speeds = malloc(NUM_SPEEDS);
     lchar(speeds, 0, 1);
     auto prv_speed;
-    auto i; i = 1; while(i < NUM_SPEEDS) {
+    auto i = 1; while(i < NUM_SPEEDS) {
         prv_speed = char(speeds, i-1);
         lchar(speeds, i, prv_speed + (prv_speed / 3) + 1);
         i++;
@@ -137,8 +137,8 @@ update_world() {
     prv_buf = cur_buf;
     cur_buf = tmp_buf;
     clear_world();
-    auto y; y = 0; while(y < y_size) {
-        auto x; x = 0; while(x < x_size) {
+    auto y = 0; while(y < y_size) {
+        auto x = 0; while(x < x_size) {
             auto up, down, left, right;
             up = (y + y_size - 1) % y_size;
             down = (y + 1) % y_size;
@@ -172,8 +172,8 @@ update_world() {
 print_world() {
     extrn werase, wmove, waddch, update_panels, doupdate;
     werase(world_win);
-    auto y; y = 0; while(y < y_size) {
-        auto x; x = 0; while(x < x_size) {
+    auto y = 0; while(y < y_size) {
+        auto x = 0; while(x < x_size) {
             if(is_alive(cur_buf, y, x)) {
                 wmove(world_win, y, x*2);
                 waddch(world_win, ALIVE_CHAR);

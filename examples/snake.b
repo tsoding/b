@@ -102,12 +102,12 @@ is_colliding_with_apple(pos) {
 
 randomize_apple() {
   extrn rand;
-  auto again; again = 1; while (again) {
+  auto again = 1; while (again) {
     apple[X] = rand() % (width - apple_size - 2) + 1;
     apple[Y] = rand() % (height - apple_size - 2) + 1;
     again = is_colliding_with_apple(head);
 
-    auto i; i = 0; while (i < body_len) {
+    auto i = 0; while (i < body_len) {
       again |= is_colliding_with_apple(body_i(i));
       i += 1;
     }
@@ -290,7 +290,7 @@ handle_user_input() {
     just_died = 0;
     usleep(1000000);
     ioctl(STDIN, FIONREAD, bytes_remaining);
-    auto i; i = 0; while (i < *bytes_remaining) { i += 1;
+    auto i = 0; while (i < *bytes_remaining) { i += 1;
       read(STDIN, input_ch, 1);
     }
   } else {
@@ -319,7 +319,7 @@ draw_screen() {
   extrn memset;
   memset(screen, EMPTY, screen_size);
 
-  auto i; i = 0; while (i < body_len) {
+  auto i = 0; while (i < body_len) {
     auto segment;
     segment = body_i(i);
     if(segment[X] != -1 & segment[Y] != -1)
@@ -370,7 +370,7 @@ update() {
     randomize_apple();
   }
 
-  auto i; i = 0; while (i < body_len) {
+  auto i = 0; while (i < body_len) {
     auto segment;
     segment = body_i(i);
     dead |= head[X]==segment[X] & head[Y]==segment[Y];
@@ -392,7 +392,7 @@ main() {
   randomize_apple();
   enable_raw_mode();
 
-  auto exit; exit = 0; while (!exit) {
+  auto exit = 0; while (!exit) {
     draw_screen();
     usleep(frame_time*1000);
     exit = handle_user_input();
