@@ -22,7 +22,9 @@ pub unsafe fn next_litteral(assembler: *mut Assembler, lit: u32) -> usize {
     let index = (*assembler).next_litteral;
     let next_trampoline = (*assembler).next_trampoline;
     // Write a dirty "trampoline"
+    sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
     sb_appendf((*assembler).output, c!("    bra .L%sTrampoline%d\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
     sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampoline);
     sb_appendf((*assembler).output, c!(".L_%sCL%d: .long %d\n"), (*assembler).funcname, index as c_int, lit);
     sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_trampoline);
@@ -36,7 +38,9 @@ pub unsafe fn next_symbol(assembler: *mut Assembler, sym: *const c_char) -> usiz
     let index = (*assembler).next_litteral;
     let next_trampoline = (*assembler).next_trampoline;
     // Write a dirty "trampoline"
+    sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
     sb_appendf((*assembler).output, c!("    bra .L%sTrampoline%d\n"), (*assembler).funcname, next_trampoline);
+    sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
     sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampoline);
     sb_appendf((*assembler).output, c!(".L_%sCL%d: .long %s\n"), (*assembler).funcname, index as c_int, sym);
     sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_trampoline);
@@ -407,8 +411,9 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 // (well, to be frank, GNU as, by default, does some "trampoline" magic 
                 // to ensure those jumps are always addressible (but I still think they should 
                 // be managed properly :3)
+                sb_appendf(output, c!("    nop ! Safety NOP for delay slot issues\n"));
                 sb_appendf(output, c!("    bra %s.label_%zu\n"), name, label);
-                sb_appendf(output, c!("    nop\n"));
+                sb_appendf(output, c!("    nop ! Safety NOP for delay slot issues\n"));
             }
             Op::JmpIfNotLabel {label, arg} => {
                 load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);

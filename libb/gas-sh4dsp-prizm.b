@@ -103,6 +103,7 @@ exit(code) {
     abort();
 }
 abort() {
+    while (1) {}
     // TODO: this function is broken...
     __asm__ ( 
         "mov r4, r0",
