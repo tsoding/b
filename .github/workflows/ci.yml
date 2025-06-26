@@ -25,8 +25,12 @@ jobs:
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
           make cli
-      - name: Run Tests
+      - name: Build Toolchain
         run: |
           make -B
+      - name: Run Tests
+        run: |
           PATH=$(realpath uxn11/bin):$PATH ./build/btest
+      - name: Build Examples:
+        run: |
           PATH=$(realpath uxn11/bin):$PATH ./build/btest -dir ./examples/ -build-only
