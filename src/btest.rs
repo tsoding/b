@@ -114,6 +114,7 @@ pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const
         for _ in 0..j {
             printf(c!("│ "));
         }
+        // TODO: these fancy unicode characters don't work well on mingw32 build via wine
         printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
         printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
     }
