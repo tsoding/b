@@ -373,10 +373,10 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 }
                 sb_appendf(output, c!("    \n"));
             },
-            Op::Asm {args} => {
-                for i in 0..args.count {
-                    let arg = *args.items.add(i);
-                    sb_appendf(output, c!("    %s\n"), arg);
+            Op::Asm { stmts } => {
+                for i in 0..stmts.count {
+                    let stmt = *stmts.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), stmt.line);
                 }
             }
             Op::Label {label} => {
@@ -486,10 +486,11 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
 pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
     for i in 0..asm_funcs.len() {
         let asm_func = (*asm_funcs)[i];
-        sb_appendf(output, c!(".global %s ! ASM\n"), asm_func.name);
+        sb_appendf(output, c!(".global %s\n"), asm_func.name);
         sb_appendf(output, c!("%s:\n"), asm_func.name);
         for j in 0..asm_func.body.count {
-            sb_appendf(output, c!("    %s\n"), *asm_func.body.items.add(j));
+            let stmt = *asm_func.body.items.add(j);
+            sb_appendf(output, c!("    %s\n"), stmt.line);
         }
     }
 }
