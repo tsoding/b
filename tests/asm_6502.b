@@ -17,6 +17,11 @@ main() {
         "LDY #$10",
         "LDA (20),Y", /* indirect load A=((20),Y) = ((20),$10) = ($410,$10) = ($420) = 69 */
 
+        "LDY #0",     /* clear upper half, now 69 in Y:A */
+        /* TODO: we should jump to a function/label here, to check 69, for now, we just subtract */
+        "SEC",
+        "SBC #69",
+
         "JMP ($FFFC)" /* jump to address in reset vector [0 in this emulator] */
     );
 }
