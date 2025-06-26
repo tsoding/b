@@ -10,14 +10,16 @@ pub enum Target {
     Gas_x86_64_Windows,
     Gas_x86_64_Linux,
     Gas_AArch64_Linux,
+    Gas_AArch64_Darwin,
     Uxn,
     Mos6502,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Os {
     Linux,
     Windows,
+    Darwin,
 }
 
 #[derive(Clone, Copy)]
@@ -32,6 +34,7 @@ pub const TARGET_NAMES: *const [Target_Name] = &[
     Target_Name { name: c!("gas-x86_64-windows"),  target: Target::Gas_x86_64_Windows  },
     Target_Name { name: c!("gas-x86_64-linux"),    target: Target::Gas_x86_64_Linux    },
     Target_Name { name: c!("gas-aarch64-linux"),   target: Target::Gas_AArch64_Linux   },
+    Target_Name { name: c!("gas-aarch64-darwin"),  target: Target::Gas_AArch64_Darwin  },
     Target_Name { name: c!("uxn"),                 target: Target::Uxn                 },
     Target_Name { name: c!("6502"),                target: Target::Mos6502             },
 ];
@@ -61,6 +64,7 @@ pub unsafe fn target_word_size(target: Target) -> u64 {
         Target::Gas_x86_64_Windows  => 8,
         Target::Gas_x86_64_Linux    => 8,
         Target::Gas_AArch64_Linux   => 8,
+        Target::Gas_AArch64_Darwin  => 8,
         Target::Uxn                 => 2,
         Target::Mos6502             => 2,
     }

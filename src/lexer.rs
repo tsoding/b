@@ -92,6 +92,7 @@ pub enum Token {
     Goto,
     Return,
     Asm,
+    Pragma,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
@@ -156,6 +157,7 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::Goto       => c!("keyword `goto`"),
         Token::Return     => c!("keyword `return`"),
         Token::Asm        => c!("keyword `__asm__`"),
+        Token::Pragma     => c!("directive `#pragma`"),
     }
 }
 
@@ -441,6 +443,27 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         let (prefix, token) = (*puncs)[i];
         if skip_prefix(l, prefix) {
             (*l).token = token;
+            return Some(())
+        }
+    }
+
+    if x == '#' as c_char {
+        skip_char(l);
+        skip_whitespaces(l);
+        (*l).string_storage.count = 0;
+        while let Some(x) = peek_char(l) {
+            if is_identifier(x) {
+                da_append(&mut (*l).string_storage, x);
+                skip_char(l);
+            } else {
+                break
+            }
+        }
+        da_append(&mut (*l).string_storage, 0);
+        (*l).string = (*l).string_storage.items;
+
+        if strcmp((*l).string, c!("pragma")) == 0 {
+            (*l).token = Token::Pragma;
             return Some(())
         }
     }

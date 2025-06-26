@@ -42,7 +42,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
     assert!(auto_vars_count >= params_count);
     let registers: *const[*const c_char] = match os {
-        Os::Linux   => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
+        Os::Linux | Os::Darwin => &[c!("rdi"), c!("rsi"), c!("rdx"), c!("rcx"), c!("r8"), c!("r9")],
         Os::Windows => &[c!("rcx"), c!("rdx"), c!("r8"), c!("r9")], // https://en.wikipedia.org/wiki/X86_calling_conventions#Microsoft_x64_calling_convention
     };
 
@@ -54,7 +54,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     }
     for j in i..params_count {
         match os {
-            Os::Linux   => sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 2)*8),
+            Os::Linux | Os::Darwin => sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 2)*8),
             Os::Windows => sb_appendf(output, c!("    mov QWORD rax, [rbp+%zu]\n"), ((j - i) + 6)*8),
         };
         sb_appendf(output, c!("    mov QWORD [rbp-%zu], rax\n"), (j + 1)*8);
@@ -224,7 +224,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
 
                 match os {
-                    Os::Linux => {
+                    Os::Linux | Os::Darwin => {
                         sb_appendf(output, c!("    mov al, 0\n")); // x86_64 Linux ABI passes the amount of
                                                                    // floating point args via al. Since B
                                                                    // does not distinguish regular and
@@ -367,6 +367,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, 
     match os {
         Os::Linux   => sb_appendf(output, c!("format ELF64\n")),
         Os::Windows => sb_appendf(output, c!("format MS64 COFF\n")),
+        Os::Darwin  => sb_appendf(output, c!("format MachO64\n")),
     };
     sb_appendf(output, c!("section \".text\" executable\n"));
     generate_funcs(output, da_slice((*c).funcs), os);

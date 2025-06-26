@@ -987,6 +987,7 @@ pub struct Compiler {
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
+    pub variadics: Array<(*const c_char, usize)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
     pub arena_names: Arena,
@@ -1011,6 +1012,34 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
 
+        if (*l).token == Token::Pragma {
+            get_and_expect_token_but_continue(l, c, Token::ID)?;
+            let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+            if strcmp(name, c!("variadic")) == 0 {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                get_and_expect_token_but_continue(l, c, Token::ID)?;
+                let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+                // push if it doesn't exist
+                for i in 0..(*c).variadics.count {
+                    if strcmp((*(*c).variadics.items.add(i)).0, func) == 0 {
+                        continue 'def; // already defined
+                    }
+                }
+                get_and_expect_token_but_continue(l, c, Token::Comma)?;
+                get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                if (*l).int_number == 0 {
+                    diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
+                    bump_error_count(c)?;
+                    continue 'def;
+                }
+                da_append(&mut (*c).variadics, (func, (*l).int_number as usize));
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+            } else {
+                diagf!((*l).loc, c!("ERROR: unknown pragma `%s`\n"), name);
+                bump_error_count(c)?;
+            }
+            continue;
+        }
         expect_token(l, Token::ID)?;
 
         let name = arena::strdup(&mut (*c).arena_names, (*l).string);
@@ -1149,6 +1178,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
         default_target = Some(Target::Gas_AArch64_Linux);
+    } else if cfg!(target_arch = "aarch64") && cfg!(target_os = "macos") {
+        default_target = Some(Target::Gas_AArch64_Darwin);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
         default_target = Some(Target::Fasm_x86_64_Linux);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
@@ -1296,7 +1327,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     match target {
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64_linux::generate_program(&mut output, &c);
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1460,6 +1491,58 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
                 runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+            }
+        },
+        Target::Gas_AArch64_Darwin => {
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-arch"), c!("arm64"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
             }
         }
         Target::Fasm_x86_64_Linux => {
