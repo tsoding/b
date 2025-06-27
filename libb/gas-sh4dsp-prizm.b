@@ -1,7 +1,12 @@
-start_osaddress;
 start_r14;
 txt_x;
 txt_y;
+
+
+// Set to 1 if this is provably a real, proper Prizm calculator,
+// or 0 on a runner.
+is_realcalc;
+
 start() {
     // This is the part where we're left to manage most pre-init things
     // like enabling 16-bit colors (the OS makes the display run in a limited 8-color mode before anything ever 
@@ -13,27 +18,29 @@ start() {
     extrn data_phystart, data_vrtstart, data_size;
     extrn bss_vrtstart, bss_size;
 
-    // HACK to get PR
-    // this is probably the most cursed piece of code i have ever written, but its goal is to effectively 
-    // write PR (which should be where we're _returning_) to a symbol (here start_osaddress).
-    __asm__ ( 
-        "sts pr, r0",
-        "mov.l start_hackpraddr, r4",
-        "mov.l r0, @r4",
-        "mov.l start_hackskaddr, r4",
-        "mov.l r14, @r4",
-        "bra start_hackend",
-        "nop",
+    extrn detect_calculator;
 
-        ".align 4",
-        "start_hackpraddr: .long start_osaddress",
-        "start_hackskaddr: .long start_r14",
-        "start_hackend:"
-    );
+    // We don't call any syscalls, thus we can mostly promuise r10 will be safe
 
     // Load in the data section
     memcpy(&data_vrtstart, &data_phystart, &data_size);
     memset(&bss_vrtstart, 0, &bss_size);
+
+    // HACK to get r14
+    __asm__ ( 
+        "mov.l start_hackskaddr, r8",
+        "mov.l r14, @r8",
+
+        "nop",
+        "bra start_hackend",
+        "nop",
+
+        ".align 4",
+        "start_hackskaddr: .long start_r14",
+        "start_hackend:",
+        "nop",
+        "nop"
+    );
 
     Bdisp_EnableColor(1);
     Bdisp_AllClr_VRAM();
@@ -41,11 +48,30 @@ start() {
     txt_x = 1;
     txt_y = 1;
 
+    is_realcalc = detect_calculator();
+
     return (main(0, 0));
 }
-store_pr(pr) {
-    start_osaddress = pr;
-}
+detect_calculator __asm__ (
+    "mov.l .L_ilram, r4",
+    "nop",
+    "bra tramp_end",
+    "nop",
+
+    ".align 4",
+    ".L_ilram: .long 0xE5200000",
+    "tramp_end:",
+
+    "mov #0, r0",
+    "mov.l r0, @r4",
+    "mov #69, r0",
+    "mov.l r0, @r4",
+    "mov.l @r4, r4",
+    "cmp/eq r0, r4",
+
+    "rts",
+    "movt r0"
+);
 
 
 // getmchar(addr)
@@ -98,28 +124,28 @@ toupper(c) {
     }
     return (c - 'a' + 'A');
 }
-exit(code) {
-    extrn abort;
-    abort();
-}
-abort() {
-    while (1) {}
-    // TODO: this function is broken...
-    __asm__ ( 
-        "mov r4, r0",
-        "mov.l exit_hackskaddr, r4",
-        "mov.l @r4, r15",
-        "mov.l exit_hackpraddr, r4",
-        "mov.l @r4, r4",
-        "lds r4, pr",
-        
-        "rts",
-        "nop",
+exit __asm__ ( 
+    "mov r4, r0",                       // CODE = return
 
-        ".align 4",
-        "exit_hackpraddr: .long start_osaddress",
-        "exit_hackskaddr: .long start_r14"
-    );
+    "mov.l exit_hackskaddr, r4",
+    "mov.l @r4, r15",
+    "lds.l @r15+, pr",
+    "mov.l @r15+, r14",
+    "mov.l @r15+, r13",
+    "mov.l @r15+, r12",
+    "mov.l @r15+, r11",
+    "mov.l @r15+, r10",
+    "mov.l @r15+, r9",
+    "mov.l @r15+, r8",
+    
+    "rts",
+    "nop",
+
+    ".align 4",
+    "exit_hackskaddr:   .long start_r14"
+);
+abort() {
+    exit(0xFFFF);
 }
 // We have no proper output "file", so we have to emulate
 putchar(ch) {
@@ -315,17 +341,31 @@ malloc(size) {
 }
 
 // Intrisic maths (division/modulo)
-intrisic_div (a, b) {
-    // TODO: This could be implemented with DSP loops(do we have these enabled by default?) and div1
-    auto d;
-    d = 0; while(a >= b) {
-        a = a - b;
-        d++;
-    }
-    return (d);
-}
+// Division routine taken from shared-ptr.com/sh_insns.html
+intrisic_div __asm__ (
+    "mov r4, r2",
+    "mov r5, r0",
+    "mov     r2,r3",
+    "rotcl   r3",
+    "subc    r1,r1",
+    "mov     #0,r3",
+    "subc    r3,r2",
+    "div0s   r0,r1",
+
+    ".rept 32",
+    "rotcl   r2",
+    "div1    r0,r1",
+    ".endr",
+
+    "rotcl   r2",
+    "addc    r3,r2",
+
+    "rts",
+    "mov r2, r0"
+);
 intrisic_mod (a, b) {
     auto q;
     q = intrisic_div(a, b);
     return (a - (b * q));
 }
+

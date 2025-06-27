@@ -26,7 +26,7 @@ pub unsafe fn next_litteral(assembler: *mut Assembler, lit: u32) -> usize {
     sb_appendf((*assembler).output, c!("    bra .L%sTrampoline%d\n"), (*assembler).funcname, next_trampoline);
     sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
     sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampoline);
-    sb_appendf((*assembler).output, c!(".L_%sCL%d: .long %d\n"), (*assembler).funcname, index as c_int, lit);
+    sb_appendf((*assembler).output, c!(".L_%sCL%d: .long 0x%x\n"), (*assembler).funcname, index as c_int, lit as c_uint);
     sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_trampoline);
     sb_appendf((*assembler).output, c!(".L%sTrampoline%d:\n"), (*assembler).funcname, next_trampoline);
 
@@ -62,7 +62,7 @@ pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assemble
 }
 
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u32, assembler: *mut Assembler) {
-    let sliteral = literal as i32;
+    let sliteral = literal as i64;
 
     // Literals that can fit in a byte are well-supported on SH-4    
     if (sliteral >= -128) & (sliteral <= 127) {
@@ -158,8 +158,6 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     sb_appendf(output, c!(".type %s, @function\n"), name);
     sb_appendf(output, c!("%s:\n"), name);
 
-    next_symbol(&mut assembler, c!(".dat"));
-    
     sb_appendf(output, c!("    mov.l r8, @-r15\n"));
     sb_appendf(output, c!("    mov.l r9, @-r15\n"));
     sb_appendf(output, c!("    mov.l r10, @-r15\n"));
@@ -250,15 +248,76 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                         write_r0(output, index);
                     },
 
-                    // TODO: SH4 is a very funny architecture when it comes to bitshifting.
-                    // Part of me just wants to do a little trolling by using DSP loops and moving
-                    // on to something better with my life instead of having a builtin routine for
-                    // this.
                     Binop::BitShl => {
-                        // TODO
+                        // TODO: There is an opportunity for optimisation for shifts by certain
+                        // literals (16, 8, 4, 2, 1)
+                        match rhs {
+                            Arg::Literal(amount) => {
+                                if amount >= 32 {
+                                    // You may as well just clear the output.
+                                    sb_appendf(output, c!("    mov #0, r0\n"));
+                                } else {
+                                    const SHIFTS: [u64;4] = [16,8,2,1];
+                                    let mut remaining = amount;
+                                    let mut index = 0;
+                                    load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                                    while remaining > 0 {
+                                        let off = SHIFTS[index];
+                                        if remaining >= off {
+                                            sb_appendf(output, c!("    shll%d r0\n"), off as c_int);
+                                            remaining -= off;
+                                            continue;
+                                        }
+                                        index += 1;
+                                    }
+                                }
+                            }
+                            _ => {
+                                load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                                load_arg_to_reg(rhs, c!("r5"), output, op.loc, &mut assembler, false);
+                                // TODO: How should shifting by negative amounts be handled?
+                                // Should the absolute value be taken, or should it be interpreted as a
+                                // right shift?
+                                sb_appendf(output, c!("    shld r5, r0\n"));
+                            }
+                        }
+                        write_r0(output, index);
                     },
                     Binop::BitShr => {
-                        // TODO
+                        // TODO: There is an opportunity for optimisation for shifts by certain
+                        // literals (16, 8, 4, 2, 1)
+                        match rhs {
+                            Arg::Literal(amount) => {
+                                if amount >= 32 {
+                                    // You may as well just clear the output.
+                                    sb_appendf(output, c!("    mov #0, r0\n"));
+                                } else {
+                                    const SHIFTS: [u64;4] = [16,8,2,1];
+                                    let mut remaining = amount;
+                                    let mut index = 0;
+                                    load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                                    while remaining > 0 {
+                                        let off = SHIFTS[index];
+                                        if remaining >= off {
+                                            sb_appendf(output, c!("    shlr%d r0\n"), off as c_int);
+                                            remaining -= off;
+                                            continue;
+                                        }
+                                        index += 1;
+                                    }
+                                }
+                            }
+                            _ => {
+                                load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
+                                load_arg_to_reg(rhs, c!("r5"), output, op.loc, &mut assembler, false);
+                                // TODO: How should shifting by negative amounts be handled?
+                                // Should the absolute value be taken, or should it be interpreted as a
+                                // right shift?
+                                sb_appendf(output, c!("    neg r5, r5\n"));
+                                sb_appendf(output, c!("    shld r5, r0\n"));
+                            }
+                        }
+                        write_r0(output, index);
                     },
                     Binop::Plus => {
                         sb_appendf(output, c!("    ! +\n"));
