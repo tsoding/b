@@ -138,6 +138,23 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
     }
 }
 
+pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Option<bool> {
+    match glob_utf8(pattern, text) {
+        Glob_Result::MATCHED   => Some(true),
+        Glob_Result::UNMATCHED => Some(false),
+        result => {
+            let error = match result {
+                Glob_Result::OOM_ERROR      => c!("out of memory"),
+                Glob_Result::ENCODING_ERROR => c!("encoding error"),
+                Glob_Result::SYNTAX_ERROR   => c!("syntax error"),
+                Glob_Result::UNMATCHED | Glob_Result::MATCHED => unreachable!(),
+            };
+            fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
+            return None;
+        },
+    }
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on. Supports globbing."));
     let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
@@ -181,13 +198,8 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let pattern = *(*target_flags).items.add(j);
             for j in 0..TARGET_NAMES.len() {
                 let Target_Name { name, target } = (*TARGET_NAMES)[j];
-                match glob_utf8(pattern, name) {
-                    Glob_Result::MATCHED => da_append(&mut targets, target),
-                    Glob_Result::UNMATCHED => (),
-                    result => {
-                        fprintf(stderr(), c!("ERROR: matching pattern `%s`: %s\n"), pattern, glob_error_string(result));
-                        return None;
-                    },
+                if matches_glob(pattern, name)? {
+                    da_append(&mut targets, target);
                 }
             }
             if targets.count == saved_count {
@@ -227,13 +239,8 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let pattern = *(*cases_flags).items.add(i);
             for i in 0..all_cases.count {
                 let case_name = *all_cases.items.add(i);
-                match glob_utf8(pattern, case_name) {
-                    Glob_Result::MATCHED => da_append(&mut cases, case_name),
-                    Glob_Result::UNMATCHED => (),
-                    result => {
-                        fprintf(stderr(), c!("ERROR: matching pattern `%s`: %s\n"), pattern, glob_error_string(result));
-                        return None;
-                    },
+                if matches_glob(pattern, case_name)? {
+                    da_append(&mut cases, case_name);
                 }
             }
             if cases.count == saved_count {
