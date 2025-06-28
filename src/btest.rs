@@ -156,9 +156,9 @@ pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Optio
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
-    let target_flags = flag_list(c!("t"), c!("Compilation targets to test on. Supports globbing."));
+    let target_flags = flag_list(c!("t"), c!("Compilation targets to test on. Can be a glob pattern."));
     let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
-    let cases_flags  = flag_list(c!("c"), c!("Test cases to run. Supports globbing."));
+    let cases_flags  = flag_list(c!("c"), c!("Test cases to run. Can be a glob pattern."));
     let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let build_only   = flag_bool(c!("build-only"), false, c!("Only build the tests but don't run them"));
