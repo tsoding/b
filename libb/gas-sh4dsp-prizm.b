@@ -1,6 +1,7 @@
 start_r14;
 txt_x;
 txt_y;
+idx;
 
 
 // Set to 1 if this is provably a real, proper Prizm calculator,
@@ -42,13 +43,15 @@ start() {
         "nop"
     );
 
-    Bdisp_EnableColor(1);
-    Bdisp_AllClr_VRAM();
-    Locate_OS(1,1);
+    is_realcalc = detect_calculator();
+    idx = 0;
+    if (is_realcalc) {
+        Bdisp_EnableColor(1);
+        Bdisp_AllClr_VRAM();
+        Locate_OS(1,1);
+    }
     txt_x = 1;
     txt_y = 1;
-
-    is_realcalc = detect_calculator();
 
     return (main(0, 0));
 }
@@ -124,7 +127,7 @@ toupper(c) {
     }
     return (c - 'a' + 'A');
 }
-exit __asm__ ( 
+Exit __asm__ ( 
     "mov r4, r0",                       // CODE = return
 
     "mov.l exit_hackskaddr, r4",
@@ -144,27 +147,47 @@ exit __asm__ (
     ".align 4",
     "exit_hackskaddr:   .long start_r14"
 );
+exit(code) {
+    if (is_realcalc) {
+        Exit(code);
+    }
+    __asm__ ( 
+        "mov #-1, r0",
+        "jmp @r0"
+    );
+}
 abort() {
     exit(0xFFFF);
 }
 // We have no proper output "file", so we have to emulate
 putchar(ch) {
-    extrn Print_OS, Locate_OS, Bdisp_PutDisp_DD;
+    extrn Bdisp_Fill_VRAM, Bdisp_PutDisp_DD;
+    extrn PrintMiniMini;
     auto str;
     str = "X";
 
-    if (ch != '\n') {
-        lchar(str, 0, ch);    
-        Print_OS(str, 0, 0);
-        txt_x = txt_x + 1;
-    } else {
-        txt_x = 1;
-        txt_y = txt_y + 1;
-    }
-    Locate_OS(txt_x, txt_y);
+    if (is_realcalc) {
+        if (txt_y >= 180) {
+            txt_x = 1;
+            txt_y = 1;
+            Bdisp_Fill_VRAM(0xFFFF, 4);
+        }
 
-    // TODO: Updating the screen like that is pretty slow
-    Bdisp_PutDisp_DD();
+        if (ch != '\n') {
+            lchar(str, 0, ch);    
+            PrintMiniMini(&txt_x, &txt_y, str, 0, 0, 0);
+
+        } else {
+            txt_x = 1;
+            txt_y = txt_y + 10;
+            // TODO: Updating the screen like that is pretty slow
+            Bdisp_PutDisp_DD();
+        }
+    } else {
+        auto ilram;        
+        ilram = 0xE5200000;
+        ilram[1] = ch;
+    }
 }
 
 printn(n, b) {
@@ -321,6 +344,32 @@ Locate_OS __asm__(
     "1: .long 0x80020070",
     "2:   .long 0x1863"
 );
+GetVRAMAddress __asm__(
+    // Prepare r2
+    "mov.l 1f, r2",
+    "mov.l 2f, r0",           // syscall ID
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop",
+    
+    ".align 4",
+    "1: .long 0x80020070",
+    "2:   .long 0x1E6"
+);
+PrintMiniMini __asm__(
+    // Prepare r2
+    "mov.l 1f, r2",
+    "mov.l 2f, r0",           // syscall ID
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop",
+    
+    ".align 4",
+    "1: .long 0x80020070",
+    "2:   .long 0x021B"
+);
 Print_OS __asm__(
     // Prepare r2
     "mov.l 1f, r2",
@@ -336,8 +385,46 @@ Print_OS __asm__(
 );
 
 // TODO: malloc/free
+Malloc __asm__(
+    // Prepare r2
+    "mov.l 1f, r2",
+    "mov.l 2f, r0",           // syscall ID
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop",
+    
+    ".align 4",
+    "1: .long 0x80020070",
+    "2:   .long 0x1F44"
+);
+Free __asm__(
+    // Prepare r2
+    "mov.l 1f, r2",
+    "mov.l 2f, r0",           // syscall ID
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop",
+    
+    ".align 4",
+    "1: .long 0x80020070",
+    "2:   .long 0x1F42"
+);
+
 malloc(size) {
-    printf("No malloc?!\n");
+    auto ret;
+    if (is_realcalc) {
+        return (Malloc(size));
+    }
+    ret = 0x8140000 + idx;
+    idx = idx + size * 4;
+    return (ret);
+}
+free(ptr) {
+    if (is_realcalc) {
+        return (Free(ptr));
+    }
 }
 
 // Intrisic maths (division/modulo)

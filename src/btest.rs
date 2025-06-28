@@ -72,9 +72,7 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
             Target::Mos6502             => runner::mos6502::run(output, Config {
                 load_offset: DEFAULT_LOAD_OFFSET
             }, output_path),
-            Target::Gas_SH4_Prizm       => None     // TODO: Implement a proper basic SH4 runner (with a
-                                                    // way to differentiate it from a real
-                                                    // calculator to make libb avoid syscalls)
+            Target::Gas_SH4_Prizm       => runner::gas_sh4dsp_prizm::run(output, output_path)
         };
         if let None = run_result {
             return Status::RunFail;

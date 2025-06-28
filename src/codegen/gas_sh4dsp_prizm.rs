@@ -3,7 +3,7 @@ use core::cmp;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc};
-use crate::{missingf, Loc};
+use crate::{Loc};
 
 #[repr(C)]
 #[derive(Clone, Copy)]
@@ -75,7 +75,7 @@ pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_cha
 
     next_litteral(assembler, literal);
 }
-pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder, loc: Loc, assembler: *mut Assembler, is_call: bool) {
+pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_Builder, _loc: Loc, assembler: *mut Assembler, is_call: bool) {
     match arg {
         Arg::External(name) => {
             sb_appendf(output, c!("    mov.l "));
@@ -113,17 +113,17 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
             load_literal_to_reg(output, reg, value as u32, assembler);
         },
         Arg::DataOffset(offset) => {
-            if offset >= 255 {
-                missingf!(loc, c!("Data offsets bigger than 255 are not supported yet\n"));
+            sb_appendf(output, c!("    mov.l "));
+            write_nextsym(assembler);
+            sb_appendf(output, c!(", %s ! %s\n"), reg, c!("<data zone>"));
+            next_symbol(assembler, c!(".dat"));
+            if offset >= 127 {
+                load_literal_to_reg(output, c!("r8"), offset as u32, assembler);
+                sb_appendf(output, c!("    add r8, %s\n"), reg);
             } else {
-                sb_appendf(output, c!("    mov.l "));
-                write_nextsym(assembler);
-                sb_appendf(output, c!(", %s ! %s\n"), reg, "<data zone>");
-
                 // TODO: Manage this through loading a literal into a register and adding it if
                 // possible
                 if offset != 0 { sb_appendf(output, c!("    add #%d, %s\n"), offset, reg); }
-                next_symbol(assembler, c!(".dat"));
             }
         },
         Arg::Bogus => unreachable!("bogus-amogus")
@@ -202,6 +202,8 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             Op::Return {arg} => {
                 if let Some(arg) = arg {
                     load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
+                } else {
+                    sb_appendf(output, c!("    mov #0, r0\n"));
                 }
                 sb_appendf(output, c!("    mov r14, r15\n"));
                 sb_appendf(output, c!("    lds.l @r15+, pr\n"));
@@ -230,7 +232,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 sb_appendf(output, c!("    cmp/eq #0, r0\n"));
                 sb_appendf(output, c!("    movt r0\n"));
-                sb_appendf(output, c!("    xor #1, r0\n"));
+                //sb_appendf(output, c!("    xor #1, r0\n"));
                 write_r0(output, result);
             },
             Op::Binop {binop, index, lhs, rhs} => {
@@ -264,7 +266,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                                     while remaining > 0 {
                                         let off = SHIFTS[index];
                                         if remaining >= off {
-                                            sb_appendf(output, c!("    shll%d r0\n"), off as c_int);
+                                            if off != 1 {
+                                                sb_appendf(output, c!("    shll%d r0\n"), off as c_int);
+                                            } else {
+                                                sb_appendf(output, c!("    shll r0\n"));
+                                            }
                                             remaining -= off;
                                             continue;
                                         }
@@ -299,7 +305,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                                     while remaining > 0 {
                                         let off = SHIFTS[index];
                                         if remaining >= off {
-                                            sb_appendf(output, c!("    shlr%d r0\n"), off as c_int);
+                                            if off != 1 {
+                                                sb_appendf(output, c!("    shll%d r0\n"), off as c_int);
+                                            } else {
+                                                sb_appendf(output, c!("    shll r0\n"));
+                                            }
                                             remaining -= off;
                                             continue;
                                         }
@@ -487,6 +497,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     // KRIS, RESTORE THE PR REGISTER
     // TODO: Do not do it if we have a tail function that doesn't call anything.
     sb_appendf(output, c!("    ! EPILOGUE START\n"));
+    sb_appendf(output, c!("    mov #0, r0\n"));
     sb_appendf(output, c!("    mov r14, r15\n"));
     sb_appendf(output, c!("    lds.l @r15+, pr\n"));
     sb_appendf(output, c!("    mov.l @r15+, r14\n"));
