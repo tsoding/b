@@ -162,11 +162,18 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
 
-    let mut targets: Array<Target> = zeroed();
-    if *list_targets || (*target_flags).count == 0 {
+    if *list_targets {
+        fprintf(stderr(), c!("Compilation targets:\n"));
         for j in 0..TARGET_NAMES.len() {
-            let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
-            da_append(&mut targets, target);
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[j].name);
+        }
+        return Some(());
+    }
+
+    let mut targets: Array<Target> = zeroed();
+    if (*target_flags).count == 0 {
+        for j in 0..TARGET_NAMES.len() {
+            da_append(&mut targets, (*TARGET_NAMES)[j].target);
         }
     } else {
         for j in 0..(*target_flags).count {
@@ -190,15 +197,6 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
-    if *list_targets {
-        fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..targets.count {
-            let target = *targets.items.add(i);
-            fprintf(stderr(), c!("    %s\n"), name_of_target(target).unwrap());
-        }
-        return Some(());
-    }
-
     let mut all_cases: Array<*const c_char> = zeroed();
 
     let mut test_files: File_Paths = zeroed();
@@ -215,8 +213,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     if *list_cases {
         fprintf(stderr(), c!("Test cases:\n"));
         for i in 0..all_cases.count {
-            let case = *all_cases.items.add(i);
-            fprintf(stderr(), c!("    %s\n"), case);
+            fprintf(stderr(), c!("    %s\n"), *all_cases.items.add(i));
         }
         return Some(());
     }
