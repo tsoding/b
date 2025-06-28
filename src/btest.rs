@@ -13,6 +13,7 @@ pub mod nob;
 pub mod targets;
 pub mod runner;
 pub mod flag;
+pub mod glob;
 
 use core::ffi::*;
 use core::cmp;
@@ -22,6 +23,7 @@ use nob::*;
 use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
+use glob::*;
 
 const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
@@ -136,16 +138,31 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
     }
 }
 
+pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Option<bool> {
+    match glob_utf8(pattern, text) {
+        Glob_Result::MATCHED   => Some(true),
+        Glob_Result::UNMATCHED => Some(false),
+        result => {
+            let error = match result {
+                Glob_Result::OOM_ERROR      => c!("out of memory"),
+                Glob_Result::ENCODING_ERROR => c!("encoding error"),
+                Glob_Result::SYNTAX_ERROR   => c!("syntax error"),
+                Glob_Result::UNMATCHED | Glob_Result::MATCHED => unreachable!(),
+            };
+            fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
+            return None;
+        },
+    }
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
-    let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
+    let target_flags = flag_list(c!("t"), c!("Compilation targets to test on. Can be a glob pattern."));
     let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
-    let cases_flags  = flag_list(c!("c"), c!("Test cases"));
+    let cases_flags  = flag_list(c!("c"), c!("Test cases to run. Can be a glob pattern."));
     let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let build_only   = flag_bool(c!("build-only"), false, c!("Only build the tests but don't run them"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
-    // TODO: select test cases and targets by a glob pattern
-    // See if https://github.com/tsoding/glob.h can be used here
 
     if !flag_parse(argc, argv) {
         usage();
@@ -162,59 +179,75 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
 
-    let mut targets: Array<Target> = zeroed();
-    if *list_targets || (*target_flags).count == 0 {
+    if *list_targets {
+        fprintf(stderr(), c!("Compilation targets:\n"));
         for j in 0..TARGET_NAMES.len() {
-            let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
-            da_append(&mut targets, target);
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[j].name);
+        }
+        return Some(());
+    }
+
+    let mut targets: Array<Target> = zeroed();
+    if (*target_flags).count == 0 {
+        for j in 0..TARGET_NAMES.len() {
+            da_append(&mut targets, (*TARGET_NAMES)[j].target);
         }
     } else {
         for j in 0..(*target_flags).count {
-            let target_name = *(*target_flags).items.add(j);
-            if let Some(target) = target_by_name(target_name) {
-                da_append(&mut targets, target);
-            } else {
-                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
+            let saved_count = targets.count;
+            let pattern = *(*target_flags).items.add(j);
+            for j in 0..TARGET_NAMES.len() {
+                let Target_Name { name, target } = (*TARGET_NAMES)[j];
+                if matches_glob(pattern, name)? {
+                    da_append(&mut targets, target);
+                }
+            }
+            if targets.count == saved_count {
+                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), pattern);
                 return None;
             }
         }
     }
 
-    if *list_targets {
-        fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..targets.count {
-            let target = *targets.items.add(i);
-            fprintf(stderr(), c!("    %s\n"), name_of_target(target).unwrap());
+    let mut all_cases: Array<*const c_char> = zeroed();
+
+    let mut test_files: File_Paths = zeroed();
+    if !read_entire_dir(*test_folder, &mut test_files) { return None; }
+    qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
+
+    for i in 0..test_files.count {
+        let test_file = *test_files.items.add(i);
+        if *test_file == '.' as c_char { continue; }
+        let Some(case_name) = temp_strip_suffix(test_file, c!(".b")) else { continue; };
+        da_append(&mut all_cases, case_name);
+    }
+
+    if *list_cases {
+        fprintf(stderr(), c!("Test cases:\n"));
+        for i in 0..all_cases.count {
+            fprintf(stderr(), c!("    %s\n"), *all_cases.items.add(i));
         }
         return Some(());
     }
 
     let mut cases: Array<*const c_char> = zeroed();
-    if *list_cases || (*cases_flags).count == 0 {
-        let mut test_files: File_Paths = zeroed();
-        if !read_entire_dir(*test_folder, &mut test_files) { return None; }
-        qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
-
-        for i in 0..test_files.count {
-            let test_file = *test_files.items.add(i);
-            if *test_file == '.' as c_char { continue; }
-            let Some(case_name) = temp_strip_suffix(test_file, c!(".b")) else { continue; };
-            da_append(&mut cases, case_name);
-        }
+    if (*cases_flags).count == 0 {
+        cases = all_cases;
     } else {
         for i in 0..(*cases_flags).count {
-            let case_name = *(*cases_flags).items.add(i);
-            da_append(&mut cases, case_name);
+            let saved_count = cases.count;
+            let pattern = *(*cases_flags).items.add(i);
+            for i in 0..all_cases.count {
+                let case_name = *all_cases.items.add(i);
+                if matches_glob(pattern, case_name)? {
+                    da_append(&mut cases, case_name);
+                }
+            }
+            if cases.count == saved_count {
+                fprintf(stderr(), c!("ERROR: unknown test case `%s`\n"), pattern);
+                return None;
+            }
         }
-    }
-
-    if *list_cases {
-        fprintf(stderr(), c!("Test cases:\n"));
-        for i in 0..cases.count {
-            let case = *cases.items.add(i);
-            fprintf(stderr(), c!("    %s\n"), case);
-        }
-        return Some(());
     }
 
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }

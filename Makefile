@@ -8,6 +8,7 @@ RSS=\
 	$(SRC)/b.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
+	$(SRC)/glob.rs \
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
 	$(SRC)/targets.rs \
@@ -29,6 +30,7 @@ RSS=\
 LINUX_OBJS=\
 	$(BUILD)/nob.linux.o \
 	$(BUILD)/flag.linux.o \
+	$(BUILD)/glob.linux.o \
 	$(BUILD)/libc.linux.o \
 	$(BUILD)/arena.linux.o \
 	$(BUILD)/fake6502.linux.o
@@ -36,6 +38,7 @@ LINUX_OBJS=\
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
 	$(BUILD)/flag.mingw32.o \
+	$(BUILD)/glob.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
 	$(BUILD)/fake6502.mingw32.o
