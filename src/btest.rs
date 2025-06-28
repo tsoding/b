@@ -170,17 +170,20 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
     } else {
         for j in 0..(*target_flags).count {
-            let saved_targets_count = targets.count;
+            let saved_count = targets.count;
             let pattern = *(*target_flags).items.add(j);
             for j in 0..TARGET_NAMES.len() {
                 let Target_Name { name, target } = (*TARGET_NAMES)[j];
                 match glob_utf8(pattern, name) {
                     Glob_Result::MATCHED => da_append(&mut targets, target),
                     Glob_Result::UNMATCHED => (),
-                    _ => todo!("report glob error"),
+                    result => {
+                        fprintf(stderr(), c!("ERROR: matching pattern `%s`: %s\n"), pattern, glob_error_string(result));
+                        return None;
+                    },
                 }
             }
-            if targets.count == saved_targets_count {
+            if targets.count == saved_count {
                 fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), pattern);
                 return None;
             }
@@ -223,17 +226,20 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         cases = all_cases;
     } else {
         for i in 0..(*cases_flags).count {
-            let saved_cases_count = cases.count;
+            let saved_count = cases.count;
             let pattern = *(*cases_flags).items.add(i);
             for i in 0..all_cases.count {
                 let case_name = *all_cases.items.add(i);
                 match glob_utf8(pattern, case_name) {
                     Glob_Result::MATCHED => da_append(&mut cases, case_name),
                     Glob_Result::UNMATCHED => (),
-                    _ => todo!("report glob error"),
+                    result => {
+                        fprintf(stderr(), c!("ERROR: matching pattern `%s`: %s\n"), pattern, glob_error_string(result));
+                        return None;
+                    },
                 }
             }
-            if cases.count == saved_cases_count {
+            if cases.count == saved_count {
                 fprintf(stderr(), c!("ERROR: unknown test case `%s`\n"), pattern);
                 return None;
             }
