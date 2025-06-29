@@ -206,12 +206,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     dump_arg(output, *args.items.add(i));
                 }
             }
-            Op::Asm {args} => {
+            Op::Asm {stmts} => {
                 push_opcode(output, 0x08);
-                append_u64(output, args.count.try_into().unwrap());
-                for i in 0..args.count {
-                    let arg = *args.items.add(i);
-                    append_string(output, arg);
+                append_u64(output, stmts.count.try_into().unwrap());
+                for i in 0..stmts.count {
+                    let arg = *stmts.items.add(i);
+                    append_string(output, arg.line);
                 }
             }
 

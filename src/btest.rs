@@ -38,13 +38,15 @@ struct Report {
     statuses: Array<Status>,
 }
 
-pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target) -> Status {
+pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target, build_only: bool) -> Status {
     // TODO: add timeouts for running and building in case they go into infinite loop or something
     let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
     let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
         Target::Fasm_x86_64_Windows => c!("exe"),
         Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+        Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
+        Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
         Target::Bytecode            => todo!()
@@ -59,18 +61,22 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
     if !cmd_run_sync_and_reset(cmd) {
         return Status::BuildFail;
     }
-    let run_result = match target {
-        Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
-        Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
-        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
-        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
-        Target::Mos6502             => runner::mos6502::run(output, Config {
-            load_offset: DEFAULT_LOAD_OFFSET
-        }, output_path),
-        Target::Bytecode => todo!(),
-    };
-    if let None = run_result {
-        return Status::RunFail;
+    if !build_only {
+        let run_result = match target {
+            Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
+            Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
+            Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
+            Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, output_path, &[]),
+            Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, output_path, &[]),
+            Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
+            Target::Mos6502             => runner::mos6502::run(output, Config {
+                load_offset: DEFAULT_LOAD_OFFSET
+            }, output_path),
+            targets::Target::Bytecode => todo!(),
+        };
+        if let None = run_result {
+            return Status::RunFail;
+        }
     }
     Status::Ok
 }
@@ -87,19 +93,59 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
 
 // TODO: Each field of Stats corresponds to an enum value of Status.
 #[derive(Clone, Copy)]
-struct Stats {
-    ks: usize,
-    bs: usize,
-    rs: usize,
+pub struct Stats {
+    pub ks: usize,
+    pub bs: usize,
+    pub rs: usize,
+}
+
+const K: *const c_char = c!("\x1b[32mK\x1b[0m");
+const B: *const c_char = c!("\x1b[33mB\x1b[0m");
+const R: *const c_char = c!("\x1b[31mR\x1b[0m");
+
+pub unsafe fn print_legend(row_width: usize) {
+    printf(c!("%*s%s - success\n"),         row_width + 2, c!(""), K);
+    printf(c!("%*s%s - failed to build\n"), row_width + 2, c!(""), B);
+    printf(c!("%*s%s - runtime error\n"),   row_width + 2, c!(""), R);
+}
+
+pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
+    assert!(targets.len() == stats_by_target.len());
+    for j in 0..targets.len() {
+        let target = (*targets)[j];
+        let stats = (*stats_by_target)[j];
+        printf(c!("%*s"), row_width + 2, c!(""));
+        for _ in 0..j {
+            printf(c!("│ "));
+        }
+        // TODO: these fancy unicode characters don't work well on mingw32 build via wine
+        printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
+    }
+}
+
+pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
+    assert!(targets.len() == stats_by_target.len());
+    for j in (0..targets.len()).rev() {
+        let target = (*targets)[j];
+        let stats = (*stats_by_target)[j];
+        printf(c!("%*s"), row_width + 2, c!(""));
+        for _ in 0..j {
+            printf(c!("│ "));
+        }
+        printf(c!("└─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
+        printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
+    }
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
+    let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
     let cases_flags  = flag_list(c!("c"), c!("Test cases"));
+    let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
+    let build_only   = flag_bool(c!("build-only"), false, c!("Only build the tests but don't run them"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
-    // TODO: flag to print the list of tests
-    // TODO: flag to print the list of targets
     // TODO: select test cases and targets by a glob pattern
     // See if https://github.com/tsoding/glob.h can be used here
 
@@ -119,8 +165,8 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut reports: Array<Report> = zeroed();
 
     let mut targets: Array<Target> = zeroed();
-    if (*target_flags).count == 0 {
-        for j in 0..TARGET_NAMES.len() - 1 { // SKIP Bytecode
+    if *list_targets || (*target_flags).count == 0 {
+        for j in 0..TARGET_NAMES.len()-1 {
             let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
             da_append(&mut targets, target);
         }
@@ -130,14 +176,23 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             if let Some(target) = target_by_name(target_name) {
                 da_append(&mut targets, target);
             } else {
-                fprintf(stderr(), c!("ERRRO: unknown target `%s`\n"), target_name);
+                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
                 return None;
             }
         }
     }
 
+    if *list_targets {
+        fprintf(stderr(), c!("Compilation targets:\n"));
+        for i in 0..targets.count {
+            let target = *targets.items.add(i);
+            fprintf(stderr(), c!("    %s\n"), name_of_target(target).unwrap());
+        }
+        return Some(());
+    }
+
     let mut cases: Array<*const c_char> = zeroed();
-    if (*cases_flags).count == 0 {
+    if *list_cases || (*cases_flags).count == 0 {
         let mut test_files: File_Paths = zeroed();
         if !read_entire_dir(*test_folder, &mut test_files) { return None; }
         qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
@@ -155,6 +210,15 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
+    if *list_cases {
+        fprintf(stderr(), c!("Test cases:\n"));
+        for i in 0..cases.count {
+            let case = *cases.items.add(i);
+            fprintf(stderr(), c!("    %s\n"), case);
+        }
+        return Some(());
+    }
+
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
 
     // TODO: Parallelize the test runner.
@@ -168,7 +232,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         };
         for j in 0..targets.count {
             let target = *targets.items.add(j);
-            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target));
+            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target, *build_only));
         }
         da_append(&mut reports, report);
     }
@@ -189,66 +253,38 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         da_append(&mut stats_by_target, stats);
     }
 
-    let mut width = 0;
+    let mut row_width = 0;
     for i in 0..reports.count {
         let report = *reports.items.add(i);
-        width = cmp::max(width, strlen(report.name));
+        row_width = cmp::max(row_width, strlen(report.name));
     }
 
-    printf(c!("%*s\x1b[32mK\x1b[0m - success\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[33mB\x1b[0m - failed to build\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
-    printf(c!("\n"));
-
-    let mut target_column_width = 0;
+    let mut col_width = 0;
     for j in 0..targets.count {
         let target = *targets.items.add(j);
         let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
-        if width > target_column_width {
-            target_column_width = width;
-        }
+        col_width = cmp::max(col_width, width);
     }
 
-    for j in 0..targets.count {
-        let target = *targets.items.add(j);
-        let stats = *stats_by_target.items.add(j);
-        printf(c!("%*s"), width + 2, c!(""));
-        for _ in 0..j {
-            printf(c!("│ "));
-        }
-        printf(c!("┌─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
-    }
-
+    print_legend(row_width);
+    printf(c!("\n"));
+    print_top_labels(da_slice(targets), da_slice(stats_by_target), row_width, col_width);
     for i in 0..reports.count {
         let report = *reports.items.add(i);
-        printf(c!("%*s:"), width, report.name);
+        printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
             let status = *report.statuses.items.add(j);
             match status {
-                Status::Ok        => printf(c!(" \x1b[32mK\x1b[0m")),
-                Status::BuildFail => printf(c!(" \x1b[33mB\x1b[0m")),
-                Status::RunFail   => printf(c!(" \x1b[31mR\x1b[0m")),
+                Status::Ok        => printf(c!(" %s"), K),
+                Status::BuildFail => printf(c!(" %s"), B),
+                Status::RunFail   => printf(c!(" %s"), R),
             };
         }
         printf(c!("\n"));
     }
-
-    for j in (0..targets.count).rev() {
-        let target = *targets.items.add(j);
-        let stats = *stats_by_target.items.add(j);
-        printf(c!("%*s"), width + 2, c!(""));
-        for _ in 0..j {
-            printf(c!("│ "));
-        }
-        printf(c!("└─%-*s"), target_column_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" \x1b[32mK\x1b[0m: %-3zu \x1b[33mB\x1b[0m: %-3zu \x1b[31mR\x1b[0m: %-3zu\n"), stats.ks, stats.bs, stats.rs);
-    }
-
+    print_bottom_labels(da_slice(targets), da_slice(stats_by_target), row_width, col_width);
     printf(c!("\n"));
-    printf(c!("%*s\x1b[32mK\x1b[0m - success\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[33mB\x1b[0m - failed to build\n"), width + 2, c!(""));
-    printf(c!("%*s\x1b[31mR\x1b[0m - runtime error\n"), width + 2, c!(""));
+    print_legend(row_width);
 
     Some(())
 }
