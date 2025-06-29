@@ -249,8 +249,31 @@ pub unsafe fn generate_extrns(output: *mut Array<u8>, extrns: *const [*const c_c
 }
 
 pub unsafe fn generate_globals(output: *mut Array<u8>, globals: *const [Global]) {
+    append_u64(output, globals.len().try_into().unwrap());
     for i in 0..globals.len() {
-        todo!();
+        let global = (*globals)[i];
+        append_string(output, global.name);      
+        append_u64(output, global.values.count.try_into().unwrap());
+        for j in 0..global.values.count {
+            let item = *global.values.items.add(i);
+            match (item) {
+                ImmediateValue::Name(name) => {
+                    push_opcode(output, 0x00);
+                    append_string(output, name);
+                }
+                ImmediateValue::Literal(value) => {
+                    push_opcode(output, 0x01);
+                    append_u64(output, value.try_into().unwrap());
+                }
+                ImmediateValue::DataOffset(offset) => {
+                    push_opcode(output, 0x02);
+                    append_u64(output, offset.try_into().unwrap());
+                }
+            }
+        }
+        
+        append_u8(output, global.is_vec.try_into().unwrap());
+        append_u64(output, global.minimum_size.try_into().unwrap());
     }
 }
 

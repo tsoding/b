@@ -99,6 +99,29 @@ def parse_function(f):
         func['ops'].append(op)
     return func
 
+def parse_global(f):
+    var = {}
+    var['name'] = parse_string(f)
+    
+    value_count = parse_u64(f)
+    var['values'] = []
+    for _ in range(value_count):
+        value = {}
+        value["op"] = parse_u8(f)
+        match value["op"]:
+            case 0x00:
+                value["name"] = parse_string(f)
+            case 0x01:
+                value["value"] = parse_u64(f)
+            case 0x02:
+                value["offset"] = parse_u64(f)
+
+        var['values'].append(value)
+    
+    var["is_vec"] = bool(parse_u8(f))
+    var["minimum_size"] = parse_u64(f)
+    return var
+
 subprocess.run("make")
 subprocess.run(["./build/b", "-t", "bytecode", "-o", "./build/bytecode.ir", sys.argv[1]])
 
@@ -122,6 +145,12 @@ with open("./build/bytecode.ir", 'rb') as f:
         bcode['data'].append(chr(parse_u8(f)))
 
     bcode['data'] = ''.join(bcode['data']).split("\x00")
+
+    globals_size = parse_u64(f)
+    bcode['globals'] = []
+    for _ in range(globals_size):
+        bcode['globals'].append(parse_global(f))
+    
     funcs_len = parse_u64(f)
     bcode['functions'] = []
     for _ in range(funcs_len):
