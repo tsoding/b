@@ -132,12 +132,14 @@ pub unsafe fn append_string(output: *mut Array<u8>, content: *const c_char) {
 
 pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut Array<u8>) {
     append_string(output, name);
+    append_string(output, (*body)[0].loc.input_path);
     append_u64(output, params_count.try_into().unwrap());
     append_u64(output, auto_vars_count.try_into().unwrap());
     append_u64(output, body.len().try_into().unwrap());
-
     for i in 0..body.len() {
         let op = (*body)[i];
+        append_u64(output, op.loc.line_number.try_into().unwrap());
+        append_u64(output, op.loc.line_offset.try_into().unwrap());
         match op.opcode {
             Op::Bogus => push_opcode(output, 0x00),
             Op::Return {arg} => {

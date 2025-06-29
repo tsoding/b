@@ -45,14 +45,23 @@ def parse_argument(f):
 def parse_function(f):
     func = {}
     func['name'] = parse_string(f)
+    func['file'] = parse_string(f)
     func['params_count'] = parse_u64(f)
     func['auto_vars_count'] = parse_u64(f)
     func['ops'] = []
     body_len = parse_u64(f)
     for _ in range(body_len):
-        opcode = parse_u8(f)
 
         op = {}
+
+        # I really hope this goes via the same order
+        op["loc"] = {
+            "line_number": parse_u64(f),
+            "line_offset": parse_u64(f),
+        }
+
+        opcode = parse_u8(f)
+
         op['opcode'] = opcode
         match opcode:
             case 0x01:
@@ -119,5 +128,64 @@ with open("./build/bytecode.ir", 'rb') as f:
         bcode['functions'].append(parse_function(f))
 
     pprint.pp(bcode)
-    
+
+def dump_argument(arg: dict):
+    match arg["type"]:
+        case 0x00:
+            return "BOGUS"
+        case 0x01:
+            return f"auto[{arg["index"]}]"
+        case 0x02:
+            return f"\*auto[{arg["index"]}]"
+        case 0x03:
+            return f"\&extrn[{arg["name"]}]"
+        case 0x04:
+            return f"\&auto[{arg["index"]}]"
+        case 0x05:
+            return arg["value"]
+        case 0x06:
+            return f"data[{arg["offset"]}]"
+
+def p(s):
+    print(s, end='')
+
+binops = ["+",
+          "-",
+          "%",
+          "/",
+          "*",
+          "<",
+          ">",
+          "==",
+          "!=",
+          ">=",
+          "<=",
+          "|",
+          "&",
+          ">>",
+          "<<"]
+
+for f in bcode["functions"]:
+    print(f"{f["name"]}({f["params_count"]}, {f["auto_vars_count"]}) {'{'}")
+    for op in f['ops']:
+        print("    ", end='')
+        match op["opcode"]:
+            case 0x00:
+                print("BOGUS")
+            case 0x01:
+                print(f"return({dump_argument(op["operand"])}" )
+            case 0x05:
+                print(f"auto[{op["index"]}] = -{dump_argument(op["operand"])}")
+            case 0x07:
+                print(
+                    f"auto[{op["index"]}] = {dump_argument(op["lhs"])}",
+                    binops[op["binop"]],
+                    dump_argument(op["rhs"])
+                ) 
+
+
+    print('}')
+
+
+
 
