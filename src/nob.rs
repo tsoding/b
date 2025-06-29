@@ -99,6 +99,19 @@ pub struct String_View {
 
 pub type File_Paths = Array<*const c_char>;
 
+#[cfg(target_os = "windows")]
+type Fd = *mut c_void;
+#[cfg(not(target_os = "windows"))]
+type Fd = c_int;
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct Cmd_Redirect {
+    pub fdin: *mut Fd,
+    pub fdout: *mut Fd,
+    pub fderr: *mut Fd,
+}
+
 extern "C" {
     #[link_name = "nob_read_entire_file"]
     pub fn read_entire_file(path: *const c_char, sb: *mut String_Builder) -> bool;
@@ -124,6 +137,10 @@ extern "C" {
     pub fn mkdir_if_not_exists(path: *const c_char) -> bool;
     #[link_name = "nob_read_entire_dir"]
     pub fn read_entire_dir(parent: *const c_char, children: *mut File_Paths) -> bool;
+    #[link_name = "nob_cmd_run_sync_redirect_and_reset"]
+    pub fn cmd_run_sync_redirect_and_reset(cmd: *mut Cmd, redirect: Cmd_Redirect) -> bool;
+    #[link_name = "nob_fd_open_for_write"]
+    pub fn fd_open_for_write(path: *const c_char) -> Fd;
 }
 
 // TODO: This is a generally useful function. Consider making it a part of nob.h

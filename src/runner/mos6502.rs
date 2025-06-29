@@ -46,10 +46,7 @@ pub mod fake6502 {
 
 }
 
-pub unsafe fn run(output: *mut String_Builder, config: Config, output_path: *const c_char) -> Option<()> {
-    (*output).count = 0;
-    if !read_entire_file(output_path, output) { return None; }
-
+pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut FILE) -> Option<()> {
     fake6502::load_rom_at(*output, config.load_offset);
     fake6502::reset();
     fake6502::pc = config.load_offset;
@@ -71,16 +68,36 @@ pub unsafe fn run(output: *mut String_Builder, config: Config, output_path: *con
         }
 
         if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
-            printf(c!("%c"), fake6502::a as c_uint);
+            fprintf(stdout, c!("%c"), fake6502::a as c_uint);
             fake6502::rts();
         }
     }
     // print exit code (in Y:A)
     let code = ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint;
-    printf(c!("Exited with code %hd\n"), code);
+    fprintf(stderr(), c!("Exited with code %hd\n"), code);
 
     if code != 0 {
         return None;
     }
     Some(())
+}
+
+pub unsafe fn run(output: *mut String_Builder, config: Config, program_path: *const c_char, stdout_path: Option<*const c_char>) -> Option<()> {
+    (*output).count = 0;
+    if !read_entire_file(program_path, output) { return None; }
+
+    let stdout = if let Some(stdout_path) = stdout_path {
+        let stdout = fopen(stdout_path, c!("wb"));
+        if stdout.is_null() {
+            return None
+        }
+        stdout
+    } else {
+        stdout()
+    };
+    let result = run_impl(output, config, stdout);
+    if stdout_path.is_some() {
+        fclose(stdout);
+    }
+    result
 }

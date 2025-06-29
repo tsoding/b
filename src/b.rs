@@ -1351,7 +1351,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Gas_x86_64_Linux => {
@@ -1402,7 +1402,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
+                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
             }
         }
         Target::Gas_x86_64_Windows => {
@@ -1459,7 +1459,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Fasm_x86_64_Linux => {
@@ -1510,7 +1510,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
+                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
             }
         }
         Target::Fasm_x86_64_Windows => {
@@ -1567,7 +1567,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Uxn => {
@@ -1585,7 +1585,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
-                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args))?;
+                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502 => {
@@ -1604,7 +1604,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
-                runner::mos6502::run(&mut output, config, effective_output_path)?;
+                runner::mos6502::run(&mut output, config, effective_output_path, None)?;
             }
         }
     }

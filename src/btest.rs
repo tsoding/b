@@ -13,6 +13,7 @@ pub mod nob;
 pub mod targets;
 pub mod runner;
 pub mod flag;
+pub mod jim;
 
 use core::ffi::*;
 use core::cmp;
@@ -22,6 +23,7 @@ use nob::*;
 use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
+use jim::*;
 
 const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
@@ -33,15 +35,46 @@ pub enum Status {
 }
 
 #[derive(Copy, Clone)]
-struct Report {
-    name: *const c_char,
-    statuses: Array<Status>,
+pub struct Report {
+    pub name: *const c_char,
+    pub statuses: Array<Status>,
 }
 
-pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: *const c_char, name: *const c_char, target: Target, build_only: bool) -> Status {
+pub struct Record {
+    pub stdout: *const c_char,
+    pub status: Status,
+}
+
+pub unsafe fn print_record_as_json(record: Record) {
+    let mut jim = Jim {
+        sink: stdout(),
+        write: fwrite,
+        error: zeroed(),
+        scopes: zeroed(),
+        scopes_size: zeroed(),
+    };
+    jim_object_begin(&mut jim);
+        jim_member_key(&mut jim, c!("stdout"));
+        jim_string(&mut jim, record.stdout);
+        jim_member_key(&mut jim, c!("status"));
+        jim_string(&mut jim, match record.status {
+            Status::Ok => c!("Ok"),
+            Status::BuildFail => c!("BuildFail"),
+            Status::RunFail => c!("RunFail"),
+        });
+    jim_object_end(&mut jim);
+    printf(c!("\n"));
+}
+
+pub unsafe fn record_test(
+    // Inputs
+    test_folder: *const c_char, name: *const c_char, target: Target,
+    // Outputs
+    cmd: *mut Cmd, output: *mut String_Builder,
+) -> Option<Record> {
     // TODO: add timeouts for running and building in case they go into infinite loop or something
     let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
-    let output_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
+    let program_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
         Target::Fasm_x86_64_Windows => c!("exe"),
         Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
@@ -50,27 +83,90 @@ pub unsafe fn run_test(cmd: *mut Cmd, output: *mut String_Builder, test_folder: 
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
     });
+    let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, name_of_target(target).unwrap());
     cmd_append! {
         cmd,
         c!("./build/b"),
         input_path,
         c!("-t"), name_of_target(target).unwrap(),
-        c!("-o"), output_path,
+        c!("-o"), program_path,
+    }
+    if !cmd_run_sync_and_reset(cmd) {
+        return Some(Record {
+            stdout: c!(""),
+            status: Status::BuildFail,
+        });
+    }
+    let run_result = match target {
+        Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
+        Target::Mos6502             => runner::mos6502::run(output, Config {
+            load_offset: DEFAULT_LOAD_OFFSET
+        }, program_path, Some(stdout_path)),
+    };
+
+    (*output).count = 0;
+    if !read_entire_file(stdout_path, output) {
+        // Must never happen
+        return None;
+    }
+    da_append(output, 0);
+
+    if let None = run_result {
+        return Some(Record {
+            status: Status::RunFail,
+            stdout: strdup((*output).items), // TODO: memory leak
+        })
+    }
+    Some(Record {
+        status: Status::Ok,
+        stdout: strdup((*output).items), // TODO: memory leak
+    })
+}
+
+pub unsafe fn replay_test(
+    // Inputs
+    test_folder: *const c_char, name: *const c_char, target: Target, build_only: bool,
+    // Outputs
+    cmd: *mut Cmd, output: *mut String_Builder,
+) -> Status {
+    // TODO: add timeouts for running and building in case they go into infinite loop or something
+    let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
+    let program_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
+        Target::Fasm_x86_64_Windows => c!("exe"),
+        Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
+        Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+        Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
+        Target::Gas_x86_64_Windows  => c!("exe"),
+        Target::Uxn                 => c!("rom"),
+        Target::Mos6502             => c!("6502"),
+    });
+    let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, name_of_target(target).unwrap());
+    cmd_append! {
+        cmd,
+        c!("./build/b"),
+        input_path,
+        c!("-t"), name_of_target(target).unwrap(),
+        c!("-o"), program_path,
     }
     if !cmd_run_sync_and_reset(cmd) {
         return Status::BuildFail;
     }
     if !build_only {
         let run_result = match target {
-            Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, output_path, &[]),
-            Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, output_path, &[]),
-            Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, output_path, &[]),
-            Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, output_path, &[]),
-            Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, output_path, &[]),
-            Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), output_path, &[]),
+            Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+            Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
+            Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+            Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+            Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
+            Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
             Target::Mos6502             => runner::mos6502::run(output, Config {
                 load_offset: DEFAULT_LOAD_OFFSET
-            }, output_path),
+            }, program_path, Some(stdout_path)),
         };
         if let None = run_result {
             return Status::RunFail;
@@ -136,6 +232,109 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
     }
 }
 
+pub unsafe fn record_tests(
+    // Inputs
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
+    // Outputs
+    cmd: *mut Cmd, sb: *mut String_Builder,
+) -> Option<()> {
+    // TODO: Parallelize the test runner.
+    // Probably using `cmd_run_async_and_reset`.
+    // Also don't forget to add the `-j` flag.
+    for i in 0..cases.len() {
+        let test_name = (*cases)[i];
+        for j in 0..targets.len() {
+            let target = (*targets)[j];
+            let record = record_test(
+                // Inputs
+                test_folder, test_name, target,
+                // Outputs
+                cmd, sb,
+            )?;
+            print_record_as_json(record);
+        }
+    }
+    todo!()
+}
+
+pub unsafe fn replay_tests(
+    // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
+    // Inputs
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], build_only: bool,
+    // Outputs
+    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>,
+) {
+    // TODO: Parallelize the test runner.
+    // Probably using `cmd_run_async_and_reset`.
+    // Also don't forget to add the `-j` flag.
+    for i in 0..cases.len() {
+        let test_name = (*cases)[i];
+        let mut report = Report {
+            name: test_name,
+            statuses: zeroed(),
+        };
+        for j in 0..targets.len() {
+            let target = (*targets)[j];
+            let status = replay_test(
+                // Inputs
+                test_folder, test_name, target, build_only,
+                // Outputs
+                cmd, sb,
+            );
+            da_append(&mut report.statuses, status);
+        }
+        da_append(reports, report);
+    }
+
+    // TODO: generate HTML reports and deploy them somewhere automatically
+
+    for j in 0..targets.len() {
+        let mut stats: Stats = zeroed();
+        for i in 0..(*reports).count {
+            let report = *(*reports).items.add(i);
+            match *report.statuses.items.add(j) {
+                Status::Ok        => stats.ks += 1,
+                Status::BuildFail => stats.bs += 1,
+                Status::RunFail   => stats.rs += 1,
+            }
+        }
+        da_append(stats_by_target, stats);
+    }
+
+    let mut row_width = 0;
+    for i in 0..(*reports).count {
+        let report = *(*reports).items.add(i);
+        row_width = cmp::max(row_width, strlen(report.name));
+    }
+
+    let mut col_width = 0;
+    for j in 0..targets.len() {
+        let target = (*targets)[j];
+        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
+        col_width = cmp::max(col_width, width);
+    }
+
+    print_legend(row_width);
+    printf(c!("\n"));
+    print_top_labels(targets, da_slice(*stats_by_target), row_width, col_width);
+    for i in 0..(*reports).count {
+        let report = *(*reports).items.add(i);
+        printf(c!("%*s:"), row_width, report.name);
+        for j in 0..report.statuses.count {
+            let status = *report.statuses.items.add(j);
+            match status {
+                Status::Ok        => printf(c!(" %s"), K),
+                Status::BuildFail => printf(c!(" %s"), B),
+                Status::RunFail   => printf(c!(" %s"), R),
+            };
+        }
+        printf(c!("\n"));
+    }
+    print_bottom_labels(targets, da_slice(*stats_by_target), row_width, col_width);
+    printf(c!("\n"));
+    print_legend(row_width);
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
     let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
@@ -144,6 +343,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let build_only   = flag_bool(c!("build-only"), false, c!("Only build the tests but don't run them"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
+    let record       = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
     // TODO: select test cases and targets by a glob pattern
     // See if https://github.com/tsoding/glob.h can be used here
 
@@ -161,6 +361,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut sb: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     let mut reports: Array<Report> = zeroed();
+    let mut stats_by_target: Array<Stats> = zeroed();
 
     let mut targets: Array<Target> = zeroed();
     if *list_targets || (*target_flags).count == 0 {
@@ -219,70 +420,21 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
 
-    // TODO: Parallelize the test runner.
-    // Probably using `cmd_run_async_and_reset`.
-    // Also don't forget to add the `-j` flag.
-    for i in 0..cases.count {
-        let test_name = *cases.items.add(i);
-        let mut report = Report {
-            name: test_name,
-            statuses: zeroed(),
-        };
-        for j in 0..targets.count {
-            let target = *targets.items.add(j);
-            da_append(&mut report.statuses, run_test(&mut cmd, &mut sb, *test_folder, test_name, target, *build_only));
-        }
-        da_append(&mut reports, report);
+    if *record {
+        record_tests(
+            // Inputs
+            *test_folder, da_slice(cases), da_slice(targets),
+            // Outputs
+            &mut cmd, &mut sb,
+        )?;
+    } else {
+        replay_tests(
+            // Inputs
+            *test_folder, da_slice(cases), da_slice(targets), *build_only,
+            // Outputs
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
+        );
     }
-
-    // TODO: generate HTML reports and deploy them somewhere automatically
-
-    let mut stats_by_target: Array<Stats> = zeroed();
-    for j in 0..targets.count {
-        let mut stats: Stats = zeroed();
-        for i in 0..reports.count {
-            let report = *reports.items.add(i);
-            match *report.statuses.items.add(j) {
-                Status::Ok        => stats.ks += 1,
-                Status::BuildFail => stats.bs += 1,
-                Status::RunFail   => stats.rs += 1,
-            }
-        }
-        da_append(&mut stats_by_target, stats);
-    }
-
-    let mut row_width = 0;
-    for i in 0..reports.count {
-        let report = *reports.items.add(i);
-        row_width = cmp::max(row_width, strlen(report.name));
-    }
-
-    let mut col_width = 0;
-    for j in 0..targets.count {
-        let target = *targets.items.add(j);
-        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
-        col_width = cmp::max(col_width, width);
-    }
-
-    print_legend(row_width);
-    printf(c!("\n"));
-    print_top_labels(da_slice(targets), da_slice(stats_by_target), row_width, col_width);
-    for i in 0..reports.count {
-        let report = *reports.items.add(i);
-        printf(c!("%*s:"), row_width, report.name);
-        for j in 0..report.statuses.count {
-            let status = *report.statuses.items.add(j);
-            match status {
-                Status::Ok        => printf(c!(" %s"), K),
-                Status::BuildFail => printf(c!(" %s"), B),
-                Status::RunFail   => printf(c!(" %s"), R),
-            };
-        }
-        printf(c!("\n"));
-    }
-    print_bottom_labels(da_slice(targets), da_slice(stats_by_target), row_width, col_width);
-    printf(c!("\n"));
-    print_legend(row_width);
 
     Some(())
 }
