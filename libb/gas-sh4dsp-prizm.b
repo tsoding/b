@@ -193,6 +193,11 @@ putchar(ch) {
 printn(n, b) {
     auto a, c, d;
 
+    if (n < 0) {
+        n = -n;
+        putchar('-');
+    }
+
     if(a=n/b) /* assignment, not test for equality */
         printn(a, b); /* recursive */
     c = (n%b) + '0';
