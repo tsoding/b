@@ -38,12 +38,16 @@ pub enum OutcomeStatus {
     RunSuccess,
 }
 
-pub unsafe fn outcome_status_serialize(jim: *mut Jim, status: OutcomeStatus) {
+pub unsafe fn outcome_status_to_string(status: OutcomeStatus) -> *const c_char {
     match status {
-        OutcomeStatus::BuildFail  => jim_string(jim, c!("BuildFail")),
-        OutcomeStatus::RunFail    => jim_string(jim, c!("RunFail")),
-        OutcomeStatus::RunSuccess => jim_string(jim, c!("RunSuccess")),
+        OutcomeStatus::BuildFail  => c!("BuildFail"),
+        OutcomeStatus::RunFail    => c!("RunFail"),
+        OutcomeStatus::RunSuccess => c!("RunSuccess"),
     }
+}
+
+pub unsafe fn outcome_status_serialize(jim: *mut Jim, status: OutcomeStatus) {
+    jim_string(jim, outcome_status_to_string(status));
 }
 
 pub unsafe fn outcome_status_deserialize(jimp: *mut Jimp) -> Option<OutcomeStatus> {
@@ -386,6 +390,7 @@ pub unsafe fn save_target_outcomes_table_from_json_file(
     json_path: *const c_char, target_outcomes_table: *const [(Target, Outcome)],
     jim: *mut Jim,
 ) -> Option<()> {
+    // TODO: enable pretty-printing in here when it's implemented in jim.h
     jim_begin(jim);
     jim_object_begin(jim);
     for j in 0..target_outcomes_table.len() {
@@ -403,7 +408,7 @@ pub unsafe fn replay_tests(
     // Inputs
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jimp: *mut Jimp,
+    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jim: *mut Jim, jimp: *mut Jimp,
 ) -> Option<()> {
     // TODO: memory leak
     // We should probably pass it along with all the Outputs
@@ -437,10 +442,20 @@ pub unsafe fn replay_tests(
                 cmd, sb,
             )?;
             let expected = if let Some(expected_outcome) = expected_outcome {
-                // TODO: if the stdouts differ in the outcomes we should report that
-                (*expected_outcome).status == actual_outcome.status &&
-                    strcmp((*expected_outcome).stdout, actual_outcome.stdout) == 0
+                if (*expected_outcome).status != actual_outcome.status || strcmp((*expected_outcome).stdout, actual_outcome.stdout) != 0 {
+                    fprintf(stderr(), c!("UNEXPECTED OUTCOME!!!\n"));
+                    jim_begin(jim);
+                    outcome_serialize(jim, *expected_outcome);
+                    fprintf(stderr(), c!("  EXPECTED: %.*s\n"), (*jim).sink_count, (*jim).sink);
+                    jim_begin(jim);
+                    outcome_serialize(jim, actual_outcome);
+                    fprintf(stderr(), c!("  ACTUAL:   %.*s\n"), (*jim).sink_count, (*jim).sink);
+                    false
+                } else {
+                    true
+                }
             } else {
+                fprintf(stderr(), c!("UNEXPECTED OUTCOME!!! The outcome was never recorded. Please use -record flag to record what is expected for this test case at this target\n"));
                 false
             };
             da_append(&mut report.statuses, (actual_outcome.status, expected));
@@ -552,7 +567,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             // Inputs
             *test_folder, da_slice(cases), da_slice(targets),
             // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jimp,
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim, &mut jimp,
         );
     }
 
