@@ -199,7 +199,7 @@ const R_EXPECTED:   *const c_char = GREY;
 const R_UNEXPECTED: *const c_char = RED;
 
 pub unsafe fn print_legend(row_width: usize) {
-    printf(c!("%*s%sK%s - success                 %sK%s - unexpected output\n"), row_width + 2, c!(""), K_EXPECTED, RESET, K_UNEXPECTED, RESET);
+    printf(c!("%*s%sK%s - success                 %sK%s - built and ran successfully, but unexpected outcome\n"), row_width + 2, c!(""), K_EXPECTED, RESET, K_UNEXPECTED, RESET);
     printf(c!("%*s%sB%s - expected build error    %sB%s - build error\n"),       row_width + 2, c!(""), B_EXPECTED, RESET, B_UNEXPECTED, RESET);
     printf(c!("%*s%sR%s - expected runtime error  %sR%s - runtime error\n"),     row_width + 2, c!(""), R_EXPECTED, RESET, R_UNEXPECTED, RESET);
 }
@@ -446,10 +446,10 @@ pub unsafe fn replay_tests(
                     fprintf(stderr(), c!("UNEXPECTED OUTCOME!!!\n"));
                     jim_begin(jim);
                     outcome_serialize(jim, *expected_outcome);
-                    fprintf(stderr(), c!("  EXPECTED: %.*s\n"), (*jim).sink_count, (*jim).sink);
+                    fprintf(stderr(), c!("EXPECTED: %.*s\n"), (*jim).sink_count, (*jim).sink);
                     jim_begin(jim);
                     outcome_serialize(jim, actual_outcome);
-                    fprintf(stderr(), c!("  ACTUAL:   %.*s\n"), (*jim).sink_count, (*jim).sink);
+                    fprintf(stderr(), c!("ACTUAL:   %.*s\n"), (*jim).sink_count, (*jim).sink);
                     false
                 } else {
                     true
