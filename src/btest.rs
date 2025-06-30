@@ -183,17 +183,30 @@ pub struct Stats {
     pub unexpected_rs: usize,
 }
 
-const K_EXPECTED:   *const c_char = c!("\x1b[32mK\x1b[0m");
-const K_UNEXPECTED: *const c_char = c!("\x1b[33mK\x1b[0m");
-const B_EXPECTED:   *const c_char = c!("\x1b[90mB\x1b[0m");
-const B_UNEXPECTED: *const c_char = c!("\x1b[31mB\x1b[0m");
-const R_EXPECTED:   *const c_char = c!("\x1b[90mR\x1b[0m");
-const R_UNEXPECTED: *const c_char = c!("\x1b[31mR\x1b[0m");
+const RESET:  *const c_char = c!("\x1b[0m");
+const GREEN:  *const c_char = c!("\x1b[32m");
+const YELLOW: *const c_char = c!("\x1b[33m");
+const GREY:   *const c_char = c!("\x1b[90m");
+const RED:    *const c_char = c!("\x1b[31m");
+
+const K_EXPECTED:   *const c_char = GREEN;
+const K_UNEXPECTED: *const c_char = YELLOW;
+const B_EXPECTED:   *const c_char = GREY;
+const B_UNEXPECTED: *const c_char = RED;
+const R_EXPECTED:   *const c_char = GREY;
+const R_UNEXPECTED: *const c_char = RED;
 
 pub unsafe fn print_legend(row_width: usize) {
-    printf(c!("%*s%s - success                 %s - unexpected output\n"), row_width + 2, c!(""), K_EXPECTED, K_UNEXPECTED);
-    printf(c!("%*s%s - expected build error    %s - build error\n"),       row_width + 2, c!(""), B_EXPECTED, B_UNEXPECTED);
-    printf(c!("%*s%s - expected runtime error  %s - runtime error\n"),     row_width + 2, c!(""), R_EXPECTED, R_UNEXPECTED);
+    printf(c!("%*s%sK%s - success                 %sK%s - unexpected output\n"), row_width + 2, c!(""), K_EXPECTED, RESET, K_UNEXPECTED, RESET);
+    printf(c!("%*s%sB%s - expected build error    %sB%s - build error\n"),       row_width + 2, c!(""), B_EXPECTED, RESET, B_UNEXPECTED, RESET);
+    printf(c!("%*s%sR%s - expected runtime error  %sR%s - runtime error\n"),     row_width + 2, c!(""), R_EXPECTED, RESET, R_UNEXPECTED, RESET);
+}
+
+pub unsafe fn print_stats(stats: Stats) {
+    printf(c!(" K: %s%3zu%s/%s%-3zu%s B: %s%3zu%s/%s%-3zu%s R: %s%3zu%s/%s%-3zu%s\n"),
+           K_EXPECTED, stats.expected_ks, RESET, K_UNEXPECTED, stats.unexpected_ks, RESET,
+           B_EXPECTED, stats.expected_bs, RESET, B_UNEXPECTED, stats.unexpected_bs, RESET,
+           R_EXPECTED, stats.expected_rs, RESET, R_UNEXPECTED, stats.unexpected_rs, RESET);
 }
 
 pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
@@ -207,10 +220,7 @@ pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const
         }
         // TODO: these fancy unicode characters don't work well on mingw32 build via wine
         printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" K: \x1b[32m%3zu\x1b[0m/\x1b[33m%-3zu\x1b[0m B: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m R: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m\n"),
-               stats.expected_ks, stats.unexpected_ks,
-               stats.expected_bs, stats.unexpected_bs,
-               stats.expected_rs, stats.unexpected_rs);
+        print_stats(stats)
     }
 }
 
@@ -224,10 +234,7 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
             printf(c!("│ "));
         }
         printf(c!("└─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" K: \x1b[32m%3zu\x1b[0m/\x1b[33m%-3zu\x1b[0m B: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m R: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m\n"),
-               stats.expected_ks, stats.unexpected_ks,
-               stats.expected_bs, stats.unexpected_bs,
-               stats.expected_rs, stats.unexpected_rs);
+        print_stats(stats)
     }
 }
 
@@ -371,12 +378,12 @@ pub unsafe fn replay_tests(
         printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
             match *report.statuses.items.add(j) {
-                (OutcomeStatus::RunSuccess, true)   => printf(c!(" %s"), K_EXPECTED),
-                (OutcomeStatus::RunSuccess, false)  => printf(c!(" %s"), K_UNEXPECTED),
-                (OutcomeStatus::BuildFail,  true)   => printf(c!(" %s"), B_EXPECTED),
-                (OutcomeStatus::BuildFail,  false)  => printf(c!(" %s"), B_UNEXPECTED),
-                (OutcomeStatus::RunFail,    true)   => printf(c!(" %s"), R_EXPECTED),
-                (OutcomeStatus::RunFail,    false)  => printf(c!(" %s"), R_UNEXPECTED),
+                (OutcomeStatus::RunSuccess, true)   => printf(c!(" %sK%s"), K_EXPECTED,   RESET),
+                (OutcomeStatus::RunSuccess, false)  => printf(c!(" %sK%s"), K_UNEXPECTED, RESET),
+                (OutcomeStatus::BuildFail,  true)   => printf(c!(" %sB%s"), B_EXPECTED,   RESET),
+                (OutcomeStatus::BuildFail,  false)  => printf(c!(" %sB%s"), B_UNEXPECTED, RESET),
+                (OutcomeStatus::RunFail,    true)   => printf(c!(" %sR%s"), R_EXPECTED,   RESET),
+                (OutcomeStatus::RunFail,    false)  => printf(c!(" %sR%s"), R_UNEXPECTED, RESET),
             };
         }
         printf(c!("\n"));
