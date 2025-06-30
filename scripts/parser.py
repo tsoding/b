@@ -174,6 +174,8 @@ def dump_argument(arg: dict):
             return arg["value"]
         case 0x06:
             return f"data[{arg["offset"]}]"
+        case 0x07:
+            return f"extrn[{arg["name"]}]"
 
 def p(s):
     print(s, end='')
@@ -211,7 +213,23 @@ for f in bcode["functions"]:
                     binops[op["binop"]],
                     dump_argument(op["rhs"])
                 ) 
+            case 0x09:
+                print(f"label_{op["index"]}:")
+            case 0x0A:
+                print(f"jmp label_{op["index"]}")
+            case 0x0B:
+                print(f"jz label_{op["index"]}, {dump_argument(op["arg"])}")
+            case 0x0C:
+                print(f"auto[{op["index"]}] = call(", end='')
+                if op["function_type"] == 0x00:
+                    print(op["function"], end='')
+                else:
+                    print(dump_argument(op["function"]), end='')
 
+                for i in op["arguments"]:
+                    print(f", {dump_argument(i)}", end='')
+
+                print(")")
 
     print('}')
 
