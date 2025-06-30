@@ -120,7 +120,7 @@ pub unsafe fn append_u64(output: *mut Array<u8>, content: u64) {
     let mut data = content;
     for _ in 0..8 {
         append_u8(output, (data & 0xFF).try_into().unwrap());
-        data <<= 8;
+        data >>= 8;
     }
 }
 
