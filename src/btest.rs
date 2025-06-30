@@ -1,5 +1,3 @@
-// TODO: Make btest test historical mode
-
 #![no_main]
 #![no_std]
 #![allow(non_upper_case_globals)]
@@ -171,7 +169,8 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
     strcmp(*(a as *const *const c_char), *(b as *const *const c_char))
 }
 
-// TODO: Each field of Stats corresponds to an enum value of Status.
+// TODO: Each field of Stats corresponds to an enum value of OutputStatus.
+// It would be great if this code failed any change of OutputStatus.
 #[derive(Clone, Copy)]
 pub struct Stats {
     pub expected_ks:   usize,
@@ -241,13 +240,17 @@ pub unsafe fn record_tests(
     // Inputs
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder, jim: *mut Jim,
+    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jim: *mut Jim,
 ) -> Option<()> {
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
     // Also don't forget to add the `-j` flag.
     for i in 0..cases.len() {
         let case_name = (*cases)[i];
+        let mut report = Report {
+            name: case_name,
+            statuses: zeroed(),
+        };
         (*jim).sink_count = 0;
         (*jim).scopes_count = 0;
         jim_object_begin(jim);
@@ -261,14 +264,74 @@ pub unsafe fn record_tests(
                 cmd, sb,
             )?;
             outcome_serialize(jim, outcome);
+            da_append(&mut report.statuses, (outcome.status, true));
         }
         jim_object_end(jim);
         // TODO: record_tests() must patch the existing json files instead of overwritting them
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
         if !write_entire_file(json_path, (*jim).sink as *const c_void, (*jim).sink_count) { return None; }
+        da_append(reports, report);
     }
-    // TODO: the record operation should probably also print the report
+
+    collect_stats_by_target(targets, da_slice(*reports), stats_by_target);
+    generate_report(da_slice(*reports), da_slice(*stats_by_target), targets);
+
     Some(())
+}
+
+pub unsafe fn collect_stats_by_target(targets: *const [Target], reports: *const [Report], stats_by_target: *mut Array<Stats>) {
+    for j in 0..targets.len() {
+        let mut stats: Stats = zeroed();
+        for i in 0..reports.len() {
+            let report = (*reports)[i];
+            match *report.statuses.items.add(j) {
+                (OutcomeStatus::RunSuccess, true)  => stats.expected_ks   += 1,
+                (OutcomeStatus::RunSuccess, false) => stats.unexpected_ks += 1,
+                (OutcomeStatus::BuildFail,  true)  => stats.expected_bs   += 1,
+                (OutcomeStatus::BuildFail,  false) => stats.unexpected_bs += 1,
+                (OutcomeStatus::RunFail,    true)  => stats.expected_rs   += 1,
+                (OutcomeStatus::RunFail,    false) => stats.unexpected_rs += 1,
+            }
+        }
+        da_append(stats_by_target, stats);
+    }
+}
+
+pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const [Stats], targets: *const [Target]) {
+    let mut row_width = 0;
+    for i in 0..reports.len() {
+        let report = (*reports)[i];
+        row_width = cmp::max(row_width, strlen(report.name));
+    }
+
+    let mut col_width = 0;
+    for j in 0..targets.len() {
+        let target = (*targets)[j];
+        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
+        col_width = cmp::max(col_width, width);
+    }
+
+    print_legend(row_width);
+    printf(c!("\n"));
+    print_top_labels(targets, stats_by_target, row_width, col_width);
+    for i in 0..reports.len() {
+        let report = (*reports)[i];
+        printf(c!("%*s:"), row_width, report.name);
+        for j in 0..report.statuses.count {
+            match *report.statuses.items.add(j) {
+                (OutcomeStatus::RunSuccess, true)   => printf(c!(" %sK%s"), K_EXPECTED,   RESET),
+                (OutcomeStatus::RunSuccess, false)  => printf(c!(" %sK%s"), K_UNEXPECTED, RESET),
+                (OutcomeStatus::BuildFail,  true)   => printf(c!(" %sB%s"), B_EXPECTED,   RESET),
+                (OutcomeStatus::BuildFail,  false)  => printf(c!(" %sB%s"), B_UNEXPECTED, RESET),
+                (OutcomeStatus::RunFail,    true)   => printf(c!(" %sR%s"), R_EXPECTED,   RESET),
+                (OutcomeStatus::RunFail,    false)  => printf(c!(" %sR%s"), R_UNEXPECTED, RESET),
+            };
+        }
+        printf(c!("\n"));
+    }
+    print_bottom_labels(targets, stats_by_target, row_width, col_width);
+    printf(c!("\n"));
+    print_legend(row_width);
 }
 
 pub unsafe fn replay_tests(
@@ -327,6 +390,7 @@ pub unsafe fn replay_tests(
                 cmd, sb,
             )?;
             let expected = if let Some(expected_outcome) = expected_outcome {
+                // TODO: if the stdouts differ in the outcomes we should report that
                 expected_outcome.status == actual_outcome.status &&
                     strcmp(expected_outcome.stdout, actual_outcome.stdout) == 0
             } else {
@@ -337,59 +401,8 @@ pub unsafe fn replay_tests(
         da_append(reports, report);
     }
 
-    // TODO: generate HTML reports and deploy them somewhere automatically
-
-    // TODO: report summary should take into account expected vs unexpected
-    for j in 0..targets.len() {
-        let mut stats: Stats = zeroed();
-        for i in 0..(*reports).count {
-            let report = *(*reports).items.add(i);
-            match *report.statuses.items.add(j) {
-                (OutcomeStatus::RunSuccess, true)  => stats.expected_ks   += 1,
-                (OutcomeStatus::RunSuccess, false) => stats.unexpected_ks += 1,
-                (OutcomeStatus::BuildFail,  true)  => stats.expected_bs   += 1,
-                (OutcomeStatus::BuildFail,  false) => stats.unexpected_bs += 1,
-                (OutcomeStatus::RunFail,    true)  => stats.expected_rs   += 1,
-                (OutcomeStatus::RunFail,    false) => stats.unexpected_rs += 1,
-            }
-        }
-        da_append(stats_by_target, stats);
-    }
-
-    let mut row_width = 0;
-    for i in 0..(*reports).count {
-        let report = *(*reports).items.add(i);
-        row_width = cmp::max(row_width, strlen(report.name));
-    }
-
-    let mut col_width = 0;
-    for j in 0..targets.len() {
-        let target = (*targets)[j];
-        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
-        col_width = cmp::max(col_width, width);
-    }
-
-    print_legend(row_width);
-    printf(c!("\n"));
-    print_top_labels(targets, da_slice(*stats_by_target), row_width, col_width);
-    for i in 0..(*reports).count {
-        let report = *(*reports).items.add(i);
-        printf(c!("%*s:"), row_width, report.name);
-        for j in 0..report.statuses.count {
-            match *report.statuses.items.add(j) {
-                (OutcomeStatus::RunSuccess, true)   => printf(c!(" %sK%s"), K_EXPECTED,   RESET),
-                (OutcomeStatus::RunSuccess, false)  => printf(c!(" %sK%s"), K_UNEXPECTED, RESET),
-                (OutcomeStatus::BuildFail,  true)   => printf(c!(" %sB%s"), B_EXPECTED,   RESET),
-                (OutcomeStatus::BuildFail,  false)  => printf(c!(" %sB%s"), B_UNEXPECTED, RESET),
-                (OutcomeStatus::RunFail,    true)   => printf(c!(" %sR%s"), R_EXPECTED,   RESET),
-                (OutcomeStatus::RunFail,    false)  => printf(c!(" %sR%s"), R_UNEXPECTED, RESET),
-            };
-        }
-        printf(c!("\n"));
-    }
-    print_bottom_labels(targets, da_slice(*stats_by_target), row_width, col_width);
-    printf(c!("\n"));
-    print_legend(row_width);
+    collect_stats_by_target(targets, da_slice(*reports), stats_by_target);
+    generate_report(da_slice(*reports), da_slice(*stats_by_target), targets);
 
     Some(())
 }
@@ -485,7 +498,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             // Inputs
             *test_folder, da_slice(cases), da_slice(targets),
             // Outputs
-            &mut cmd, &mut sb, &mut jim,
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
         )?;
     } else {
         replay_tests(
@@ -498,3 +511,6 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     Some(())
 }
+
+// TODO: generate HTML reports and deploy them somewhere automatically
+// TODO: Make btest test historical mode
