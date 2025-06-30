@@ -30,29 +30,32 @@ use jimp::*;
 
 const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
-#[derive(Copy, Clone)]
-pub enum Status {
-    Ok,
+#[derive(Copy, Clone, PartialEq)]
+pub enum OutcomeStatus {
+    /// The test didn't even manage to build
     BuildFail,
+    /// The test built and maybe even printed something, but crashed at the end
     RunFail,
+    /// The test built, printed something and exited normally
+    RunSuccess,
 }
 
-pub unsafe fn status_serialize(jim: *mut Jim, status: Status) {
+pub unsafe fn outcome_status_serialize(jim: *mut Jim, status: OutcomeStatus) {
     match status {
-        Status::Ok        => jim_string(jim, c!("Ok")),
-        Status::BuildFail => jim_string(jim, c!("BuildFail")),
-        Status::RunFail   => jim_string(jim, c!("RunFail")),
+        OutcomeStatus::BuildFail  => jim_string(jim, c!("BuildFail")),
+        OutcomeStatus::RunFail    => jim_string(jim, c!("RunFail")),
+        OutcomeStatus::RunSuccess => jim_string(jim, c!("RunSuccess")),
     }
 }
 
-pub unsafe fn status_deserialize(jimp: *mut Jimp) -> Option<Status> {
+pub unsafe fn outcome_status_deserialize(jimp: *mut Jimp) -> Option<OutcomeStatus> {
     jimp_string(jimp)?;
-    if strcmp((*jimp).string, c!("Ok")) == 0 {
-        Some(Status::Ok)
+    if strcmp((*jimp).string, c!("RunSuccess")) == 0 {
+        Some(OutcomeStatus::RunSuccess)
     } else if strcmp((*jimp).string, c!("BuildFail")) == 0 {
-        Some(Status::BuildFail)
+        Some(OutcomeStatus::BuildFail)
     } else if strcmp((*jimp).string, c!("RunFail")) == 0 {
-        Some(Status::RunFail)
+        Some(OutcomeStatus::RunFail)
     } else {
         // TODO: unknown member is not an accurate diagnostic here, but it works accidentally 'cause it reports on jimp->string
         jimp_unknown_member(jimp);
@@ -62,14 +65,14 @@ pub unsafe fn status_deserialize(jimp: *mut Jimp) -> Option<Status> {
 
 #[derive(Copy, Clone)]
 pub struct Outcome {
-    pub status: Status,
+    pub status: OutcomeStatus,
     pub stdout: *const c_char,
 }
 
 pub unsafe fn outcome_serialize(jim: *mut Jim, outcome: Outcome) {
     jim_object_begin(jim);
         jim_member_key(jim, c!("status"));
-        status_serialize(jim, outcome.status);
+        outcome_status_serialize(jim, outcome.status);
         jim_member_key(jim, c!("stdout"));
         jim_string(jim, outcome.stdout);
     jim_object_end(jim);
@@ -80,7 +83,7 @@ pub unsafe fn outcome_deserialize(jimp: *mut Jimp) -> Option<Outcome> {
     jimp_object_begin(jimp)?;
     while let Some(()) = jimp_object_member(jimp) {
         if strcmp((*jimp).string, c!("status")) == 0 {
-            outcome.status = status_deserialize(jimp)?;
+            outcome.status = outcome_status_deserialize(jimp)?;
         } else if strcmp((*jimp).string, c!("stdout")) == 0 {
             jimp_string(jimp)?;
             outcome.stdout = strdup((*jimp).string); // TODO: memory leak
@@ -96,7 +99,8 @@ pub unsafe fn outcome_deserialize(jimp: *mut Jimp) -> Option<Outcome> {
 #[derive(Copy, Clone)]
 pub struct Report {
     pub name: *const c_char,
-    pub statuses: Array<Status>,
+    /// The bool indicates whether the outcome was expected or not
+    pub statuses: Array<(OutcomeStatus, bool)>,
 }
 
 pub unsafe fn execute_test(
@@ -126,7 +130,7 @@ pub unsafe fn execute_test(
     }
     if !cmd_run_sync_and_reset(cmd) {
         return Some(Outcome {
-            status: Status::BuildFail,
+            status: OutcomeStatus::BuildFail,
             stdout: c!("")
         });
     }
@@ -146,11 +150,13 @@ pub unsafe fn execute_test(
     read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.
     da_append(sb, 0);                   // NULL-terminating the stdout
 
+    // TODO: we should probably report the collected stdout for the user
+
     Some(Outcome {
         status: if let None = run_result {
-            Status::RunFail
+            OutcomeStatus::RunFail
         } else {
-            Status::Ok
+            OutcomeStatus::RunSuccess
         },
         stdout: strdup((*sb).items), // TODO: Memory leak
     })
@@ -169,19 +175,25 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
 // TODO: Each field of Stats corresponds to an enum value of Status.
 #[derive(Clone, Copy)]
 pub struct Stats {
-    pub ks: usize,
-    pub bs: usize,
-    pub rs: usize,
+    pub expected_ks:   usize,
+    pub unexpected_ks: usize,
+    pub expected_bs:   usize,
+    pub unexpected_bs: usize,
+    pub expected_rs:   usize,
+    pub unexpected_rs: usize,
 }
 
-const K: *const c_char = c!("\x1b[32mK\x1b[0m");
-const B: *const c_char = c!("\x1b[33mB\x1b[0m");
-const R: *const c_char = c!("\x1b[31mR\x1b[0m");
+const K_EXPECTED:   *const c_char = c!("\x1b[32mK\x1b[0m");
+const K_UNEXPECTED: *const c_char = c!("\x1b[33mK\x1b[0m");
+const B_EXPECTED:   *const c_char = c!("\x1b[90mB\x1b[0m");
+const B_UNEXPECTED: *const c_char = c!("\x1b[31mB\x1b[0m");
+const R_EXPECTED:   *const c_char = c!("\x1b[90mR\x1b[0m");
+const R_UNEXPECTED: *const c_char = c!("\x1b[31mR\x1b[0m");
 
 pub unsafe fn print_legend(row_width: usize) {
-    printf(c!("%*s%s - success\n"),         row_width + 2, c!(""), K);
-    printf(c!("%*s%s - failed to build\n"), row_width + 2, c!(""), B);
-    printf(c!("%*s%s - runtime error\n"),   row_width + 2, c!(""), R);
+    printf(c!("%*s%s - success                 %s - unexpected output\n"), row_width + 2, c!(""), K_EXPECTED, K_UNEXPECTED);
+    printf(c!("%*s%s - expected build error    %s - build error\n"),       row_width + 2, c!(""), B_EXPECTED, B_UNEXPECTED);
+    printf(c!("%*s%s - expected runtime error  %s - runtime error\n"),     row_width + 2, c!(""), R_EXPECTED, R_UNEXPECTED);
 }
 
 pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
@@ -195,7 +207,10 @@ pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const
         }
         // TODO: these fancy unicode characters don't work well on mingw32 build via wine
         printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
+        printf(c!(" K: \x1b[32m%3zu\x1b[0m/\x1b[33m%-3zu\x1b[0m B: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m R: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m\n"),
+               stats.expected_ks, stats.unexpected_ks,
+               stats.expected_bs, stats.unexpected_bs,
+               stats.expected_rs, stats.unexpected_rs);
     }
 }
 
@@ -209,7 +224,10 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
             printf(c!("│ "));
         }
         printf(c!("└─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
-        printf(c!(" %s: %-3zu %s: %-3zu %s: %-3zu\n"), K, stats.ks, B, stats.bs, R, stats.rs);
+        printf(c!(" K: \x1b[32m%3zu\x1b[0m/\x1b[33m%-3zu\x1b[0m B: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m R: \x1b[90m%3zu\x1b[0m/\x1b[31m%-3zu\x1b[0m\n"),
+               stats.expected_ks, stats.unexpected_ks,
+               stats.expected_bs, stats.unexpected_bs,
+               stats.expected_rs, stats.unexpected_rs);
     }
 }
 
@@ -239,9 +257,11 @@ pub unsafe fn record_tests(
             outcome_serialize(jim, outcome);
         }
         jim_object_end(jim);
+        // TODO: record_tests() must patch the existing json files instead of overwritting them
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
         if !write_entire_file(json_path, (*jim).sink as *const c_void, (*jim).sink_count) { return None; }
     }
+    // TODO: the record operation should probably also print the report
     Some(())
 }
 
@@ -271,13 +291,14 @@ pub unsafe fn replay_tests(
             // It would be much better if read_entire_file() returned the reason of failure so
             // it's easy to check if it failed due to ENOENT, but that requires significant
             // changes to nob.h rn.
+            (*sb).count = 0;
             read_entire_file(json_path, sb)?;
             jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
             target_outcomes_table.count = 0;
             jimp_object_begin(jimp)?;
             while let Some(()) = jimp_object_member(jimp) {
                 if let Some(target) = target_by_name((*jimp).string) {
-                    let mut outcome: Outcome = outcome_deserialize(jimp)?;
+                    let outcome: Outcome = outcome_deserialize(jimp)?;
                     da_append(&mut target_outcomes_table, (target, outcome));
                 } else {
                     jimp_unknown_member(jimp);
@@ -298,23 +319,32 @@ pub unsafe fn replay_tests(
                 test_folder, case_name, target,
                 // Outputs
                 cmd, sb,
-            );
-            todo!("We probably need to separate statuses that go to outcome and to report");
-            // da_append(&mut report.statuses, status);
+            )?;
+            let expected = if let Some(expected_outcome) = expected_outcome {
+                expected_outcome.status == actual_outcome.status &&
+                    strcmp(expected_outcome.stdout, actual_outcome.stdout) == 0
+            } else {
+                false
+            };
+            da_append(&mut report.statuses, (actual_outcome.status, expected));
         }
         da_append(reports, report);
     }
 
     // TODO: generate HTML reports and deploy them somewhere automatically
 
+    // TODO: report summary should take into account expected vs unexpected
     for j in 0..targets.len() {
         let mut stats: Stats = zeroed();
         for i in 0..(*reports).count {
             let report = *(*reports).items.add(i);
             match *report.statuses.items.add(j) {
-                Status::Ok        => stats.ks += 1,
-                Status::BuildFail => stats.bs += 1,
-                Status::RunFail   => stats.rs += 1,
+                (OutcomeStatus::RunSuccess, true)  => stats.expected_ks   += 1,
+                (OutcomeStatus::RunSuccess, false) => stats.unexpected_ks += 1,
+                (OutcomeStatus::BuildFail,  true)  => stats.expected_bs   += 1,
+                (OutcomeStatus::BuildFail,  false) => stats.unexpected_bs += 1,
+                (OutcomeStatus::RunFail,    true)  => stats.expected_rs   += 1,
+                (OutcomeStatus::RunFail,    false) => stats.unexpected_rs += 1,
             }
         }
         da_append(stats_by_target, stats);
@@ -340,11 +370,13 @@ pub unsafe fn replay_tests(
         let report = *(*reports).items.add(i);
         printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
-            let status = *report.statuses.items.add(j);
-            match status {
-                Status::Ok        => printf(c!(" %s"), K),
-                Status::BuildFail => printf(c!(" %s"), B),
-                Status::RunFail   => printf(c!(" %s"), R),
+            match *report.statuses.items.add(j) {
+                (OutcomeStatus::RunSuccess, true)   => printf(c!(" %s"), K_EXPECTED),
+                (OutcomeStatus::RunSuccess, false)  => printf(c!(" %s"), K_UNEXPECTED),
+                (OutcomeStatus::BuildFail,  true)   => printf(c!(" %s"), B_EXPECTED),
+                (OutcomeStatus::BuildFail,  false)  => printf(c!(" %s"), B_UNEXPECTED),
+                (OutcomeStatus::RunFail,    true)   => printf(c!(" %s"), R_EXPECTED),
+                (OutcomeStatus::RunFail,    false)  => printf(c!(" %s"), R_UNEXPECTED),
             };
         }
         printf(c!("\n"));

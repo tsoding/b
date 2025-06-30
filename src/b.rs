@@ -1238,7 +1238,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         //
         //     - rexim (2025-06-12 20:56:08)
         let libb_path = c!("./libb");
-        if file_exists(libb_path)? {
+        if !file_exists(libb_path)? {
             fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }

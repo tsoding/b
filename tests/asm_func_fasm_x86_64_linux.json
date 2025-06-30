@@ -1,0 +1,1 @@
+{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"8070071\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"69\n"},"gas-x86_64-windows":{"status":"BuildFail","stdout":""},"gas-x86_64-linux":{"status":"BuildFail","stdout":""},"gas-aarch64-linux":{"status":"BuildFail","stdout":""},"uxn":{"status":"BuildFail","stdout":""},"6502":{"status":"BuildFail","stdout":""}}

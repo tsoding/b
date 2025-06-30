@@ -42,7 +42,7 @@ typedef struct {
     const char *point;
 
     Jimp_Token token;
-    const char *token_start;
+    const char *token_start;    // TODO: `token_start` is primarily used for diagnostics location. Rename it accordingly.
 
     char *string;
     size_t string_count;
@@ -188,12 +188,45 @@ static bool jimp__get_token(Jimp *jimp)
         while (jimp->point < jimp->end) {
             // TODO: support all the JSON escape sequences defined in the spec
             // Yes, including those dumb suroggate pairs. Spec is spec.
-            if (*jimp->point == '"') {
+            switch (*jimp->point) {
+            case '\\': {
+                jimp->point++;
+                if (jimp->point >= jimp->end) {
+                    jimp->token_start = jimp->point;
+                    jimp_diagf(jimp, "ERROR: unfinished escape sequence\n");
+                    return false;
+                }
+                switch (*jimp->point) {
+                case 'r':
+                    jimp->point++;
+                    jimp__append_to_string(jimp, '\r');
+                    break;
+                case 'n':
+                    jimp->point++;
+                    jimp__append_to_string(jimp, '\n');
+                    break;
+                case 't':
+                    jimp->point++;
+                    jimp__append_to_string(jimp, '\t');
+                    break;
+                case '\\':
+                    jimp->point++;
+                    jimp__append_to_string(jimp, '\\');
+                    break;
+                default:
+                    jimp->token_start = jimp->point;
+                    jimp_diagf(jimp, "ERROR: invalid escape sequence\n");
+                    return false;
+                }
+                break;
+            }
+            case '"': {
                 jimp->point++;
                 jimp__append_to_string(jimp, '\0');
                 jimp->token = JIMP_STRING;
                 return true;
-            } else {
+            }
+            default:
                 char x = *jimp->point++;
                 jimp__append_to_string(jimp, x);
             }
