@@ -84,7 +84,7 @@ pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut
 
 pub unsafe fn run(output: *mut String_Builder, config: Config, program_path: *const c_char, stdout_path: Option<*const c_char>) -> Option<()> {
     (*output).count = 0;
-    if !read_entire_file(program_path, output) { return None; }
+    read_entire_file(program_path, output)?;
 
     let stdout = if let Some(stdout_path) = stdout_path {
         let stdout = fopen(stdout_path, c!("wb"));

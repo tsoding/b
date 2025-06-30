@@ -10,6 +10,20 @@ macro_rules! c {
     }
 }
 
+pub unsafe fn slice_lookup<X, Y, Arg>(xs: *const [X], p: unsafe fn(x: X, arg: Arg) -> Option<Y>, arg: Arg) -> Option<Y>
+where
+    X:   Copy + Clone,
+    Y:   Copy + Clone,
+    Arg: Copy + Clone,
+{
+    for i in 0..xs.len() {
+        if let Some(result) = p((*xs)[i], arg) {
+            return Some(result)
+        }
+    }
+    None
+}
+
 #[macro_use]
 pub mod libc {
     use core::ffi::*;

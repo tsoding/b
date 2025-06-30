@@ -1,4 +1,4 @@
-// Prototype of an Immediate Deserialization idea.
+// Prototype of an Immediate Deserialization idea. Expect this API to change a lot.
 #ifndef JIMP_H_
 #define JIMP_H_
 
@@ -48,21 +48,51 @@ typedef struct {
     size_t string_count;
     size_t string_capacity;
     double number;
-
-    const char *member;
+    bool boolean;
 } Jimp;
 
 // TODO: how do null-s fit into this entire system?
-bool jimp_bool(Jimp *jimp, bool *boolean);
-bool jimp_number(Jimp *jimp, double *number);
-bool jimp_string(Jimp *jimp, const char **string);
+
+void jimp_begin(Jimp *jimp, const char *file_path, const char *input, size_t input_size);
+
+/// If succeeds puts the freshly parsed boolean into jimp->boolean.
+/// Any consequent calls to the jimp_* functions may invalidate jimp->boolean.
+bool jimp_boolean(Jimp *jimp);
+
+/// If succeeds puts the freshly parsed number into jimp->number.
+/// Any consequent calls to the jimp_* functions may invalidate jimp->number.
+bool jimp_number(Jimp *jimp);
+
+/// If succeeds puts the freshly parsed string into jimp->string as a NULL-terminated string.
+/// Any consequent calls to the jimp_* functions may invalidate jimp->string.
+/// strdup it if you don't wanna lose it (memory management is on you at that point).
+bool jimp_string(Jimp *jimp);
+
+/// Parses the beginning of the object `{`
 bool jimp_object_begin(Jimp *jimp);
+
+/// If succeeds puts the key of the member into jimp->string as a NULL-terminated string.
+/// Any consequent calls to the jimp_* functions may invalidate jimp->string.
+/// strdup it if you don't wanna lose it (memory management is on you at that point).
 bool jimp_object_member(Jimp *jimp);
+
+/// Parses the end of the object `}`
 bool jimp_object_end(Jimp *jimp);
+
+/// Reports jimp->string as an unknown member. jimp->string is expected to be populated by
+/// jimp_object_member.
 void jimp_unknown_member(Jimp *jimp);
+
+/// Parses the beginning of the array `[`
 bool jimp_array_begin(Jimp *jimp);
+
+/// Checks whether there is any more items in the array.
 bool jimp_array_item(Jimp *jimp);
+
+/// Parses the end of the array `]`
 bool jimp_array_end(Jimp *jimp);
+
+/// Prints diagnostic at the current position of the parser.
 void jimp_diagf(Jimp *jimp, const char *fmt, ...);
 
 #endif // JIMP_H_
@@ -145,7 +175,7 @@ static bool jimp__get_token(Jimp *jimp)
     }
 
     char *endptr = NULL;
-    jimp->number = strtod(jimp->point, &endptr); // TODO: this implies that jimp->end is a valid address and *jimp->end == 0
+    jimp->number = strtod(jimp->point, &endptr); // TODO: This implies that jimp->end is a valid address and *jimp->end == 0
     if (jimp->point != endptr) {
         jimp->point = endptr;
         jimp->token = JIMP_NUMBER;
@@ -176,6 +206,14 @@ static bool jimp__get_token(Jimp *jimp)
     jimp->token = JIMP_INVALID;
     jimp_diagf(jimp, "ERROR: invalid token\n");
     return false;
+}
+
+void jimp_begin(Jimp *jimp, const char *file_path, const char *input, size_t input_size)
+{
+    jimp->file_path = file_path;
+    jimp->start     = input;
+    jimp->end       = input + input_size;
+    jimp->point     = input;
 }
 
 void jimp_diagf(Jimp *jimp, const char *fmt, ...)
@@ -244,7 +282,7 @@ bool jimp_array_item(Jimp *jimp)
 
 void jimp_unknown_member(Jimp *jimp)
 {
-    jimp_diagf(jimp, "ERROR: unexpected object member `%s`\n", jimp->member);
+    jimp_diagf(jimp, "ERROR: unexpected object member `%s`\n", jimp->string);
 }
 
 bool jimp_object_begin(Jimp *jimp)
@@ -258,7 +296,6 @@ bool jimp_object_member(Jimp *jimp)
     if (!jimp__get_token(jimp)) return false;
     if (jimp->token == JIMP_COMMA) {
         if (!jimp__get_and_expect_token(jimp, JIMP_STRING)) return false;
-        jimp->member = strdup(jimp->string); // TODO: memory leak
         if (!jimp__get_and_expect_token(jimp, JIMP_COLON)) return false;
         return true;
     }
@@ -267,7 +304,6 @@ bool jimp_object_member(Jimp *jimp)
         return false;
     }
     if (!jimp__expect_token(jimp, JIMP_STRING)) return false;
-    jimp->member = strdup(jimp->string); // TODO: memory leak
     if (!jimp__get_and_expect_token(jimp, JIMP_COLON)) return false;
     return true;
 }
@@ -277,11 +313,9 @@ bool jimp_object_end(Jimp *jimp)
     return jimp__get_and_expect_token(jimp, JIMP_CCURLY);
 }
 
-bool jimp_string(Jimp *jimp, const char **string)
+bool jimp_string(Jimp *jimp)
 {
-    if (!jimp__get_and_expect_token(jimp, JIMP_STRING)) return false;
-    *string = strdup(jimp->string);
-    return true;
+    return jimp__get_and_expect_token(jimp, JIMP_STRING);
 }
 
 bool jimp_bool(Jimp *jimp, bool *boolean)
@@ -298,11 +332,9 @@ bool jimp_bool(Jimp *jimp, bool *boolean)
     return true;
 }
 
-bool jimp_number(Jimp *jimp, double *number)
+bool jimp_number(Jimp *jimp)
 {
-    if (!jimp__get_and_expect_token(jimp, JIMP_NUMBER)) return false;
-    *number = jimp->number;
-    return true;
+    return jimp__get_and_expect_token(jimp, JIMP_NUMBER);
 }
 
 static bool jimp__get_and_expect_token(Jimp *jimp, Jimp_Token token)

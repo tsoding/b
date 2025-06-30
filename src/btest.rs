@@ -14,16 +14,19 @@ pub mod targets;
 pub mod runner;
 pub mod flag;
 pub mod jim;
+pub mod jimp;
 
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
+use crust::slice_lookup;
 use crust::libc::*;
 use nob::*;
 use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 use jim::*;
+use jimp::*;
 
 const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
@@ -34,44 +37,74 @@ pub enum Status {
     RunFail,
 }
 
+pub unsafe fn status_serialize(jim: *mut Jim, status: Status) {
+    match status {
+        Status::Ok        => jim_string(jim, c!("Ok")),
+        Status::BuildFail => jim_string(jim, c!("BuildFail")),
+        Status::RunFail   => jim_string(jim, c!("RunFail")),
+    }
+}
+
+pub unsafe fn status_deserialize(jimp: *mut Jimp) -> Option<Status> {
+    jimp_string(jimp)?;
+    if strcmp((*jimp).string, c!("Ok")) == 0 {
+        Some(Status::Ok)
+    } else if strcmp((*jimp).string, c!("BuildFail")) == 0 {
+        Some(Status::BuildFail)
+    } else if strcmp((*jimp).string, c!("RunFail")) == 0 {
+        Some(Status::RunFail)
+    } else {
+        // TODO: unknown member is not an accurate diagnostic here, but it works accidentally 'cause it reports on jimp->string
+        jimp_unknown_member(jimp);
+        None
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct Outcome {
+    pub status: Status,
+    pub stdout: *const c_char,
+}
+
+pub unsafe fn outcome_serialize(jim: *mut Jim, outcome: Outcome) {
+    jim_object_begin(jim);
+        jim_member_key(jim, c!("status"));
+        status_serialize(jim, outcome.status);
+        jim_member_key(jim, c!("stdout"));
+        jim_string(jim, outcome.stdout);
+    jim_object_end(jim);
+}
+
+pub unsafe fn outcome_deserialize(jimp: *mut Jimp) -> Option<Outcome> {
+    let mut outcome: Outcome = zeroed();
+    jimp_object_begin(jimp)?;
+    while let Some(()) = jimp_object_member(jimp) {
+        if strcmp((*jimp).string, c!("status")) == 0 {
+            outcome.status = status_deserialize(jimp)?;
+        } else if strcmp((*jimp).string, c!("stdout")) == 0 {
+            jimp_string(jimp)?;
+            outcome.stdout = strdup((*jimp).string); // TODO: memory leak
+        } else {
+            jimp_unknown_member(jimp);
+            return None;
+        }
+    }
+    jimp_object_end(jimp)?;
+    Some(outcome)
+}
+
 #[derive(Copy, Clone)]
 pub struct Report {
     pub name: *const c_char,
     pub statuses: Array<Status>,
 }
 
-pub struct Record {
-    pub stdout: *const c_char,
-    pub status: Status,
-}
-
-pub unsafe fn print_record_as_json(record: Record) {
-    let mut jim = Jim {
-        sink: stdout(),
-        write: fwrite,
-        error: zeroed(),
-        scopes: zeroed(),
-        scopes_size: zeroed(),
-    };
-    jim_object_begin(&mut jim);
-        jim_member_key(&mut jim, c!("stdout"));
-        jim_string(&mut jim, record.stdout);
-        jim_member_key(&mut jim, c!("status"));
-        jim_string(&mut jim, match record.status {
-            Status::Ok => c!("Ok"),
-            Status::BuildFail => c!("BuildFail"),
-            Status::RunFail => c!("RunFail"),
-        });
-    jim_object_end(&mut jim);
-    printf(c!("\n"));
-}
-
-pub unsafe fn record_test(
+pub unsafe fn execute_test(
     // Inputs
     test_folder: *const c_char, name: *const c_char, target: Target,
     // Outputs
-    cmd: *mut Cmd, output: *mut String_Builder,
-) -> Option<Record> {
+    cmd: *mut Cmd, sb: *mut String_Builder,
+) -> Option<Outcome> {
     // TODO: add timeouts for running and building in case they go into infinite loop or something
     let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
     let program_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
@@ -92,9 +125,9 @@ pub unsafe fn record_test(
         c!("-o"), program_path,
     }
     if !cmd_run_sync_and_reset(cmd) {
-        return Some(Record {
-            stdout: c!(""),
+        return Some(Outcome {
             status: Status::BuildFail,
+            stdout: c!("")
         });
     }
     let run_result = match target {
@@ -104,75 +137,23 @@ pub unsafe fn record_test(
         Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-        Target::Mos6502             => runner::mos6502::run(output, Config {
+        Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
     };
 
-    (*output).count = 0;
-    if !read_entire_file(stdout_path, output) {
-        // Must never happen
-        return None;
-    }
-    da_append(output, 0);
+    (*sb).count = 0;
+    read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.
+    da_append(sb, 0);                   // NULL-terminating the stdout
 
-    if let None = run_result {
-        return Some(Record {
-            status: Status::RunFail,
-            stdout: strdup((*output).items), // TODO: memory leak
-        })
-    }
-    Some(Record {
-        status: Status::Ok,
-        stdout: strdup((*output).items), // TODO: memory leak
+    Some(Outcome {
+        status: if let None = run_result {
+            Status::RunFail
+        } else {
+            Status::Ok
+        },
+        stdout: strdup((*sb).items), // TODO: Memory leak
     })
-}
-
-pub unsafe fn replay_test(
-    // Inputs
-    test_folder: *const c_char, name: *const c_char, target: Target, build_only: bool,
-    // Outputs
-    cmd: *mut Cmd, output: *mut String_Builder,
-) -> Status {
-    // TODO: add timeouts for running and building in case they go into infinite loop or something
-    let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
-    let program_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
-        Target::Fasm_x86_64_Windows => c!("exe"),
-        Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
-        Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
-        Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
-        Target::Gas_x86_64_Windows  => c!("exe"),
-        Target::Uxn                 => c!("rom"),
-        Target::Mos6502             => c!("6502"),
-    });
-    let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, name_of_target(target).unwrap());
-    cmd_append! {
-        cmd,
-        c!("./build/b"),
-        input_path,
-        c!("-t"), name_of_target(target).unwrap(),
-        c!("-o"), program_path,
-    }
-    if !cmd_run_sync_and_reset(cmd) {
-        return Status::BuildFail;
-    }
-    if !build_only {
-        let run_result = match target {
-            Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-            Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
-            Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-            Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-            Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
-            Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-            Target::Mos6502             => runner::mos6502::run(output, Config {
-                load_offset: DEFAULT_LOAD_OFFSET
-            }, program_path, Some(stdout_path)),
-        };
-        if let None = run_result {
-            return Status::RunFail;
-        }
-    }
-    Status::Ok
 }
 
 pub unsafe fn usage() {
@@ -236,25 +217,32 @@ pub unsafe fn record_tests(
     // Inputs
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder,
+    cmd: *mut Cmd, sb: *mut String_Builder, jim: *mut Jim,
 ) -> Option<()> {
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
     // Also don't forget to add the `-j` flag.
     for i in 0..cases.len() {
-        let test_name = (*cases)[i];
+        let case_name = (*cases)[i];
+        (*jim).sink_count = 0;
+        (*jim).scopes_count = 0;
+        jim_object_begin(jim);
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            let record = record_test(
+            jim_member_key(jim, name_of_target(target).unwrap());
+            let outcome = execute_test(
                 // Inputs
-                test_folder, test_name, target,
+                test_folder, case_name, target,
                 // Outputs
                 cmd, sb,
             )?;
-            print_record_as_json(record);
+            outcome_serialize(jim, outcome);
         }
+        jim_object_end(jim);
+        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
+        if !write_entire_file(json_path, (*jim).sink as *const c_void, (*jim).sink_count) { return None; }
     }
-    todo!()
+    Some(())
 }
 
 pub unsafe fn replay_tests(
@@ -262,26 +250,57 @@ pub unsafe fn replay_tests(
     // Inputs
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], build_only: bool,
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>,
-) {
+    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jimp: *mut Jimp,
+) -> Option<()> {
+    // TODO: memory leak
+    // We should probably pass it along with all the Outputs
+    let mut target_outcomes_table: Array<(Target, Outcome)> = zeroed();
+
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
     // Also don't forget to add the `-j` flag.
     for i in 0..cases.len() {
-        let test_name = (*cases)[i];
+        let case_name = (*cases)[i];
         let mut report = Report {
-            name: test_name,
+            name: case_name,
             statuses: zeroed(),
         };
+        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
+        if file_exists(json_path)? {
+            // TODO: file may stop existing between file_exists() and read_entire_file() cools
+            // It would be much better if read_entire_file() returned the reason of failure so
+            // it's easy to check if it failed due to ENOENT, but that requires significant
+            // changes to nob.h rn.
+            read_entire_file(json_path, sb)?;
+            jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
+            target_outcomes_table.count = 0;
+            jimp_object_begin(jimp)?;
+            while let Some(()) = jimp_object_member(jimp) {
+                if let Some(target) = target_by_name((*jimp).string) {
+                    let mut outcome: Outcome = outcome_deserialize(jimp)?;
+                    da_append(&mut target_outcomes_table, (target, outcome));
+                } else {
+                    jimp_unknown_member(jimp);
+                    return None;
+                }
+            }
+            jimp_object_end(jimp)?;
+        }
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            let status = replay_test(
+            let expected_outcome = slice_lookup(
+                da_slice(target_outcomes_table),
+                |(key, outcome), target| if key == target { Some(outcome) } else { None },
+                target
+            );
+            let actual_outcome = execute_test(
                 // Inputs
-                test_folder, test_name, target, build_only,
+                test_folder, case_name, target,
                 // Outputs
                 cmd, sb,
             );
-            da_append(&mut report.statuses, status);
+            todo!("We probably need to separate statuses that go to outcome and to report");
+            // da_append(&mut report.statuses, status);
         }
         da_append(reports, report);
     }
@@ -333,6 +352,8 @@ pub unsafe fn replay_tests(
     print_bottom_labels(targets, da_slice(*stats_by_target), row_width, col_width);
     printf(c!("\n"));
     print_legend(row_width);
+
+    Some(())
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
@@ -360,6 +381,8 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     let mut sb: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
+    let mut jim: Jim = zeroed();
+    let mut jimp: Jimp = zeroed();
     let mut reports: Array<Report> = zeroed();
     let mut stats_by_target: Array<Stats> = zeroed();
 
@@ -392,14 +415,14 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     let mut cases: Array<*const c_char> = zeroed();
     if *list_cases || (*cases_flags).count == 0 {
-        let mut test_files: File_Paths = zeroed();
-        if !read_entire_dir(*test_folder, &mut test_files) { return None; }
-        qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
+        let mut case_files: File_Paths = zeroed();
+        if !read_entire_dir(*test_folder, &mut case_files) { return None; } // TODO: memory leak. The file names are strduped to temp, but the File_Paths dynamic array itself is still allocated on the heap
+        qsort(case_files.items as *mut c_void, case_files.count, size_of::<*const c_char>(), compar_cstr);
 
-        for i in 0..test_files.count {
-            let test_file = *test_files.items.add(i);
-            if *test_file == '.' as c_char { continue; }
-            let Some(case_name) = temp_strip_suffix(test_file, c!(".b")) else { continue; };
+        for i in 0..case_files.count {
+            let case_file = *case_files.items.add(i);
+            if *case_file == '.' as c_char { continue; }
+            let Some(case_name) = temp_strip_suffix(case_file, c!(".b")) else { continue; };
             da_append(&mut cases, case_name);
         }
     } else {
@@ -425,14 +448,14 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             // Inputs
             *test_folder, da_slice(cases), da_slice(targets),
             // Outputs
-            &mut cmd, &mut sb,
+            &mut cmd, &mut sb, &mut jim,
         )?;
     } else {
         replay_tests(
             // Inputs
             *test_folder, da_slice(cases), da_slice(targets), *build_only,
             // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jimp,
         );
     }
 

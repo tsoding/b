@@ -113,8 +113,6 @@ pub struct Cmd_Redirect {
 }
 
 extern "C" {
-    #[link_name = "nob_read_entire_file"]
-    pub fn read_entire_file(path: *const c_char, sb: *mut String_Builder) -> bool;
     #[link_name = "nob_write_entire_file"]
     pub fn write_entire_file(path: *const c_char, data: *const c_void, size: usize) -> bool;
     #[link_name = "nob_temp_sprintf"]
@@ -131,8 +129,6 @@ extern "C" {
     pub fn sv_from_parts(data: *const c_char, count: usize) -> String_View;
     #[link_name = "nob_sv_starts_with"]
     pub fn sv_starts_with(sv: String_View, expected_prefix: String_View) -> bool;
-    #[link_name = "nob_file_exists"]
-    pub fn file_exists(file_path: *const c_char) -> c_int;
     #[link_name = "nob_mkdir_if_not_exists"]
     pub fn mkdir_if_not_exists(path: *const c_char) -> bool;
     #[link_name = "nob_read_entire_dir"]
@@ -142,6 +138,32 @@ extern "C" {
     #[link_name = "nob_fd_open_for_write"]
     pub fn fd_open_for_write(path: *const c_char) -> Fd;
 }
+
+pub unsafe fn read_entire_file(path: *const c_char, sb: *mut String_Builder) -> Option<()> {
+    extern "C" {
+        #[link_name = "nob_read_entire_file"]
+        pub fn nob_read_entire_file(path: *const c_char, sb: *mut String_Builder) -> bool;
+    }
+    if nob_read_entire_file(path, sb) {
+        Some(())
+    } else {
+        None
+    }
+}
+
+pub unsafe fn file_exists(file_path: *const c_char) -> Option<bool> {
+    extern "C" {
+        #[link_name = "nob_file_exists"]
+        pub fn nob_file_exists(file_path: *const c_char) -> c_int;
+    }
+    let exists = nob_file_exists(file_path);
+    if exists < 0 {
+        None
+    } else {
+        Some(exists > 0)
+    }
+}
+
 
 // TODO: This is a generally useful function. Consider making it a part of nob.h
 pub unsafe fn temp_strip_suffix(s: *const c_char, suffix: *const c_char) -> Option<*const c_char> {

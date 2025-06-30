@@ -1139,9 +1139,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 }
 
 pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
-    let path_exists = file_exists(path);
-    if path_exists < 0 { return None; }
-    if path_exists > 0 { da_append(input_paths, path); }
+    if file_exists(path)? {
+        da_append(input_paths, path);
+    }
     Some(())
 }
 
@@ -1238,9 +1238,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         //
         //     - rexim (2025-06-12 20:56:08)
         let libb_path = c!("./libb");
-        let libb_path_exist = file_exists(libb_path);
-        if libb_path_exist < 0 { return None; }
-        if libb_path_exist == 0 {
+        if file_exists(libb_path)? {
             fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }
@@ -1272,7 +1270,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         let input_path = *input_paths.items.add(i);
 
         input.count = 0;
-        if !read_entire_file(input_path, &mut input) { return None; }
+        read_entire_file(input_path, &mut input)?;
 
         let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
 
