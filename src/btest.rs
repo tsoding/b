@@ -17,7 +17,7 @@ pub mod jimp;
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
-use crust::slice_lookup;
+use crust::{slice_lookup, slice_lookup_mut};
 use crust::libc::*;
 use nob::*;
 use targets::*;
@@ -240,8 +240,14 @@ pub unsafe fn record_tests(
     // Inputs
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jim: *mut Jim,
+    cmd: *mut Cmd, sb: *mut String_Builder,
+    reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>,
+    jim: *mut Jim, jimp: *mut Jimp,
 ) -> Option<()> {
+    // TODO: memory leak
+    // We should probably pass it along with all the Outputs
+    let mut target_outcomes_table: Array<(Target, Outcome)> = zeroed();
+
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
     // Also don't forget to add the `-j` flag.
@@ -251,25 +257,39 @@ pub unsafe fn record_tests(
             name: case_name,
             statuses: zeroed(),
         };
-        (*jim).sink_count = 0;
-        (*jim).scopes_count = 0;
-        jim_object_begin(jim);
+        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
+        load_target_outcomes_table_from_json_file_if_exists(
+            json_path,
+            sb, jimp, &mut target_outcomes_table,
+        )?;
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            jim_member_key(jim, name_of_target(target).unwrap());
-            let outcome = execute_test(
+            let actual_outcome = execute_test(
                 // Inputs
                 test_folder, case_name, target,
                 // Outputs
                 cmd, sb,
             )?;
-            outcome_serialize(jim, outcome);
-            da_append(&mut report.statuses, (outcome.status, true));
+            if let Some(expected_outcome) = slice_lookup_mut(
+                da_slice(target_outcomes_table),
+                |pair, target| if (*pair).0 == (*target) {
+                    Some(&mut (*pair).1)
+                } else {
+                    None
+                },
+                &target,
+            ) {
+                *expected_outcome = actual_outcome;
+            } else {
+                da_append(&mut target_outcomes_table, (target, actual_outcome));
+            }
+            da_append(&mut report.statuses, (actual_outcome.status, true));
         }
-        jim_object_end(jim);
-        // TODO: record_tests() must patch the existing json files instead of overwritting them
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        if !write_entire_file(json_path, (*jim).sink as *const c_void, (*jim).sink_count) { return None; }
+        save_target_outcomes_table_from_json_file(
+            json_path, da_slice(target_outcomes_table),
+            jim,
+        )?;
         da_append(reports, report);
     }
 
@@ -334,6 +354,50 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
     print_legend(row_width);
 }
 
+pub unsafe fn load_target_outcomes_table_from_json_file_if_exists(
+    json_path: *const c_char,
+    sb: *mut String_Builder, jimp: *mut Jimp, target_outcomes_table: *mut Array<(Target, Outcome)>,
+) -> Option<()> {
+    if file_exists(json_path)? {
+        // TODO: file may stop existing between file_exists() and read_entire_file() cools
+        // It would be much better if read_entire_file() returned the reason of failure so
+        // it's easy to check if it failed due to ENOENT, but that requires significant
+        // changes to nob.h rn.
+        (*sb).count = 0;
+        read_entire_file(json_path, sb)?;
+        jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
+        (*target_outcomes_table).count = 0;
+        jimp_object_begin(jimp)?;
+        while let Some(()) = jimp_object_member(jimp) {
+            if let Some(target) = target_by_name((*jimp).string) {
+                let outcome: Outcome = outcome_deserialize(jimp)?;
+                da_append(target_outcomes_table, (target, outcome));
+            } else {
+                jimp_unknown_member(jimp);
+                return None;
+            }
+        }
+        jimp_object_end(jimp)?;
+    }
+    Some(())
+}
+
+pub unsafe fn save_target_outcomes_table_from_json_file(
+    json_path: *const c_char, target_outcomes_table: *const [(Target, Outcome)],
+    jim: *mut Jim,
+) -> Option<()> {
+    jim_begin(jim);
+    jim_object_begin(jim);
+    for j in 0..target_outcomes_table.len() {
+        let (target, outcome) = (*target_outcomes_table)[j];
+        jim_member_key(jim, name_of_target(target).unwrap());
+        outcome_serialize(jim, outcome);
+    }
+    jim_object_end(jim);
+
+    write_entire_file(json_path, (*jim).sink as *const c_void, (*jim).sink_count)
+}
+
 pub unsafe fn replay_tests(
     // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
     // Inputs
@@ -355,33 +419,16 @@ pub unsafe fn replay_tests(
             statuses: zeroed(),
         };
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        if file_exists(json_path)? {
-            // TODO: file may stop existing between file_exists() and read_entire_file() cools
-            // It would be much better if read_entire_file() returned the reason of failure so
-            // it's easy to check if it failed due to ENOENT, but that requires significant
-            // changes to nob.h rn.
-            (*sb).count = 0;
-            read_entire_file(json_path, sb)?;
-            jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
-            target_outcomes_table.count = 0;
-            jimp_object_begin(jimp)?;
-            while let Some(()) = jimp_object_member(jimp) {
-                if let Some(target) = target_by_name((*jimp).string) {
-                    let outcome: Outcome = outcome_deserialize(jimp)?;
-                    da_append(&mut target_outcomes_table, (target, outcome));
-                } else {
-                    jimp_unknown_member(jimp);
-                    return None;
-                }
-            }
-            jimp_object_end(jimp)?;
-        }
+        load_target_outcomes_table_from_json_file_if_exists(
+            json_path,
+            sb, jimp, &mut target_outcomes_table,
+        )?;
         for j in 0..targets.len() {
             let target = (*targets)[j];
             let expected_outcome = slice_lookup(
                 da_slice(target_outcomes_table),
-                |(key, outcome), target| if key == target { Some(outcome) } else { None },
-                target
+                |pair, target| if (*pair).0 == *target { Some(&(*pair).1) } else { None },
+                &target
             );
             let actual_outcome = execute_test(
                 // Inputs
@@ -391,8 +438,8 @@ pub unsafe fn replay_tests(
             )?;
             let expected = if let Some(expected_outcome) = expected_outcome {
                 // TODO: if the stdouts differ in the outcomes we should report that
-                expected_outcome.status == actual_outcome.status &&
-                    strcmp(expected_outcome.stdout, actual_outcome.stdout) == 0
+                (*expected_outcome).status == actual_outcome.status &&
+                    strcmp((*expected_outcome).stdout, actual_outcome.stdout) == 0
             } else {
                 false
             };
@@ -498,7 +545,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             // Inputs
             *test_folder, da_slice(cases), da_slice(targets),
             // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim, &mut jimp,
         )?;
     } else {
         replay_tests(

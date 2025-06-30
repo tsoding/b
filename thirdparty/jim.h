@@ -36,9 +36,15 @@ typedef struct {
     size_t scopes_capacity;
 } Jim;
 
+// TODO: implement pretty-printing based on how nested the scopes are.
+//   Introduce a separate boolean flag in the Jim struct to enable/disable
+//   the pretty-printing.
+
+void jim_begin(Jim *jim);
 void jim_null(Jim *jim);
 void jim_bool(Jim *jim, int boolean);
 void jim_integer(Jim *jim, long long int x);
+// TODO: deprecate this version of jim_float introduce the one that does not require precision and uses something like sprintf from libc to render the floats
 void jim_float(Jim *jim, double x, int precision);
 void jim_string(Jim *jim, const char *str);
 void jim_string_sized(Jim *jim, const char *str, size_t size);
@@ -114,6 +120,12 @@ static int jim_get_utf8_char_len(unsigned char ch)
     default:
         return 2;
     }
+}
+
+void jim_begin(Jim *jim)
+{
+    jim->sink_count = 0;
+    jim->scopes_count = 0;
 }
 
 void jim_element_begin(Jim *jim)

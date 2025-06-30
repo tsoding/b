@@ -1308,7 +1308,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
@@ -1367,7 +1367,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
@@ -1424,7 +1424,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
             let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
@@ -1475,7 +1475,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
@@ -1532,7 +1532,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
@@ -1580,7 +1580,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
@@ -1599,7 +1599,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 runner::mos6502::run(&mut output, config, effective_output_path, None)?;

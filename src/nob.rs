@@ -113,8 +113,6 @@ pub struct Cmd_Redirect {
 }
 
 extern "C" {
-    #[link_name = "nob_write_entire_file"]
-    pub fn write_entire_file(path: *const c_char, data: *const c_void, size: usize) -> bool;
     #[link_name = "nob_temp_sprintf"]
     pub fn temp_sprintf(format: *const c_char, ...) -> *mut c_char;
     #[link_name = "nob_sb_appendf"]
@@ -137,6 +135,18 @@ extern "C" {
     pub fn cmd_run_sync_redirect_and_reset(cmd: *mut Cmd, redirect: Cmd_Redirect) -> bool;
     #[link_name = "nob_fd_open_for_write"]
     pub fn fd_open_for_write(path: *const c_char) -> Fd;
+}
+
+pub unsafe fn write_entire_file(path: *const c_char, data: *const c_void, size: usize) -> Option<()> {
+    extern "C" {
+        #[link_name = "nob_write_entire_file"]
+        pub fn nob_write_entire_file(path: *const c_char, data: *const c_void, size: usize) -> bool;
+    }
+    if nob_write_entire_file(path, data, size) {
+        Some(())
+    } else {
+        None
+    }
 }
 
 pub unsafe fn read_entire_file(path: *const c_char, sb: *mut String_Builder) -> Option<()> {

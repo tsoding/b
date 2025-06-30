@@ -10,15 +10,21 @@ macro_rules! c {
     }
 }
 
-pub unsafe fn slice_lookup<X, Y, Arg>(xs: *const [X], p: unsafe fn(x: X, arg: Arg) -> Option<Y>, arg: Arg) -> Option<Y>
-where
-    X:   Copy + Clone,
-    Y:   Copy + Clone,
-    Arg: Copy + Clone,
+pub unsafe fn slice_lookup_mut<X, Y, Arg>(xs: *mut [X], p: unsafe fn(x: *mut X, arg: *const Arg) -> Option<*mut Y>, arg: *const Arg) -> Option<*mut Y>
 {
     for i in 0..xs.len() {
-        if let Some(result) = p((*xs)[i], arg) {
-            return Some(result)
+        if let Some(y) = p(&mut (*xs)[i], arg) {
+            return Some(y)
+        }
+    }
+    None
+}
+
+pub unsafe fn slice_lookup<X, Y, Arg>(xs: *const [X], p: unsafe fn(x: *const X, arg: *const Arg) -> Option<*const Y>, arg: *const Arg) -> Option<*const Y>
+{
+    for i in 0..xs.len() {
+        if let Some(y) = p(&(*xs)[i], arg) {
+            return Some(y)
         }
     }
     None
