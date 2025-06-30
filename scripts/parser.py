@@ -66,6 +66,15 @@ def parse_function(f):
         match opcode:
             case 0x01:
                 op["operand"] = parse_argument(f)
+            case 0x02:
+                op["index"] = parse_u64(f)
+                op["operand"] = parse_argument(f)
+            case 0x03:
+                op["name"] = parse_string(f)
+                op["operand"] = parse_argument(f)
+            case 0x04:
+                op["index"] = parse_u64(f)
+                op["operand"] = parse_argument(f)
             case 0x05:
                 op["index"]   = parse_u64(f)
                 op["operand"] = parse_argument(f)
@@ -156,8 +165,6 @@ with open("./build/bytecode.ir", 'rb') as f:
     for _ in range(funcs_len):
         bcode['functions'].append(parse_function(f))
 
-    pprint.pp(bcode)
-
 def dump_argument(arg: dict):
     match arg["type"]:
         case 0x00:
@@ -165,11 +172,11 @@ def dump_argument(arg: dict):
         case 0x01:
             return f"auto[{arg["index"]}]"
         case 0x02:
-            return f"\*auto[{arg["index"]}]"
+            return f"*auto[{arg["index"]}]"
         case 0x03:
-            return f"\&extrn[{arg["name"]}]"
+            return f"&extrn[{arg["name"]}]"
         case 0x04:
-            return f"\&auto[{arg["index"]}]"
+            return f"&auto[{arg["index"]}]"
         case 0x05:
             return arg["value"]
         case 0x06:
@@ -199,28 +206,33 @@ binops = ["+",
 for f in bcode["functions"]:
     print(f"{f["name"]}({f["params_count"]}, {f["auto_vars_count"]}) {'{'}")
     for op in f['ops']:
-        print("    ", end='')
         match op["opcode"]:
             case 0x00:
-                print("BOGUS")
+                print("\tBOGUS")
             case 0x01:
-                print(f"return({dump_argument(op["operand"])}" )
+                print(f"\treturn({dump_argument(op["operand"])})" )
+            case 0x02:
+                print(f"\t*auto[{op["index"]}] = {dump_argument(op["operand"])}")
+            case 0x03:
+                print(f"\textrn[{op['name']}] = {dump_argument(op["operand"])}")
+            case 0x04:
+                print(f"\tauto[{op["index"]}] = {dump_argument(op["operand"])}")
             case 0x05:
-                print(f"auto[{op["index"]}] = -{dump_argument(op["operand"])}")
+                print(f"\tauto[{op["index"]}] = -{dump_argument(op["operand"])}")
             case 0x07:
                 print(
-                    f"auto[{op["index"]}] = {dump_argument(op["lhs"])}",
+                    f"\tauto[{op["index"]}] = {dump_argument(op["lhs"])}",
                     binops[op["binop"]],
                     dump_argument(op["rhs"])
                 ) 
             case 0x09:
                 print(f"label_{op["index"]}:")
             case 0x0A:
-                print(f"jmp label_{op["index"]}")
+                print(f"\tjmp label_{op["index"]}")
             case 0x0B:
-                print(f"jz label_{op["index"]}, {dump_argument(op["arg"])}")
+                print(f"\tjz label_{op["index"]}, {dump_argument(op["arg"])}")
             case 0x0C:
-                print(f"auto[{op["index"]}] = call(", end='')
+                print(f"\tauto[{op["index"]}] = call(", end='')
                 if op["function_type"] == 0x00:
                     print(op["function"], end='')
                 else:
@@ -230,6 +242,8 @@ for f in bcode["functions"]:
                     print(f", {dump_argument(i)}", end='')
 
                 print(")")
+            case _:
+                print(f"\tDUMMY: {op["opcode"]} ")
 
     print('}')
 

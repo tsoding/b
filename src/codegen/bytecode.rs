@@ -125,6 +125,11 @@ pub unsafe fn append_u64(output: *mut Array<u8>, content: u64) {
 }
 
 pub unsafe fn append_string(output: *mut Array<u8>, content: *const c_char) {
+    if content == core::ptr::null() {
+        append_u64(output, 1);
+        sb_appendf(output as *mut String_Builder, c!("E"));
+        return;
+    }
     let len: usize = strlen(content);
     append_u64(output, len.try_into().unwrap());
     sb_appendf(output as *mut String_Builder, c!("%s"), content );
