@@ -8,8 +8,8 @@
         "stdout": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "8070070\r\n"
+        "status": "BuildFail",
+        "stdout": ""
     },
     "gas-x86_64-linux": {
         "status": "RunSuccess",

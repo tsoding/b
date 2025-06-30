@@ -1,7 +1,7 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "0\r\n"
+        "status": "BuildFail",
+        "stdout": ""
     },
     "fasm-x86_64-linux": {
         "status": "RunSuccess",
