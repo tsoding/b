@@ -14,6 +14,7 @@
 
 #include <assert.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 
 typedef enum {
@@ -23,8 +24,8 @@ typedef enum {
 
 typedef struct {
     Jim_Scope_Kind kind;
-    int tail;
-    int key;
+    int tail;                   // Not the first element in an array or an object
+    int key;                    // An object key was just placed
 } Jim_Scope;
 
 typedef struct {
@@ -34,6 +35,7 @@ typedef struct {
     Jim_Scope *scopes;
     size_t scopes_count;
     size_t scopes_capacity;
+    size_t pp;
 } Jim;
 
 // TODO: implement pretty-printing based on how nested the scopes are.
@@ -131,8 +133,20 @@ void jim_begin(Jim *jim)
 void jim_element_begin(Jim *jim)
 {
     Jim_Scope *scope = jim_current_scope(jim);
-    if (scope && scope->tail && !scope->key) {
-        jim_write_cstr(jim, ",");
+    if (scope) {
+        if (scope->tail && !scope->key) {
+            jim_write_cstr(jim, ",");
+        }
+        if (jim->pp) {
+            if (scope->key) {
+                jim_write_cstr(jim, " ");
+            } else {
+                jim_write_cstr(jim, "\n");
+                for (size_t i = 0; i < jim->scopes_count*jim->pp; ++i) {
+                    jim_write_cstr(jim, " ");
+                }
+            }
+        }
     }
 }
 
@@ -282,6 +296,13 @@ void jim_array_begin(Jim *jim)
 
 void jim_array_end(Jim *jim)
 {
+    Jim_Scope *scope = jim_current_scope(jim);
+    if (jim->pp && scope && scope->tail) {
+        jim_write_cstr(jim, "\n");
+        for (size_t i = 0; i < (jim->scopes_count - 1)*jim->pp; ++i) {
+            jim_write_cstr(jim, " ");
+        }
+    }
     jim_write_cstr(jim, "]");
     jim_scope_pop(jim);
     jim_element_end(jim);
@@ -313,6 +334,13 @@ void jim_member_key_sized(Jim *jim, const char *str, size_t size)
 
 void jim_object_end(Jim *jim)
 {
+    Jim_Scope *scope = jim_current_scope(jim);
+    if (jim->pp && scope && scope->tail) {
+        jim_write_cstr(jim, "\n");
+        for (size_t i = 0; i < (jim->scopes_count - 1)*jim->pp; ++i) {
+            jim_write_cstr(jim, " ");
+        }
+    }
     jim_write_cstr(jim, "}");
     jim_scope_pop(jim);
     jim_element_end(jim);

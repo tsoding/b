@@ -9,6 +9,7 @@ pub struct Jim {
     pub scopes: *mut c_void,
     pub scopes_count: usize,
     pub scopes_capacity: usize,
+    pub pp: usize,
 }
 
 extern "C" {

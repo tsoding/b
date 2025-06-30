@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"lower: hello, world\r\nUPPER: HELLO, WORLD\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"lower: hello, world\nUPPER: HELLO, WORLD\n"},"gas-x86_64-windows":{"status":"RunSuccess","stdout":"lower: hello, world\r\nUPPER: HELLO, WORLD\r\n"},"gas-x86_64-linux":{"status":"RunSuccess","stdout":"lower: hello, world\nUPPER: HELLO, WORLD\n"},"gas-aarch64-linux":{"status":"RunSuccess","stdout":"lower: hello, world\nUPPER: HELLO, WORLD\n"},"uxn":{"status":"RunSuccess","stdout":"lower: hello, world\nUPPER: HELLO, WORLD\n"},"6502":{"status":"RunSuccess","stdout":"lower: hello, world\r\nUPPER: HELLO, WORLD\r\n"}}
+{
+    "fasm-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n"
+    },
+    "fasm-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n"
+    },
+    "gas-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n"
+    },
+    "gas-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n"
+    },
+    "gas-aarch64-linux": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n"
+    },
+    "uxn": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n"
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n"
+    }
+}

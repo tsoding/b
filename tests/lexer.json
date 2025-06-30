@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"},"gas-x86_64-windows":{"status":"RunSuccess","stdout":"0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"},"gas-x86_64-linux":{"status":"RunSuccess","stdout":"0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"},"gas-aarch64-linux":{"status":"RunSuccess","stdout":"0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"},"uxn":{"status":"RunSuccess","stdout":"0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"},"6502":{"status":"RunSuccess","stdout":"0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"}}
+{
+    "fasm-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"
+    },
+    "fasm-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+    },
+    "gas-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"
+    },
+    "gas-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+    },
+    "gas-aarch64-linux": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+    },
+    "uxn": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"
+    }
+}

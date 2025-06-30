@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"BuildFail","stdout":""},"fasm-x86_64-linux":{"status":"BuildFail","stdout":""},"gas-x86_64-windows":{"status":"BuildFail","stdout":""},"gas-x86_64-linux":{"status":"BuildFail","stdout":""},"gas-aarch64-linux":{"status":"BuildFail","stdout":""},"uxn":{"status":"BuildFail","stdout":""},"6502":{"status":"RunSuccess","stdout":""}}
+{
+    "fasm-x86_64-windows": {
+        "status": "BuildFail",
+        "stdout": ""
+    },
+    "fasm-x86_64-linux": {
+        "status": "BuildFail",
+        "stdout": ""
+    },
+    "gas-x86_64-windows": {
+        "status": "BuildFail",
+        "stdout": ""
+    },
+    "gas-x86_64-linux": {
+        "status": "BuildFail",
+        "stdout": ""
+    },
+    "gas-aarch64-linux": {
+        "status": "BuildFail",
+        "stdout": ""
+    },
+    "uxn": {
+        "status": "BuildFail",
+        "stdout": ""
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": ""
+    }
+}

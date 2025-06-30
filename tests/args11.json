@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"},"gas-x86_64-windows":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"},"gas-x86_64-linux":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"},"gas-aarch64-linux":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"},"uxn":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"},"6502":{"status":"RunSuccess","stdout":"Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"}}
+{
+    "fasm-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"
+    },
+    "fasm-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+    },
+    "gas-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"
+    },
+    "gas-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+    },
+    "gas-aarch64-linux": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+    },
+    "uxn": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"
+    }
+}

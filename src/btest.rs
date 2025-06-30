@@ -494,6 +494,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut sb: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     let mut jim: Jim = zeroed();
+    jim.pp = 4;
     let mut jimp: Jimp = zeroed();
     let mut reports: Array<Report> = zeroed();
     let mut stats_by_target: Array<Stats> = zeroed();

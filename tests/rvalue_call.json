@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"Foo\r\nBar\r\nBaz\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"Foo\nBar\nBaz\n"},"gas-x86_64-windows":{"status":"RunSuccess","stdout":"Foo\r\nBar\r\nBaz\r\n"},"gas-x86_64-linux":{"status":"RunSuccess","stdout":"Foo\nBar\nBaz\n"},"gas-aarch64-linux":{"status":"RunSuccess","stdout":"Foo\nBar\nBaz\n"},"uxn":{"status":"RunSuccess","stdout":"Foo\nBar\nBaz\n"},"6502":{"status":"RunSuccess","stdout":"Foo\r\nBar\r\nBaz\r\n"}}
+{
+    "fasm-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "Foo\r\nBar\r\nBaz\r\n"
+    },
+    "fasm-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "Foo\nBar\nBaz\n"
+    },
+    "gas-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "Foo\r\nBar\r\nBaz\r\n"
+    },
+    "gas-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "Foo\nBar\nBaz\n"
+    },
+    "gas-aarch64-linux": {
+        "status": "RunSuccess",
+        "stdout": "Foo\nBar\nBaz\n"
+    },
+    "uxn": {
+        "status": "RunSuccess",
+        "stdout": "Foo\nBar\nBaz\n"
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": "Foo\r\nBar\r\nBaz\r\n"
+    }
+}

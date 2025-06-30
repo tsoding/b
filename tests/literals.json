@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"69\r\n1000000\r\n123456789987654321\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"69\n1000000\n123456789987654321\n"},"gas-x86_64-windows":{"status":"RunSuccess","stdout":"69\r\n1000000\r\n123456789987654321\r\n"},"gas-x86_64-linux":{"status":"RunSuccess","stdout":"69\n1000000\n123456789987654321\n"},"gas-aarch64-linux":{"status":"RunSuccess","stdout":"69\n1000000\n123456789987654321\n"},"uxn":{"status":"RunSuccess","stdout":"%lu\n%lu\n%lu\n"},"6502":{"status":"RunSuccess","stdout":"%lu\r\n%lu\r\n%lu\r\n"}}
+{
+    "fasm-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "69\r\n1000000\r\n123456789987654321\r\n"
+    },
+    "fasm-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "69\n1000000\n123456789987654321\n"
+    },
+    "gas-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "69\r\n1000000\r\n123456789987654321\r\n"
+    },
+    "gas-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "69\n1000000\n123456789987654321\n"
+    },
+    "gas-aarch64-linux": {
+        "status": "RunSuccess",
+        "stdout": "69\n1000000\n123456789987654321\n"
+    },
+    "uxn": {
+        "status": "RunSuccess",
+        "stdout": "%lu\n%lu\n%lu\n"
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": "%lu\r\n%lu\r\n%lu\r\n"
+    }
+}

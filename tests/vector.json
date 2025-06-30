@@ -1,1 +1,30 @@
-{"fasm-x86_64-windows":{"status":"RunSuccess","stdout":"34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n"},"fasm-x86_64-linux":{"status":"RunSuccess","stdout":"34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"},"gas-x86_64-windows":{"status":"RunSuccess","stdout":"34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n"},"gas-x86_64-linux":{"status":"RunSuccess","stdout":"34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"},"gas-aarch64-linux":{"status":"RunSuccess","stdout":"34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"},"uxn":{"status":"RunSuccess","stdout":"34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"},"6502":{"status":"RunSuccess","stdout":"34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n"}}
+{
+    "fasm-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n"
+    },
+    "fasm-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"
+    },
+    "gas-x86_64-windows": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n"
+    },
+    "gas-x86_64-linux": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"
+    },
+    "gas-aarch64-linux": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"
+    },
+    "uxn": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n"
+    },
+    "6502": {
+        "status": "RunSuccess",
+        "stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n"
+    }
+}
