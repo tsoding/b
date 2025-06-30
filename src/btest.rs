@@ -149,8 +149,7 @@ pub unsafe fn execute_test(
     (*sb).count = 0;
     read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.
     da_append(sb, 0);                   // NULL-terminating the stdout
-
-    // TODO: we should probably report the collected stdout for the user
+    printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
 
     Some(Outcome {
         status: if let None = run_result {
