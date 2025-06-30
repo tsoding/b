@@ -9,6 +9,8 @@ on:
       - main
 
 # TODO: add jobs that test on different host platforms (windows, aarch64, etc)
+# TODO: build examples on CI
+#   May require a special support for build-only mode in btest
 
 jobs:
   btest:
@@ -31,6 +33,3 @@ jobs:
       - name: Run Tests
         run: |
           PATH=$(realpath uxn11/bin):$PATH ./build/btest
-      - name: Build Examples
-        run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -dir ./examples/ -build-only

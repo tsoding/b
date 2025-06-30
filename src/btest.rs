@@ -275,7 +275,7 @@ pub unsafe fn record_tests(
 pub unsafe fn replay_tests(
     // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], build_only: bool,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jimp: *mut Jimp,
 ) -> Option<()> {
@@ -401,7 +401,6 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let cases_flags  = flag_list(c!("c"), c!("Test cases"));
     let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
     let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
-    let build_only   = flag_bool(c!("build-only"), false, c!("Only build the tests but don't run them"));
     let help         = flag_bool(c!("help"), false, c!("Print this help message"));
     let record       = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
     // TODO: select test cases and targets by a glob pattern
@@ -492,7 +491,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     } else {
         replay_tests(
             // Inputs
-            *test_folder, da_slice(cases), da_slice(targets), *build_only,
+            *test_folder, da_slice(cases), da_slice(targets),
             // Outputs
             &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jimp,
         );
