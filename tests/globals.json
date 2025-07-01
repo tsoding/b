@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\r\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\r\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "foo == 0x0102030405060708: OK\r\n"
+        "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }

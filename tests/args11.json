@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n"
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n"
+        "expected_stdout": "",
+        "state": "Enabled",
+        "comment": "TODO: Stack overflow"
     }
 }

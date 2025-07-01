@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Foo\r\nBar\r\nBaz\r\n"
+        "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Foo\nBar\nBaz\n"
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Foo\r\nBar\r\nBaz\r\n"
+        "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Foo\nBar\nBaz\n"
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Foo\nBar\nBaz\n"
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "Foo\nBar\nBaz\n"
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "Foo\r\nBar\r\nBaz\r\n"
+        "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }

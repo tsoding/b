@@ -28,81 +28,93 @@ use jimp::*;
 
 const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
-#[derive(Copy, Clone, PartialEq)]
-pub enum OutcomeStatus {
-    /// The test didn't even manage to build
-    BuildFail,
-    /// The test built and maybe even printed something, but crashed at the end
-    RunFail,
-    /// The test built, printed something and exited normally
-    RunSuccess,
+#[derive(Copy, Clone)]
+pub enum TestState {
+    Enabled,
+    Disabled,
 }
 
-pub unsafe fn outcome_status_to_string(status: OutcomeStatus) -> *const c_char {
-    match status {
-        OutcomeStatus::BuildFail  => c!("BuildFail"),
-        OutcomeStatus::RunFail    => c!("RunFail"),
-        OutcomeStatus::RunSuccess => c!("RunSuccess"),
-    }
-}
-
-pub unsafe fn outcome_status_serialize(jim: *mut Jim, status: OutcomeStatus) {
-    jim_string(jim, outcome_status_to_string(status));
-}
-
-pub unsafe fn outcome_status_deserialize(jimp: *mut Jimp) -> Option<OutcomeStatus> {
+pub unsafe fn test_state_deserialize(jimp: *mut Jimp) -> Option<TestState> {
     jimp_string(jimp)?;
-    if strcmp((*jimp).string, c!("RunSuccess")) == 0 {
-        Some(OutcomeStatus::RunSuccess)
-    } else if strcmp((*jimp).string, c!("BuildFail")) == 0 {
-        Some(OutcomeStatus::BuildFail)
-    } else if strcmp((*jimp).string, c!("RunFail")) == 0 {
-        Some(OutcomeStatus::RunFail)
+    if strcmp((*jimp).string, c!("Enabled")) == 0 {
+        Some(TestState::Enabled)
+    } else if strcmp((*jimp).string, c!("Disabled")) == 0 {
+        Some(TestState::Disabled)
     } else {
-        // TODO: unknown member is not an accurate diagnostic here, but it works accidentally 'cause it reports on jimp->string
-        jimp_unknown_member(jimp);
+        jimp_unknown_member(jimp); // TODO: jimp_unknown_member() is not appropriate here, but it works cause it reports on jimp->string
         None
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct Outcome {
-    pub status: OutcomeStatus,
-    pub stdout: *const c_char,
+pub unsafe fn test_state_serialize(jim: *mut Jim, test_state: TestState) {
+    match test_state {
+        TestState::Enabled  => jim_string(jim, c!("Enabled")),
+        TestState::Disabled => jim_string(jim, c!("Disabled")),
+    }
 }
 
-pub unsafe fn outcome_serialize(jim: *mut Jim, outcome: Outcome) {
+#[derive(Copy, Clone)]
+pub struct TestConfig {
+    pub expected_stdout: *const c_char,
+    pub state: TestState,
+    pub comment: *const c_char,
+}
+
+pub unsafe fn test_config_serialize(jim: *mut Jim, test_config: TestConfig) {
     jim_object_begin(jim);
-        jim_member_key(jim, c!("status"));
-        outcome_status_serialize(jim, outcome.status);
-        jim_member_key(jim, c!("stdout"));
-        jim_string(jim, outcome.stdout);
+        jim_member_key(jim, c!("expected_stdout"));
+        jim_string(jim, test_config.expected_stdout);
+        jim_member_key(jim, c!("state"));
+        test_state_serialize(jim, test_config.state);
+        jim_member_key(jim, c!("comment"));
+        jim_string(jim, test_config.comment);
     jim_object_end(jim);
 }
 
-pub unsafe fn outcome_deserialize(jimp: *mut Jimp) -> Option<Outcome> {
-    let mut outcome: Outcome = zeroed();
+pub unsafe fn test_config_deserialize(jimp: *mut Jimp) -> Option<TestConfig> {
+    let mut test_config: TestConfig = zeroed();
     jimp_object_begin(jimp)?;
     while let Some(()) = jimp_object_member(jimp) {
-        if strcmp((*jimp).string, c!("status")) == 0 {
-            outcome.status = outcome_status_deserialize(jimp)?;
-        } else if strcmp((*jimp).string, c!("stdout")) == 0 {
+        if strcmp((*jimp).string, c!("expected_stdout")) == 0 {
             jimp_string(jimp)?;
-            outcome.stdout = strdup((*jimp).string); // TODO: memory leak
+            test_config.expected_stdout = strdup((*jimp).string); // TODO: memory leak
+        } else if strcmp((*jimp).string, c!("state")) == 0 {
+            test_config.state = test_state_deserialize(jimp)?;
+        } else if strcmp((*jimp).string, c!("comment")) == 0 {
+            jimp_string(jimp)?;
+            test_config.comment = strdup((*jimp).string); // TODO: memory leak
         } else {
             jimp_unknown_member(jimp);
             return None;
         }
     }
     jimp_object_end(jimp)?;
-    Some(outcome)
+    Some(test_config)
+}
+
+#[derive(Copy, Clone)]
+pub enum Outcome {
+    /// The test didn't even manage to build
+    BuildFail,
+    /// The test built, but crashed at runtime
+    RunFail,
+    /// The test built, printed something and exited normally
+    RunSuccess{stdout: *const c_char},
+}
+
+#[derive(Copy, Clone)]
+pub enum ReportStatus {
+    BuildFail,
+    RunFail,
+    Disabled,
+    StdoutMismatch,
+    OK,
 }
 
 #[derive(Copy, Clone)]
 pub struct Report {
     pub name: *const c_char,
-    /// The bool indicates whether the outcome was expected or not
-    pub statuses: Array<(OutcomeStatus, bool)>,
+    pub statuses: Array<ReportStatus>,
 }
 
 pub unsafe fn execute_test(
@@ -131,10 +143,7 @@ pub unsafe fn execute_test(
         c!("-o"), program_path,
     }
     if !cmd_run_sync_and_reset(cmd) {
-        return Some(Outcome {
-            status: OutcomeStatus::BuildFail,
-            stdout: c!("")
-        });
+        return Some(Outcome::BuildFail);
     }
     let run_result = match target {
         Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
@@ -153,14 +162,11 @@ pub unsafe fn execute_test(
     da_append(sb, 0);                   // NULL-terminating the stdout
     printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
 
-    Some(Outcome {
-        status: if let None = run_result {
-            OutcomeStatus::RunFail
-        } else {
-            OutcomeStatus::RunSuccess
-        },
-        stdout: strdup((*sb).items), // TODO: Memory leak
-    })
+    if let None = run_result {
+        Some(Outcome::RunFail)
+    } else {
+        Some(Outcome::RunSuccess{stdout: strdup((*sb).items)}) // TODO: memory leak
+    }
 }
 
 pub unsafe fn usage() {
@@ -173,16 +179,15 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
     strcmp(*(a as *const *const c_char), *(b as *const *const c_char))
 }
 
-// TODO: Each field of Stats corresponds to an enum value of OutputStatus.
-// It would be great if this code failed any change of OutputStatus.
+// TODO: Each field of Stats corresponds to an enum value of ReportStatus.
+// It would be great if this code failed on any change of ReportStatus.
 #[derive(Clone, Copy)]
-pub struct Stats {
-    pub expected_ks:   usize,
-    pub unexpected_ks: usize,
-    pub expected_bs:   usize,
-    pub unexpected_bs: usize,
-    pub expected_rs:   usize,
-    pub unexpected_rs: usize,
+pub struct ReportStats {
+    build_fail: usize,
+    run_fail: usize,
+    disabled: usize,
+    stdout_mismatch: usize,
+    ok: usize,
 }
 
 const RESET:  *const c_char = c!("\x1b[0m");
@@ -191,27 +196,22 @@ const YELLOW: *const c_char = c!("\x1b[33m");
 const GREY:   *const c_char = c!("\x1b[90m");
 const RED:    *const c_char = c!("\x1b[31m");
 
-const K_EXPECTED:   *const c_char = GREEN;
-const K_UNEXPECTED: *const c_char = YELLOW;
-const B_EXPECTED:   *const c_char = GREY;
-const B_UNEXPECTED: *const c_char = RED;
-const R_EXPECTED:   *const c_char = GREY;
-const R_UNEXPECTED: *const c_char = RED;
-
 pub unsafe fn print_legend(row_width: usize) {
-    printf(c!("%*s%sK%s - success                 %sK%s - built and ran successfully, but unexpected outcome\n"), row_width + 2, c!(""), K_EXPECTED, RESET, K_UNEXPECTED, RESET);
-    printf(c!("%*s%sB%s - expected build error    %sB%s - build error\n"),       row_width + 2, c!(""), B_EXPECTED, RESET, B_UNEXPECTED, RESET);
-    printf(c!("%*s%sR%s - expected runtime error  %sR%s - runtime error\n"),     row_width + 2, c!(""), R_EXPECTED, RESET, R_UNEXPECTED, RESET);
+    printf(c!("%*s%sK%s - passed      %sX%s - unexpected stdout\n"), row_width + 2, c!(""), GREEN,  RESET, YELLOW, RESET);
+    printf(c!("%*s%sB%s - build fail  %sR%s - runtime fail\n"),      row_width + 2, c!(""), RED,    RESET, RED,    RESET);
+    printf(c!("%*s%s-%s - disabled\n"),                              row_width + 2, c!(""), GREY,   RESET);
 }
 
-pub unsafe fn print_stats(stats: Stats) {
-    printf(c!(" K: %s%3zu%s/%s%-3zu%s B: %s%3zu%s/%s%-3zu%s R: %s%3zu%s/%s%-3zu%s\n"),
-           K_EXPECTED, stats.expected_ks, RESET, K_UNEXPECTED, stats.unexpected_ks, RESET,
-           B_EXPECTED, stats.expected_bs, RESET, B_UNEXPECTED, stats.unexpected_bs, RESET,
-           R_EXPECTED, stats.expected_rs, RESET, R_UNEXPECTED, stats.unexpected_rs, RESET);
+pub unsafe fn print_report_stats(stats: ReportStats) {
+    printf(c!(" %sK%s: %-3zu"), GREEN,  RESET, stats.ok);
+    printf(c!(" %sX%s: %-3zu"), YELLOW, RESET, stats.stdout_mismatch);
+    printf(c!(" %sB%s: %-3zu"), RED,    RESET, stats.build_fail);
+    printf(c!(" %sR%s: %-3zu"), RED,    RESET, stats.run_fail);
+    printf(c!(" %s-%s: %-3zu"), GREY,   RESET, stats.disabled);
+    printf(c!("\n"));
 }
 
-pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
+pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const [ReportStats], row_width: usize, col_width: usize) {
     assert!(targets.len() == stats_by_target.len());
     for j in 0..targets.len() {
         let target = (*targets)[j];
@@ -222,11 +222,11 @@ pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const
         }
         // TODO: these fancy unicode characters don't work well on mingw32 build via wine
         printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
-        print_stats(stats)
+        print_report_stats(stats)
     }
 }
 
-pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *const [Stats], row_width: usize, col_width: usize) {
+pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *const [ReportStats], row_width: usize, col_width: usize) {
     assert!(targets.len() == stats_by_target.len());
     for j in (0..targets.len()).rev() {
         let target = (*targets)[j];
@@ -236,7 +236,7 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
             printf(c!("│ "));
         }
         printf(c!("└─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
-        print_stats(stats)
+        print_report_stats(stats)
     }
 }
 
@@ -245,12 +245,12 @@ pub unsafe fn record_tests(
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
-    reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>,
+    reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>,
     jim: *mut Jim, jimp: *mut Jimp,
 ) -> Option<()> {
     // TODO: memory leak
     // We should probably pass it along with all the Outputs
-    let mut target_outcomes_table: Array<(Target, Outcome)> = zeroed();
+    let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
 
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
@@ -262,36 +262,77 @@ pub unsafe fn record_tests(
             statuses: zeroed(),
         };
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        load_target_outcomes_table_from_json_file_if_exists(
+        load_target_test_config_table_from_json_file_if_exists(
             json_path,
-            sb, jimp, &mut target_outcomes_table,
+            sb, jimp, &mut target_test_config_table,
         )?;
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            let actual_outcome = execute_test(
-                // Inputs
-                test_folder, case_name, target,
-                // Outputs
-                cmd, sb,
-            )?;
-            if let Some(expected_outcome) = slice_lookup_mut(
-                da_slice(target_outcomes_table),
-                |pair, target| if (*pair).0 == (*target) {
-                    Some(&mut (*pair).1)
-                } else {
-                    None
-                },
+            if let Some(test_config) = slice_lookup_mut(
+                da_slice(target_test_config_table),
+                |pair, target| if (*pair).0 == (*target) { Some(&mut (*pair).1) } else { None },
                 &target,
             ) {
-                *expected_outcome = actual_outcome;
+                match (*test_config).state {
+                    TestState::Enabled => {
+                        let outcome = execute_test(
+                            // Inputs
+                            test_folder, case_name, target,
+                            // Outputs
+                            cmd, sb,
+                        )?;
+                        match outcome {
+                            Outcome::BuildFail => da_append(&mut report.statuses, ReportStatus::BuildFail),
+                            Outcome::RunFail   => da_append(&mut report.statuses, ReportStatus::RunFail),
+                            Outcome::RunSuccess{stdout} => {
+                                (*test_config).expected_stdout = stdout;
+                                da_append(&mut report.statuses, ReportStatus::OK);
+                            }
+                        }
+                    }
+                    TestState::Disabled => da_append(&mut report.statuses, ReportStatus::Disabled),
+                }
             } else {
-                da_append(&mut target_outcomes_table, (target, actual_outcome));
+                let outcome = execute_test(
+                    // Inputs
+                    test_folder, case_name, target,
+                    // Outputs
+                    cmd, sb,
+                )?;
+                match outcome {
+                    Outcome::BuildFail => {
+                        let new_test_config = TestConfig {
+                            expected_stdout: c!(""),
+                            state: TestState::Enabled,
+                            comment: c!("Failed to build on record"),
+                        };
+                        da_append(&mut target_test_config_table, (target, new_test_config));
+                        da_append(&mut report.statuses, ReportStatus::BuildFail)
+                    },
+                    Outcome::RunFail => {
+                        let new_test_config = TestConfig {
+                            expected_stdout: c!(""),
+                            state: TestState::Enabled,
+                            comment: c!("Failed to run on record"),
+                        };
+                        da_append(&mut target_test_config_table, (target, new_test_config));
+                        da_append(&mut report.statuses, ReportStatus::RunFail)
+                    }
+                    Outcome::RunSuccess{stdout} => {
+                        let new_test_config = TestConfig {
+                            expected_stdout: stdout,
+                            state: TestState::Enabled,
+                            comment: c!(""),
+                        };
+                        da_append(&mut target_test_config_table, (target, new_test_config));
+                        da_append(&mut report.statuses, ReportStatus::OK);
+                    }
+                }
             }
-            da_append(&mut report.statuses, (actual_outcome.status, true));
         }
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        save_target_outcomes_table_from_json_file(
-            json_path, da_slice(target_outcomes_table),
+        save_target_test_config_table_from_json_file(
+            json_path, da_slice(target_test_config_table),
             jim,
         )?;
         da_append(reports, report);
@@ -303,25 +344,24 @@ pub unsafe fn record_tests(
     Some(())
 }
 
-pub unsafe fn collect_stats_by_target(targets: *const [Target], reports: *const [Report], stats_by_target: *mut Array<Stats>) {
+pub unsafe fn collect_stats_by_target(targets: *const [Target], reports: *const [Report], stats_by_target: *mut Array<ReportStats>) {
     for j in 0..targets.len() {
-        let mut stats: Stats = zeroed();
+        let mut stats: ReportStats = zeroed();
         for i in 0..reports.len() {
             let report = (*reports)[i];
             match *report.statuses.items.add(j) {
-                (OutcomeStatus::RunSuccess, true)  => stats.expected_ks   += 1,
-                (OutcomeStatus::RunSuccess, false) => stats.unexpected_ks += 1,
-                (OutcomeStatus::BuildFail,  true)  => stats.expected_bs   += 1,
-                (OutcomeStatus::BuildFail,  false) => stats.unexpected_bs += 1,
-                (OutcomeStatus::RunFail,    true)  => stats.expected_rs   += 1,
-                (OutcomeStatus::RunFail,    false) => stats.unexpected_rs += 1,
+                ReportStatus::BuildFail      => stats.build_fail      += 1,
+                ReportStatus::RunFail        => stats.run_fail        += 1,
+                ReportStatus::Disabled       => stats.disabled        += 1,
+                ReportStatus::StdoutMismatch => stats.stdout_mismatch += 1,
+                ReportStatus::OK             => stats.ok              += 1,
             }
         }
         da_append(stats_by_target, stats);
     }
 }
 
-pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const [Stats], targets: *const [Target]) {
+pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const [ReportStats], targets: *const [Target]) {
     let mut row_width = 0;
     for i in 0..reports.len() {
         let report = (*reports)[i];
@@ -343,12 +383,11 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
         printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
             match *report.statuses.items.add(j) {
-                (OutcomeStatus::RunSuccess, true)   => printf(c!(" %sK%s"), K_EXPECTED,   RESET),
-                (OutcomeStatus::RunSuccess, false)  => printf(c!(" %sK%s"), K_UNEXPECTED, RESET),
-                (OutcomeStatus::BuildFail,  true)   => printf(c!(" %sB%s"), B_EXPECTED,   RESET),
-                (OutcomeStatus::BuildFail,  false)  => printf(c!(" %sB%s"), B_UNEXPECTED, RESET),
-                (OutcomeStatus::RunFail,    true)   => printf(c!(" %sR%s"), R_EXPECTED,   RESET),
-                (OutcomeStatus::RunFail,    false)  => printf(c!(" %sR%s"), R_UNEXPECTED, RESET),
+                ReportStatus::OK             => printf(c!(" %sK%s"), GREEN,  RESET),
+                ReportStatus::StdoutMismatch => printf(c!(" %sX%s"), YELLOW, RESET),
+                ReportStatus::BuildFail      => printf(c!(" %sB%s"), RED,    RESET),
+                ReportStatus::RunFail        => printf(c!(" %sR%s"), RED,    RESET),
+                ReportStatus::Disabled       => printf(c!(" %s-%s"), GREY,   RESET),
             };
         }
         printf(c!("\n"));
@@ -358,10 +397,11 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
     print_legend(row_width);
 }
 
-pub unsafe fn load_target_outcomes_table_from_json_file_if_exists(
+pub unsafe fn load_target_test_config_table_from_json_file_if_exists(
     json_path: *const c_char,
-    sb: *mut String_Builder, jimp: *mut Jimp, target_outcomes_table: *mut Array<(Target, Outcome)>,
+    sb: *mut String_Builder, jimp: *mut Jimp, target_test_config_table: *mut Array<(Target, TestConfig)>,
 ) -> Option<()> {
+    (*target_test_config_table).count = 0;
     if file_exists(json_path)? {
         // TODO: file may stop existing between file_exists() and read_entire_file() cools
         // It would be much better if read_entire_file() returned the reason of failure so
@@ -370,12 +410,11 @@ pub unsafe fn load_target_outcomes_table_from_json_file_if_exists(
         (*sb).count = 0;
         read_entire_file(json_path, sb)?;
         jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
-        (*target_outcomes_table).count = 0;
         jimp_object_begin(jimp)?;
         while let Some(()) = jimp_object_member(jimp) {
             if let Some(target) = target_by_name((*jimp).string) {
-                let outcome: Outcome = outcome_deserialize(jimp)?;
-                da_append(target_outcomes_table, (target, outcome));
+                let test_config: TestConfig = test_config_deserialize(jimp)?;
+                da_append(target_test_config_table, (target, test_config));
             } else {
                 jimp_unknown_member(jimp);
                 return None;
@@ -386,17 +425,17 @@ pub unsafe fn load_target_outcomes_table_from_json_file_if_exists(
     Some(())
 }
 
-pub unsafe fn save_target_outcomes_table_from_json_file(
-    json_path: *const c_char, target_outcomes_table: *const [(Target, Outcome)],
+pub unsafe fn save_target_test_config_table_from_json_file(
+    json_path: *const c_char, target_test_config_table: *const [(Target, TestConfig)],
     jim: *mut Jim,
 ) -> Option<()> {
     // TODO: enable pretty-printing in here when it's implemented in jim.h
     jim_begin(jim);
     jim_object_begin(jim);
-    for j in 0..target_outcomes_table.len() {
-        let (target, outcome) = (*target_outcomes_table)[j];
+    for j in 0..target_test_config_table.len() {
+        let (target, outcome) = (*target_test_config_table)[j];
         jim_member_key(jim, name_of_target(target).unwrap());
-        outcome_serialize(jim, outcome);
+        test_config_serialize(jim, outcome);
     }
     jim_object_end(jim);
 
@@ -408,11 +447,11 @@ pub unsafe fn replay_tests(
     // Inputs
     test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<Stats>, jim: *mut Jim, jimp: *mut Jimp,
+    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>, jim: *mut Jim, jimp: *mut Jimp,
 ) -> Option<()> {
     // TODO: memory leak
     // We should probably pass it along with all the Outputs
-    let mut target_outcomes_table: Array<(Target, Outcome)> = zeroed();
+    let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
 
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
@@ -424,41 +463,63 @@ pub unsafe fn replay_tests(
             statuses: zeroed(),
         };
         let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        load_target_outcomes_table_from_json_file_if_exists(
+        load_target_test_config_table_from_json_file_if_exists(
             json_path,
-            sb, jimp, &mut target_outcomes_table,
+            sb, jimp, &mut target_test_config_table,
         )?;
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            let expected_outcome = slice_lookup(
-                da_slice(target_outcomes_table),
+            let test_config = slice_lookup(
+                da_slice(target_test_config_table),
                 |pair, target| if (*pair).0 == *target { Some(&(*pair).1) } else { None },
                 &target
             );
-            let actual_outcome = execute_test(
-                // Inputs
-                test_folder, case_name, target,
-                // Outputs
-                cmd, sb,
-            )?;
-            let expected = if let Some(expected_outcome) = expected_outcome {
-                if (*expected_outcome).status != actual_outcome.status || strcmp((*expected_outcome).stdout, actual_outcome.stdout) != 0 {
-                    fprintf(stderr(), c!("UNEXPECTED OUTCOME!!!\n"));
-                    jim_begin(jim);
-                    outcome_serialize(jim, *expected_outcome);
-                    fprintf(stderr(), c!("EXPECTED: %.*s\n"), (*jim).sink_count, (*jim).sink);
-                    jim_begin(jim);
-                    outcome_serialize(jim, actual_outcome);
-                    fprintf(stderr(), c!("ACTUAL:   %.*s\n"), (*jim).sink_count, (*jim).sink);
-                    false
-                } else {
-                    true
+            if let Some(test_config) = test_config {
+                match (*test_config).state {
+                    TestState::Enabled => {
+                        let outcome = execute_test(
+                            // Inputs
+                            test_folder, case_name, target,
+                            // Outputs
+                            cmd, sb,
+                        )?;
+                        match outcome {
+                            Outcome::RunSuccess{stdout} =>
+                                if strcmp((*test_config).expected_stdout, stdout) != 0 {
+                                    fprintf(stderr(), c!("UNEXPECTED OUTCOME!!!\n"));
+                                    jim_begin(jim);
+                                    jim_string(jim, (*test_config).expected_stdout);
+                                    fprintf(stderr(), c!("EXPECTED: %.*s\n"), (*jim).sink_count, (*jim).sink);
+                                    jim_begin(jim);
+                                    jim_string(jim, stdout);
+                                    fprintf(stderr(), c!("ACTUAL:   %.*s\n"), (*jim).sink_count, (*jim).sink);
+                                    da_append(&mut report.statuses, ReportStatus::StdoutMismatch);
+                                } else {
+                                    da_append(&mut report.statuses, ReportStatus::OK);
+                                },
+                            Outcome::BuildFail => da_append(&mut report.statuses, ReportStatus::BuildFail),
+                            Outcome::RunFail   => da_append(&mut report.statuses, ReportStatus::RunFail),
+                        }
+                    }
+                    TestState::Disabled => da_append(&mut report.statuses, ReportStatus::Disabled),
                 }
             } else {
-                fprintf(stderr(), c!("UNEXPECTED OUTCOME!!! The outcome was never recorded. Please use -record flag to record what is expected for this test case at this target\n"));
-                false
-            };
-            da_append(&mut report.statuses, (actual_outcome.status, expected));
+                let outcome = execute_test(
+                    // Inputs
+                    test_folder, case_name, target,
+                    // Outputs
+                    cmd, sb,
+                )?;
+
+                match outcome {
+                    Outcome::RunSuccess{..} => {
+                        fprintf(stderr(), c!("UNEXPECTED OUTCOME!!! The outcome was never recorded. Please use -record flag to record what is expected for this test case at this target\n"));
+                        da_append(&mut report.statuses, ReportStatus::StdoutMismatch);
+                    }
+                    Outcome::BuildFail => da_append(&mut report.statuses, ReportStatus::BuildFail),
+                    Outcome::RunFail   => da_append(&mut report.statuses, ReportStatus::RunFail),
+                }
+            }
         }
         da_append(reports, report);
     }
@@ -497,7 +558,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     jim.pp = 4;
     let mut jimp: Jimp = zeroed();
     let mut reports: Array<Report> = zeroed();
-    let mut stats_by_target: Array<Stats> = zeroed();
+    let mut stats_by_target: Array<ReportStats> = zeroed();
 
     let mut targets: Array<Target> = zeroed();
     if *list_targets || (*target_flags).count == 0 {

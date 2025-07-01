@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n"
+        "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\n-1\n-2\n-3\n"
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n"
+        "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\n-1\n-2\n-3\n"
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\n-1\n-2\n-3\n"
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\n-1\n-2\n-3\n"
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n"
+        "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }

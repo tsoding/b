@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "69\r\n1000000\r\n123456789987654321\r\n"
+        "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "69\n1000000\n123456789987654321\n"
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "69\r\n1000000\r\n123456789987654321\r\n"
+        "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "69\n1000000\n123456789987654321\n"
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "69\n1000000\n123456789987654321\n"
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "69\n1000000\n123456789987654321\n"
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "69\r\n1000000\r\n123456789987654321\r\n"
+        "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }

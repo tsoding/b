@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\r\nHELLOOOOO\r\nHELLOOOOO\r\n"
+        "expected_stdout": "HELLOOOOO\r\nHELLOOOOO\r\nHELLOOOOO\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n"
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\r\nHELLOOOOO\r\nHELLOOOOO\r\n"
+        "expected_stdout": "HELLOOOOO\r\nHELLOOOOO\r\nHELLOOOOO\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n"
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n"
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n"
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n"
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }

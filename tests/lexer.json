@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"
+        "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"
+        "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n"
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n"
+        "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }

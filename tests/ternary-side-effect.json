@@ -1,30 +1,37 @@
 {
     "fasm-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n"
+        "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "fasm-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\n  Foo\n"
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-windows": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n"
+        "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-x86_64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\n  Foo\n"
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "gas-aarch64-linux": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\n  Foo\n"
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "uxn": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\n  Foo\n"
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
     },
     "6502": {
-        "status": "RunSuccess",
-        "stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n"
+        "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
+        "state": "Enabled",
+        "comment": ""
     }
 }
