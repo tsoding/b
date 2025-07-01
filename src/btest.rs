@@ -261,7 +261,7 @@ pub unsafe fn record_tests(
             name: case_name,
             statuses: zeroed(),
         };
-        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
+        let json_path = temp_sprintf(c!("%s/config/%s.json"), test_folder, case_name);
         load_target_test_config_table_from_json_file_if_exists(
             json_path,
             sb, jimp, &mut target_test_config_table,
@@ -330,7 +330,7 @@ pub unsafe fn record_tests(
                 }
             }
         }
-        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
+        let json_path = temp_sprintf(c!("%s/config/%s.json"), test_folder, case_name);
         save_target_test_config_table_from_json_file(
             json_path, da_slice(target_test_config_table),
             jim,
@@ -462,7 +462,7 @@ pub unsafe fn replay_tests(
             name: case_name,
             statuses: zeroed(),
         };
-        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
+        let json_path = temp_sprintf(c!("%s/config/%s.json"), test_folder, case_name);
         load_target_test_config_table_from_json_file_if_exists(
             json_path,
             sb, jimp, &mut target_test_config_table,
