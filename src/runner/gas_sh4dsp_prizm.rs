@@ -701,7 +701,7 @@ pub mod sh4 {
             let rn = CPU.r[n];
             let rm = CPU.r[m];
 
-            CPU.r[m] = rn | rm;
+            CPU.r[n] = rn | rm;
 
             CPU.pc += 2;
             true
@@ -711,7 +711,7 @@ pub mod sh4 {
             let rn = CPU.r[n];
             let rm = CPU.r[m];
 
-            CPU.r[m] = rn ^ rm;
+            CPU.r[n] = rn ^ rm;
 
             CPU.pc += 2;
             true
@@ -721,7 +721,7 @@ pub mod sh4 {
             let rn = CPU.r[n];
             let rm = CPU.r[m];
 
-            CPU.r[m] = rn & rm;
+            CPU.r[n] = rn & rm;
 
             CPU.pc += 2;
             true
@@ -764,7 +764,7 @@ pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char) -> Op
         }
     }
     let code = sh4::CPU.r[0] as c_uint;
-    printf(c!("\nExited with code %hd\n"), code);
+    printf(c!("\nExited with code %d\n"), code);
 
     if code != 0 {
         return None;

@@ -53,7 +53,8 @@ start() {
     txt_x = 1;
     txt_y = 1;
 
-    return (main(0, 0));
+    extrn exit;
+    exit(main(0,0));
 }
 detect_calculator __asm__ (
     "mov.l .L_ilram, r4",
@@ -152,8 +153,9 @@ exit(code) {
         Exit(code);
     }
     __asm__ ( 
-        "mov #-1, r0",
-        "jmp @r0"
+        "mov r4, r0",
+        "mov #-1, r1",
+        "jmp @r1"
     );
 }
 abort() {
