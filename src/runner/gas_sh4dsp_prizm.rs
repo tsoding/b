@@ -103,6 +103,7 @@ pub mod sh4 {
     pub unsafe fn load_addin(rom: String_Builder) {
         if rom.count < 0x7000 {
             // TODO: Tell the user off. This shit ain't an addin.
+            panic!("YOUR TAKING TOO LONG");
         }
         for i in 0..(rom.count-0x7000) {
             ADDIN[i] = *rom.items.add(i + 0x7000) as u8;
@@ -758,6 +759,29 @@ pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char) -> Op
     sh4::reset();
 
     while sh4::CPU.pc != 0xFFFFFFFF { // The convetion is stop executing when pc == 0xFFFFFFFF
+        if sh4::CPU.pc == 0x80020070 {
+            // TODO: Consider having a syscall handler that tries to use raylib for Bdisp syscalls
+            // and other text related shenanigans. If anyone wants to have a little fun homework
+            // exercice, I recommend that they look at the following pages I left here:
+            //      - https://prizm.cemetech.net/Syscalls/ for a list of known syscalls on the
+            //      Prizm
+            //      - libb/gas-sh4dsp-prizm.b has a list of all syscalls *used by B* and their
+            //      parameters
+            //      - https://prizm.cemetech.net/Technical_Documentation/Display/ for some basic
+            //      display specs
+            //      - https://git.planet-casio.com/Lephenixnoir/mq for a more complete Prizm
+            //      emulator. Due to its nature (it runs gint add-ins, which are mostly independent
+            //      from the Prizm OS), it mostly aims at emulating hardware, and not OS
+            //      interfaces.A
+            //      - https://shared-ptr.com/sh_insns.html for a general SHx instruction set. If
+            //      you want to implement more instructions, ONLY follow those marked as SH4A or
+            //      DSP. Do NOT try to implement ANY instructions linked to floating-point
+            //      arithmetic.
+            //
+            let syscall_id: u32 = sh4::CPU.r[0];
+            fprintf(stderr(), c!("UMIMPLEMENTED SYSCALL ID: %04X\n"), syscall_id as c_uint);
+            panic!();
+        }
         if !sh4::step(false) {
             printf(c!("Umimplemented instruction 0x%04X @ PC=%08X\n"), sh4::read16(sh4::CPU.pc) as c_uint, sh4::CPU.pc);
             return None

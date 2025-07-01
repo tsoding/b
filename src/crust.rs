@@ -28,6 +28,8 @@ pub mod libc {
         pub fn strlen(s: *const c_char) -> usize;
         pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
 
+        pub fn getenv(s: *const c_char) -> *const c_char;
+
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn strncpy(dst: *mut c_char, src: *const c_char, dsize: usize) -> *mut c_char;

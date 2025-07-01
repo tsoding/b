@@ -1320,15 +1320,19 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             // We do not need to worry about anyone building from an fx-CG50, so let's just assume
             // a working GNU sh4 toolchain
-            let (gas, cc, objcopy) = (c!("sh-elf-as"), c!("sh-elf-gcc"), c!("sh-elf-objcopy"));
+            let mut toolchain_prefix = getenv(c!("PREFIX"));
+            if toolchain_prefix.is_null() { toolchain_prefix = c!("sh-elf"); }
+            let (gas, cc, objcopy) = (
+                temp_sprintf(c!("%s-as"), toolchain_prefix), 
+                temp_sprintf(c!("%s-gcc"), toolchain_prefix), 
+                temp_sprintf(c!("%s-objcopy"), toolchain_prefix)
+            );
 
             cmd_append! {
                 &mut cmd,
                 gas, c!("-o"), output_obj_path, output_asm_path,
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            // TODO: mess with this
-            // and use mkg3a/linker magic to generate a proper .g3a raw executable
             cmd_append! {
                 &mut cmd,
                 cc, c!("-no-pie"),
@@ -1395,10 +1399,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                // TODO: since I kind of want to use the calculator's native ""syscall"" """interface""" instead 
-                // of something like gint, I can't simply go around implementing a runner (as I'd
-                // either need to properly emulate them, or just straight up ship flash ROMs, which
-                // is obviously a recipe for disasters)
+                runner::gas_sh4dsp_prizm::run(&mut output, output_g3a_path)?;
             }
         },
         Target::Gas_AArch64_Linux => {
