@@ -487,7 +487,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 get_and_expect_token_but_continue(l, c, Token::CBracket)?;
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-                let word_size = Arg::Literal(target_word_size((*c).target));
+                let word_size = Arg::Literal((*c).target.word_size());
                 // TODO: Introduce Op::Index instruction that indices values without explicitly emit Binop::Mult and uses efficient multiplication by the size of the word at the codegen level.
                 push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
                 push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
@@ -1158,7 +1158,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     let default_target_name = if let Some(default_target) = default_target {
-        name_of_target(default_target).expect("default target name not found")
+        default_target.name()
     } else {
         ptr::null()
     };
@@ -1205,13 +1205,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if strcmp(*target_name, c!("list")) == 0 {
         fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..TARGET_NAMES.len() {
-            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[i].name);
+        for i in 0..TARGET_ORDER.len() {
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_ORDER)[i].name());
         }
         return Some(());
     }
 
-    let Some(target) = target_by_name(*target_name) else {
+    let Some(target) = Target::by_name(*target_name) else {
         usage();
         fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;

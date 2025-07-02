@@ -102,24 +102,8 @@ pub enum Outcome {
     RunSuccess{stdout: *const c_char},
 }
 
-macro_rules! enum_with_order {
-    (
-        enum $name:ident in $order_name:ident {
-            $($items:tt)*
-        }
-    ) => {
-        #[derive(Copy, Clone)]
-        pub enum $name {
-            $($items)*
-        }
-        pub const $order_name: *const [$name] = {
-            use $name::*;
-            &[$($items)*]
-        };
-    }
-}
-
 enum_with_order! {
+    #[derive(Copy, Clone)]
     enum ReportStatus in REPORT_STATUS_ORDER {
         OK,
         NeverRecorded,
@@ -188,12 +172,12 @@ pub unsafe fn execute_test(
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
     });
-    let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, name_of_target(target).unwrap());
+    let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
         cmd,
         c!("./build/b"),
         input_path,
-        c!("-t"), name_of_target(target).unwrap(),
+        c!("-t"), target.name(),
         c!("-o"), program_path,
     }
     if !cmd_run_sync_and_reset(cmd) {
@@ -270,7 +254,7 @@ pub unsafe fn print_top_labels(targets: *const [Target], stats_by_target: *const
             printf(c!("│ "));
         }
         // TODO: these fancy unicode characters don't work well on mingw32 build via wine
-        printf(c!("┌─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
+        printf(c!("┌─%-*s"), col_width - 2*j, target.name());
         print_report_stats(stats)
     }
 }
@@ -284,7 +268,7 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
         for _ in 0..j {
             printf(c!("│ "));
         }
-        printf(c!("└─%-*s"), col_width - 2*j, name_of_target(target).unwrap());
+        printf(c!("└─%-*s"), col_width - 2*j, target.name());
         print_report_stats(stats)
     }
 }
@@ -403,7 +387,7 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
     let mut col_width = 0;
     for j in 0..targets.len() {
         let target = (*targets)[j];
-        let width = 2*(j + 1) + strlen(name_of_target(target).unwrap());
+        let width = 2*(j + 1) + strlen(target.name());
         col_width = cmp::max(col_width, width);
     }
 
@@ -447,7 +431,7 @@ pub unsafe fn load_bat_from_json_file_if_exists(
             let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
             jimp_object_begin(jimp)?;
             while let Some(()) = jimp_object_member(jimp) {
-                if let Some(target) = target_by_name((*jimp).string) {
+                if let Some(target) = Target::by_name((*jimp).string) {
                     let test_config: TestConfig = test_config_deserialize(jimp)?;
                     da_append(&mut target_test_config_table, (target, test_config));
                 } else {
@@ -475,7 +459,7 @@ pub unsafe fn save_bat_to_json_file(
         jim_object_begin(jim);
         for j in 0..target_test_config_table.count {
             let (target, outcome) = *target_test_config_table.items.add(j);
-            jim_member_key(jim, name_of_target(target).unwrap());
+            jim_member_key(jim, target.name());
             test_config_serialize(jim, outcome);
         }
         jim_object_end(jim);
@@ -599,14 +583,11 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     let mut targets: Array<Target> = zeroed();
     if *list_targets || (*target_flags).count == 0 {
-        for j in 0..TARGET_NAMES.len() {
-            let Target_Name { name: _, target } = (*TARGET_NAMES)[j];
-            da_append(&mut targets, target);
-        }
+        da_append_many(&mut targets, TARGET_ORDER);
     } else {
         for j in 0..(*target_flags).count {
             let target_name = *(*target_flags).items.add(j);
-            if let Some(target) = target_by_name(target_name) {
+            if let Some(target) = Target::by_name(target_name) {
                 da_append(&mut targets, target);
             } else {
                 fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
@@ -619,7 +600,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         fprintf(stderr(), c!("Compilation targets:\n"));
         for i in 0..targets.count {
             let target = *targets.items.add(i);
-            fprintf(stderr(), c!("    %s\n"), name_of_target(target).unwrap());
+            fprintf(stderr(), c!("    %s\n"), target.name());
         }
         return Some(());
     }

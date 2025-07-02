@@ -10,6 +10,25 @@ macro_rules! c {
     }
 }
 
+#[macro_export]
+macro_rules! enum_with_order {
+    (
+        #[derive($($traits:tt)*)]
+        enum $name:ident in $order_name:ident {
+            $($items:tt)*
+        }
+    ) => {
+        #[derive($($traits)*)]
+        pub enum $name {
+            $($items)*
+        }
+        pub const $order_name: *const [$name] = {
+            use $name::*;
+            &[$($items)*]
+        };
+    }
+}
+
 pub unsafe fn assoc_lookup_cstr_mut<Value>(assoc: *mut [(*const c_char, Value)], needle: *const c_char) -> Option<*mut Value> {
     for i in 0..assoc.len() {
         if strcmp((*assoc)[i].0, needle) == 0 {
