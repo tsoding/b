@@ -108,6 +108,7 @@ pub enum ReportStatus {
     RunFail,
     Disabled,
     StdoutMismatch,
+    NeverRecorded,
     OK,
 }
 
@@ -188,26 +189,32 @@ pub struct ReportStats {
     disabled: usize,
     stdout_mismatch: usize,
     ok: usize,
+    never_recorded: usize,
 }
 
 const RESET:  *const c_char = c!("\x1b[0m");
 const GREEN:  *const c_char = c!("\x1b[32m");
-const YELLOW: *const c_char = c!("\x1b[33m");
+const _YELLOW: *const c_char = c!("\x1b[33m");
 const GREY:   *const c_char = c!("\x1b[90m");
 const RED:    *const c_char = c!("\x1b[31m");
+const BLUE:   *const c_char = c!("\x1b[94m");
 
 pub unsafe fn print_legend(row_width: usize) {
-    printf(c!("%*s%sK%s - passed      %sX%s - unexpected stdout\n"), row_width + 2, c!(""), GREEN,  RESET, YELLOW, RESET);
-    printf(c!("%*s%sB%s - build fail  %sR%s - runtime fail\n"),      row_width + 2, c!(""), RED,    RESET, RED,    RESET);
-    printf(c!("%*s%s-%s - disabled\n"),                              row_width + 2, c!(""), GREY,   RESET);
+    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sK%s - passed"),                    GREEN, RESET); printf(c!("\n"));
+    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sK%s - stdout was never recorded"), BLUE,  RESET); printf(c!("\n"));
+    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sK%s - unexpected stdout"),         RED,   RESET); printf(c!("\n"));
+    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sB%s - build fail"),                RED,   RESET); printf(c!("\n"));
+    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sR%s - runtime fail"),              RED,   RESET); printf(c!("\n"));
+    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%s-%s - disabled"),                  GREY,  RESET); printf(c!("\n"));
 }
 
 pub unsafe fn print_report_stats(stats: ReportStats) {
-    printf(c!(" %sK%s: %-3zu"), GREEN,  RESET, stats.ok);
-    printf(c!(" %sX%s: %-3zu"), YELLOW, RESET, stats.stdout_mismatch);
-    printf(c!(" %sB%s: %-3zu"), RED,    RESET, stats.build_fail);
-    printf(c!(" %sR%s: %-3zu"), RED,    RESET, stats.run_fail);
-    printf(c!(" %s-%s: %-3zu"), GREY,   RESET, stats.disabled);
+    printf(c!(" %sK%s: %-3zu"), GREEN, RESET, stats.ok);
+    printf(c!(" %sK%s: %-3zu"), BLUE,  RESET, stats.never_recorded);
+    printf(c!(" %sK%s: %-3zu"), RED,   RESET, stats.stdout_mismatch);
+    printf(c!(" %sB%s: %-3zu"), RED,   RESET, stats.build_fail);
+    printf(c!(" %sR%s: %-3zu"), RED,   RESET, stats.run_fail);
+    printf(c!(" %s-%s: %-3zu"), GREY,  RESET, stats.disabled);
     printf(c!("\n"));
 }
 
@@ -343,6 +350,7 @@ pub unsafe fn collect_stats_by_target(targets: *const [Target], reports: *const 
                 ReportStatus::RunFail        => stats.run_fail        += 1,
                 ReportStatus::Disabled       => stats.disabled        += 1,
                 ReportStatus::StdoutMismatch => stats.stdout_mismatch += 1,
+                ReportStatus::NeverRecorded  => stats.never_recorded  += 1,
                 ReportStatus::OK             => stats.ok              += 1,
             }
         }
@@ -372,11 +380,12 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
         printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
             match *report.statuses.items.add(j) {
-                ReportStatus::OK             => printf(c!(" %sK%s"), GREEN,  RESET),
-                ReportStatus::StdoutMismatch => printf(c!(" %sX%s"), YELLOW, RESET),
-                ReportStatus::BuildFail      => printf(c!(" %sB%s"), RED,    RESET),
-                ReportStatus::RunFail        => printf(c!(" %sR%s"), RED,    RESET),
-                ReportStatus::Disabled       => printf(c!(" %s-%s"), GREY,   RESET),
+                ReportStatus::OK             => printf(c!(" %sK%s"), GREEN, RESET),
+                ReportStatus::StdoutMismatch => printf(c!(" %sK%s"), RED,   RESET),
+                ReportStatus::BuildFail      => printf(c!(" %sB%s"), RED,   RESET),
+                ReportStatus::RunFail        => printf(c!(" %sR%s"), RED,   RESET),
+                ReportStatus::Disabled       => printf(c!(" %s-%s"), GREY,  RESET),
+                ReportStatus::NeverRecorded  => printf(c!(" %sK%s"), BLUE,  RESET),
             };
         }
         printf(c!("\n"));
@@ -513,7 +522,7 @@ pub unsafe fn replay_tests(
                 match outcome {
                     Outcome::RunSuccess{..} => {
                         fprintf(stderr(), c!("UNEXPECTED OUTCOME!!! The outcome was never recorded. Please use -record flag to record what is expected for this test case at this target\n"));
-                        da_append(&mut report.statuses, ReportStatus::StdoutMismatch);
+                        da_append(&mut report.statuses, ReportStatus::NeverRecorded);
                     }
                     Outcome::BuildFail => da_append(&mut report.statuses, ReportStatus::BuildFail),
                     Outcome::RunFail   => da_append(&mut report.statuses, ReportStatus::RunFail),
