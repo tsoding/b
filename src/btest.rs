@@ -102,14 +102,67 @@ pub enum Outcome {
     RunSuccess{stdout: *const c_char},
 }
 
-#[derive(Copy, Clone)]
-pub enum ReportStatus {
-    BuildFail,
-    RunFail,
-    Disabled,
-    StdoutMismatch,
-    NeverRecorded,
-    OK,
+macro_rules! enum_with_order {
+    (
+        enum $name:ident in $order_name:ident {
+            $($items:tt)*
+        }
+    ) => {
+        #[derive(Copy, Clone)]
+        pub enum $name {
+            $($items)*
+        }
+        pub const $order_name: *const [$name] = {
+            use $name::*;
+            &[$($items)*]
+        };
+    }
+}
+
+enum_with_order! {
+    enum ReportStatus in REPORT_STATUS_ORDER {
+        OK,
+        NeverRecorded,
+        StdoutMismatch,
+        BuildFail,
+        RunFail,
+        Disabled,
+    }
+}
+
+impl ReportStatus {
+    fn letter(self) -> *const c_char {
+        match self {
+            ReportStatus::OK             => c!("K"),
+            ReportStatus::NeverRecorded  => c!("K"),
+            ReportStatus::StdoutMismatch => c!("K"),
+            ReportStatus::BuildFail      => c!("B"),
+            ReportStatus::RunFail        => c!("R"),
+            ReportStatus::Disabled       => c!("-"),
+        }
+    }
+
+    fn color(self) -> *const c_char {
+        match self {
+            ReportStatus::OK             => GREEN,
+            ReportStatus::NeverRecorded  => BLUE,
+            ReportStatus::StdoutMismatch => RED,
+            ReportStatus::BuildFail      => RED,
+            ReportStatus::RunFail        => RED,
+            ReportStatus::Disabled       => GREY,
+        }
+    }
+
+    fn description(self) -> *const c_char {
+        match self {
+            ReportStatus::OK             => c!("passed"),
+            ReportStatus::NeverRecorded  => c!("stdout is not recorded"),
+            ReportStatus::StdoutMismatch => c!("unexpected stdout"),
+            ReportStatus::BuildFail      => c!("build fail"),
+            ReportStatus::RunFail        => c!("runtime error"),
+            ReportStatus::Disabled       => c!("disabled"),
+        }
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -180,16 +233,9 @@ pub unsafe extern "C" fn compar_cstr(a: *const c_void, b: *const c_void) -> c_in
     strcmp(*(a as *const *const c_char), *(b as *const *const c_char))
 }
 
-// TODO: Each field of Stats corresponds to an enum value of ReportStatus.
-// It would be great if this code failed on any change of ReportStatus.
 #[derive(Clone, Copy)]
 pub struct ReportStats {
-    build_fail: usize,
-    run_fail: usize,
-    disabled: usize,
-    stdout_mismatch: usize,
-    ok: usize,
-    never_recorded: usize,
+    entries: [usize; REPORT_STATUS_ORDER.len()]
 }
 
 const RESET:  *const c_char = c!("\x1b[0m");
@@ -200,21 +246,17 @@ const RED:    *const c_char = c!("\x1b[31m");
 const BLUE:   *const c_char = c!("\x1b[94m");
 
 pub unsafe fn print_legend(row_width: usize) {
-    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sK%s - passed"),                    GREEN, RESET); printf(c!("\n"));
-    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sK%s - stdout was never recorded"), BLUE,  RESET); printf(c!("\n"));
-    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sK%s - unexpected stdout"),         RED,   RESET); printf(c!("\n"));
-    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sB%s - build fail"),                RED,   RESET); printf(c!("\n"));
-    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%sR%s - runtime fail"),              RED,   RESET); printf(c!("\n"));
-    printf(c!("%*s"), row_width + 2, c!("")); printf(c!("%s-%s - disabled"),                  GREY,  RESET); printf(c!("\n"));
+    for i in 0..REPORT_STATUS_ORDER.len() {
+        let status = (*REPORT_STATUS_ORDER)[i];
+        printf(c!("%*s%s%s%s - %s\n"), row_width + 2, c!(""), status.color(), status.letter(), RESET, status.description());
+    }
 }
 
 pub unsafe fn print_report_stats(stats: ReportStats) {
-    printf(c!(" %sK%s: %-3zu"), GREEN, RESET, stats.ok);
-    printf(c!(" %sK%s: %-3zu"), BLUE,  RESET, stats.never_recorded);
-    printf(c!(" %sK%s: %-3zu"), RED,   RESET, stats.stdout_mismatch);
-    printf(c!(" %sB%s: %-3zu"), RED,   RESET, stats.build_fail);
-    printf(c!(" %sR%s: %-3zu"), RED,   RESET, stats.run_fail);
-    printf(c!(" %s-%s: %-3zu"), GREY,  RESET, stats.disabled);
+    for i in 0..REPORT_STATUS_ORDER.len() {
+        let status = (*REPORT_STATUS_ORDER)[i];
+        printf(c!(" %s%s%s: %-3zu"), status.color(), status.letter(), RESET, stats.entries[i]);
+    }
     printf(c!("\n"));
 }
 
@@ -345,14 +387,7 @@ pub unsafe fn collect_stats_by_target(targets: *const [Target], reports: *const 
         let mut stats: ReportStats = zeroed();
         for i in 0..reports.len() {
             let report = (*reports)[i];
-            match *report.statuses.items.add(j) {
-                ReportStatus::BuildFail      => stats.build_fail      += 1,
-                ReportStatus::RunFail        => stats.run_fail        += 1,
-                ReportStatus::Disabled       => stats.disabled        += 1,
-                ReportStatus::StdoutMismatch => stats.stdout_mismatch += 1,
-                ReportStatus::NeverRecorded  => stats.never_recorded  += 1,
-                ReportStatus::OK             => stats.ok              += 1,
-            }
+            stats.entries[*report.statuses.items.add(j) as usize] += 1;
         }
         da_append(stats_by_target, stats);
     }
@@ -379,14 +414,8 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
         let report = (*reports)[i];
         printf(c!("%*s:"), row_width, report.name);
         for j in 0..report.statuses.count {
-            match *report.statuses.items.add(j) {
-                ReportStatus::OK             => printf(c!(" %sK%s"), GREEN, RESET),
-                ReportStatus::StdoutMismatch => printf(c!(" %sK%s"), RED,   RESET),
-                ReportStatus::BuildFail      => printf(c!(" %sB%s"), RED,   RESET),
-                ReportStatus::RunFail        => printf(c!(" %sR%s"), RED,   RESET),
-                ReportStatus::Disabled       => printf(c!(" %s-%s"), GREY,  RESET),
-                ReportStatus::NeverRecorded  => printf(c!(" %sK%s"), BLUE,  RESET),
-            };
+            let status = *report.statuses.items.add(j);
+            printf(c!(" %s%s%s"), status.color(), status.letter(), RESET);
         }
         printf(c!("\n"));
     }
