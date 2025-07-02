@@ -57,7 +57,7 @@ void jimp_begin(Jimp *jimp, const char *file_path, const char *input, size_t inp
 
 /// If succeeds puts the freshly parsed boolean into jimp->boolean.
 /// Any consequent calls to the jimp_* functions may invalidate jimp->boolean.
-bool jimp_boolean(Jimp *jimp);
+bool jimp_bool(Jimp *jimp);
 
 /// If succeeds puts the freshly parsed number into jimp->number.
 /// Any consequent calls to the jimp_* functions may invalidate jimp->number.
@@ -94,6 +94,13 @@ bool jimp_array_end(Jimp *jimp);
 
 /// Prints diagnostic at the current position of the parser.
 void jimp_diagf(Jimp *jimp, const char *fmt, ...);
+
+bool jimp_is_null_ahead(Jimp *jimp);
+bool jimp_is_bool_ahead(Jimp *jimp);
+bool jimp_is_number_ahead(Jimp *jimp);
+bool jimp_is_string_ahead(Jimp *jimp);
+bool jimp_is_array_ahead(Jimp *jimp);
+bool jimp_is_object_ahead(Jimp *jimp);
 
 #endif // JIMP_H_
 
@@ -351,13 +358,13 @@ bool jimp_string(Jimp *jimp)
     return jimp__get_and_expect_token(jimp, JIMP_STRING);
 }
 
-bool jimp_bool(Jimp *jimp, bool *boolean)
+bool jimp_bool(Jimp *jimp)
 {
     jimp__get_token(jimp);
     if (jimp->token == JIMP_TRUE) {
-        *boolean = true;
+        jimp->boolean = true;
     } else if (jimp->token == JIMP_FALSE) {
-        *boolean = false;
+        jimp->boolean = false;
     } else {
         jimp_diagf(jimp, "ERROR: expected boolean, but got `%s`\n", jimp__token_kind(jimp->token));
         return false;
@@ -368,6 +375,54 @@ bool jimp_bool(Jimp *jimp, bool *boolean)
 bool jimp_number(Jimp *jimp)
 {
     return jimp__get_and_expect_token(jimp, JIMP_NUMBER);
+}
+
+bool jimp_is_null_ahead(Jimp *jimp)
+{
+    const char *point = jimp->point;
+    if (!jimp__get_token(jimp)) return false;
+    jimp->point = point;
+    return jimp->token == JIMP_NULL;
+}
+
+bool jimp_is_bool_ahead(Jimp *jimp)
+{
+    const char *point = jimp->point;
+    if (!jimp__get_token(jimp)) return false;
+    jimp->point = point;
+    return jimp->token == JIMP_TRUE || jimp->token == JIMP_FALSE;
+}
+
+bool jimp_is_number_ahead(Jimp *jimp)
+{
+    const char *point = jimp->point;
+    if (!jimp__get_token(jimp)) return false;
+    jimp->point = point;
+    return jimp->token == JIMP_NUMBER;
+}
+
+bool jimp_is_string_ahead(Jimp *jimp)
+{
+    const char *point = jimp->point;
+    if (!jimp__get_token(jimp)) return false;
+    jimp->point = point;
+    return jimp->token == JIMP_STRING;
+}
+
+bool jimp_is_array_ahead(Jimp *jimp)
+{
+    const char *point = jimp->point;
+    if (!jimp__get_token(jimp)) return false;
+    jimp->point = point;
+    return jimp->token == JIMP_OBRACKET;
+}
+
+bool jimp_is_object_ahead(Jimp *jimp)
+{
+    const char *point = jimp->point;
+    if (!jimp__get_token(jimp)) return false;
+    jimp->point = point;
+    return jimp->token == JIMP_OCURLY;
 }
 
 static bool jimp__get_and_expect_token(Jimp *jimp, Jimp_Token token)

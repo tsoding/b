@@ -17,7 +17,7 @@ pub mod jimp;
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
-use crust::{assoc_lookup, assoc_lookup_mut};
+use crust::*;
 use crust::libc::*;
 use nob::*;
 use targets::*;
@@ -242,16 +242,11 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
 
 pub unsafe fn record_tests(
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: *mut Bat,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
     reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>,
-    jim: *mut Jim, jimp: *mut Jimp,
 ) -> Option<()> {
-    // TODO: memory leak
-    // We should probably pass it along with all the Outputs
-    let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
-
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
     // Also don't forget to add the `-j` flag.
@@ -261,14 +256,17 @@ pub unsafe fn record_tests(
             name: case_name,
             statuses: zeroed(),
         };
-        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        load_target_test_config_table_from_json_file_if_exists(
-            json_path,
-            sb, jimp, &mut target_test_config_table,
-        )?;
+
+        let target_test_config_table = if let Some(found) = assoc_lookup_cstr_mut(da_slice(*bat), case_name) {
+            found
+        } else {
+            da_append(bat, (case_name, zeroed()));
+            &mut (*da_last_mut(bat).unwrap()).1
+        };
+
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            if let Some(test_config) = assoc_lookup_mut(da_slice(target_test_config_table), &target) {
+            if let Some(test_config) = assoc_lookup_mut(da_slice(*target_test_config_table), &target) {
                 match (*test_config).state {
                     TestState::Enabled => {
                         let outcome = execute_test(
@@ -302,7 +300,7 @@ pub unsafe fn record_tests(
                             state: TestState::Enabled,
                             comment: c!("Failed to build on record"),
                         };
-                        da_append(&mut target_test_config_table, (target, new_test_config));
+                        da_append(target_test_config_table, (target, new_test_config));
                         da_append(&mut report.statuses, ReportStatus::BuildFail)
                     },
                     Outcome::RunFail => {
@@ -311,7 +309,7 @@ pub unsafe fn record_tests(
                             state: TestState::Enabled,
                             comment: c!("Failed to run on record"),
                         };
-                        da_append(&mut target_test_config_table, (target, new_test_config));
+                        da_append(target_test_config_table, (target, new_test_config));
                         da_append(&mut report.statuses, ReportStatus::RunFail)
                     }
                     Outcome::RunSuccess{stdout} => {
@@ -320,17 +318,12 @@ pub unsafe fn record_tests(
                             state: TestState::Enabled,
                             comment: c!(""),
                         };
-                        da_append(&mut target_test_config_table, (target, new_test_config));
+                        da_append(target_test_config_table, (target, new_test_config));
                         da_append(&mut report.statuses, ReportStatus::OK);
                     }
                 }
             }
         }
-        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        save_target_test_config_table_from_json_file(
-            json_path, da_slice(target_test_config_table),
-            jim,
-        )?;
         da_append(reports, report);
     }
 
@@ -393,11 +386,13 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
     print_legend(row_width);
 }
 
-pub unsafe fn load_target_test_config_table_from_json_file_if_exists(
+type Bat = Array<(*const c_char, Array<(Target, TestConfig)>)>; // (Big Ass Table)
+
+pub unsafe fn load_bat_from_json_file_if_exists(
     json_path: *const c_char,
-    sb: *mut String_Builder, jimp: *mut Jimp, target_test_config_table: *mut Array<(Target, TestConfig)>,
-) -> Option<()> {
-    (*target_test_config_table).count = 0;
+    sb: *mut String_Builder, jimp: *mut Jimp
+) -> Option<Bat> {
+    let mut bat: Bat = zeroed();
     if file_exists(json_path)? {
         // TODO: file may stop existing between file_exists() and read_entire_file() cools
         // It would be much better if read_entire_file() returned the reason of failure so
@@ -405,33 +400,47 @@ pub unsafe fn load_target_test_config_table_from_json_file_if_exists(
         // changes to nob.h rn.
         (*sb).count = 0;
         read_entire_file(json_path, sb)?;
+
         jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
+
         jimp_object_begin(jimp)?;
         while let Some(()) = jimp_object_member(jimp) {
-            if let Some(target) = target_by_name((*jimp).string) {
-                let test_config: TestConfig = test_config_deserialize(jimp)?;
-                da_append(target_test_config_table, (target, test_config));
-            } else {
-                jimp_unknown_member(jimp);
-                return None;
+            let case_name = strdup((*jimp).string); // TODO: memory leak
+            let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
+            jimp_object_begin(jimp)?;
+            while let Some(()) = jimp_object_member(jimp) {
+                if let Some(target) = target_by_name((*jimp).string) {
+                    let test_config: TestConfig = test_config_deserialize(jimp)?;
+                    da_append(&mut target_test_config_table, (target, test_config));
+                } else {
+                    jimp_unknown_member(jimp);
+                    return None;
+                }
             }
+            jimp_object_end(jimp)?;
+            da_append(&mut bat, (case_name, target_test_config_table));
         }
         jimp_object_end(jimp)?;
     }
-    Some(())
+    Some(bat)
 }
 
-pub unsafe fn save_target_test_config_table_from_json_file(
-    json_path: *const c_char, target_test_config_table: *const [(Target, TestConfig)],
+pub unsafe fn save_bat_to_json_file(
+    json_path: *const c_char, bat: Bat,
     jim: *mut Jim,
 ) -> Option<()> {
-    // TODO: enable pretty-printing in here when it's implemented in jim.h
     jim_begin(jim);
     jim_object_begin(jim);
-    for j in 0..target_test_config_table.len() {
-        let (target, outcome) = (*target_test_config_table)[j];
-        jim_member_key(jim, name_of_target(target).unwrap());
-        test_config_serialize(jim, outcome);
+    for i in 0..bat.count {
+        let (case_name, target_test_config_table) = *bat.items.add(i);
+        jim_member_key(jim, case_name);
+        jim_object_begin(jim);
+        for j in 0..target_test_config_table.count {
+            let (target, outcome) = *target_test_config_table.items.add(j);
+            jim_member_key(jim, name_of_target(target).unwrap());
+            test_config_serialize(jim, outcome);
+        }
+        jim_object_end(jim);
     }
     jim_object_end(jim);
 
@@ -441,13 +450,10 @@ pub unsafe fn save_target_test_config_table_from_json_file(
 pub unsafe fn replay_tests(
     // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target],
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: Bat,
     // Outputs
-    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>, jim: *mut Jim, jimp: *mut Jimp,
+    cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>, jim: *mut Jim,
 ) -> Option<()> {
-    // TODO: memory leak
-    // We should probably pass it along with all the Outputs
-    let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
 
     // TODO: Parallelize the test runner.
     // Probably using `cmd_run_async_and_reset`.
@@ -458,11 +464,13 @@ pub unsafe fn replay_tests(
             name: case_name,
             statuses: zeroed(),
         };
-        let json_path = temp_sprintf(c!("%s/%s.json"), test_folder, case_name);
-        load_target_test_config_table_from_json_file_if_exists(
-            json_path,
-            sb, jimp, &mut target_test_config_table,
-        )?;
+
+        let target_test_config_table = if let Some(found) = assoc_lookup_cstr(da_slice(bat), case_name) {
+            *found
+        } else {
+            zeroed()
+        };
+
         for j in 0..targets.len() {
             let target = (*targets)[j];
             if let Some(test_config) = assoc_lookup(da_slice(target_test_config_table), &target) {
@@ -608,19 +616,23 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
 
+    let json_path = c!("tests.json");
     if *record {
+        let mut bat = load_bat_from_json_file_if_exists(json_path, &mut sb, &mut jimp)?;
         record_tests(
             // Inputs
-            *test_folder, da_slice(cases), da_slice(targets),
+            *test_folder, da_slice(cases), da_slice(targets), &mut bat,
             // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim, &mut jimp,
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
         )?;
+        save_bat_to_json_file(json_path, bat, &mut jim)?;
     } else {
+        let bat = load_bat_from_json_file_if_exists(json_path, &mut sb, &mut jimp)?;
         replay_tests(
             // Inputs
-            *test_folder, da_slice(cases), da_slice(targets),
+            *test_folder, da_slice(cases), da_slice(targets), bat,
             // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim, &mut jimp,
+            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
         );
     }
 
