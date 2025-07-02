@@ -10,21 +10,23 @@ macro_rules! c {
     }
 }
 
-pub unsafe fn slice_lookup_mut<X, Y, Arg>(xs: *mut [X], p: unsafe fn(x: *mut X, arg: *const Arg) -> Option<*mut Y>, arg: *const Arg) -> Option<*mut Y>
+pub unsafe fn assoc_lookup_mut<Key, Value>(assoc: *mut [(Key, Value)], needle: *const Key) -> Option<*mut Value>
+where Key: PartialEq
 {
-    for i in 0..xs.len() {
-        if let Some(y) = p(&mut (*xs)[i], arg) {
-            return Some(y)
+    for i in 0..assoc.len() {
+        if (*assoc)[i].0 == *needle {
+            return Some(&mut (*assoc)[i].1);
         }
     }
     None
 }
 
-pub unsafe fn slice_lookup<X, Y, Arg>(xs: *const [X], p: unsafe fn(x: *const X, arg: *const Arg) -> Option<*const Y>, arg: *const Arg) -> Option<*const Y>
+pub unsafe fn assoc_lookup<Key, Value>(assoc: *const [(Key, Value)], needle: *const Key) -> Option<*const Value>
+where Key: PartialEq
 {
-    for i in 0..xs.len() {
-        if let Some(y) = p(&(*xs)[i], arg) {
-            return Some(y)
+    for i in 0..assoc.len() {
+        if (*assoc)[i].0 == *needle {
+            return Some(&(*assoc)[i].1);
         }
     }
     None

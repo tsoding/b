@@ -17,7 +17,7 @@ pub mod jimp;
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
-use crust::{slice_lookup, slice_lookup_mut};
+use crust::{assoc_lookup, assoc_lookup_mut};
 use crust::libc::*;
 use nob::*;
 use targets::*;
@@ -268,11 +268,7 @@ pub unsafe fn record_tests(
         )?;
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            if let Some(test_config) = slice_lookup_mut(
-                da_slice(target_test_config_table),
-                |pair, target| if (*pair).0 == (*target) { Some(&mut (*pair).1) } else { None },
-                &target,
-            ) {
+            if let Some(test_config) = assoc_lookup_mut(da_slice(target_test_config_table), &target) {
                 match (*test_config).state {
                     TestState::Enabled => {
                         let outcome = execute_test(
@@ -469,12 +465,7 @@ pub unsafe fn replay_tests(
         )?;
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            let test_config = slice_lookup(
-                da_slice(target_test_config_table),
-                |pair, target| if (*pair).0 == *target { Some(&(*pair).1) } else { None },
-                &target
-            );
-            if let Some(test_config) = test_config {
+            if let Some(test_config) = assoc_lookup(da_slice(target_test_config_table), &target) {
                 match (*test_config).state {
                     TestState::Enabled => {
                         let outcome = execute_test(
