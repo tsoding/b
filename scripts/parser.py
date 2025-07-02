@@ -1,3 +1,6 @@
+# TODO: Rewrite in (C)rust or C.
+
+
 import math
 import pprint
 import subprocess
