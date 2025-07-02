@@ -12,7 +12,6 @@ macro_rules! c {
 
 pub unsafe fn assoc_lookup_cstr_mut<Value>(assoc: *mut [(*const c_char, Value)], needle: *const c_char) -> Option<*mut Value> {
     for i in 0..assoc.len() {
-        printf(c!("assoc_lookup_cstr_mut: key = %s, needl = %s\n"), (*assoc)[i].0, needle);
         if strcmp((*assoc)[i].0, needle) == 0 {
             return Some(&mut (*assoc)[i].1);
         }
