@@ -320,7 +320,6 @@ pub enum Op {
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Label          {label: usize},
     JmpLabel       {label: usize},
-    // TODO: Rename JmpIfNot to JmpUnless
     JmpIfNotLabel  {label: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
