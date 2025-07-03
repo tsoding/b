@@ -3,7 +3,7 @@ use crate::crust::libc::*;
 use core::ffi::*;
 
 // This is meant to be a SH4 emulator for testing that somewhat looks like a basic CASIO Prizm, thus ignoring
-// some details (like on-chip memory, etc...) that aren't important for tests (including any syscall, using them 
+// some details (like on-chip memory, etc...) that aren't important for tests (including any syscall, using them
 // WILL not work).
 //
 // Also, I've only really implemented the subset that B actually requires, so most DSP operations
@@ -571,7 +571,7 @@ pub mod sh4 {
             }
             let disp12 = sext12(instr & 0x0FFF) as i32;
             let npc = (CPU.pc as i32 + 4 + disp12 * 2) as u32;
-            // Run the next instruction 
+            // Run the next instruction
             CPU.pc += 2;
             if !step(true) {
                 return false
@@ -586,7 +586,7 @@ pub mod sh4 {
                 return false;
             }
             CPU.pr = CPU.pc + 4;
-            // Run the next instruction 
+            // Run the next instruction
             CPU.pc += 2;
             if !step(true) {
                 return false
@@ -600,7 +600,7 @@ pub mod sh4 {
                 // TODO
                 return false;
             }
-            // Run the next instruction 
+            // Run the next instruction
             CPU.pc += 2;
             if !step(true) {
                 return false;
@@ -751,9 +751,11 @@ pub mod sh4 {
 
 }
 
-pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char) -> Option<()> {
+pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char, _stdout_path: Option<*const c_char>) -> Option<()> {
+    // TODO: implement accepting command line arguments
+    // TODO: implement redirecting the stdout to _stdout_path
     (*output).count = 0;
-    if !read_entire_file(output_path, output) { return None; }
+    read_entire_file(output_path, output)?;
 
     sh4::load_addin(*output);
     sh4::reset();
