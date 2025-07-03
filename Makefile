@@ -31,14 +31,18 @@ LINUX_OBJS=\
 	$(BUILD)/flag.linux.o \
 	$(BUILD)/libc.linux.o \
 	$(BUILD)/arena.linux.o \
-	$(BUILD)/fake6502.linux.o
+	$(BUILD)/fake6502.linux.o \
+	$(BUILD)/jim.linux.o \
+	$(BUILD)/jimp.linux.o
 
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
 	$(BUILD)/flag.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
-	$(BUILD)/fake6502.linux.o
+	$(BUILD)/fake6502.mingw32.o \
+	$(BUILD)/jim.mingw32.o \
+	$(BUILD)/jimp.mingw32.o
 
 .PHONY: all
 all: $(BUILD)/b $(BUILD)/btest
@@ -50,7 +54,7 @@ test: $(BUILD)/b $(BUILD)/btest
 $(BUILD)/b: $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/b.rs -o $(BUILD)/b
 
-$(BUILD)/btest: $(RSS) $(LINUX_OBJS) | $(BUILD)
+$(BUILD)/btest: $(SRC)/btest.rs $(RSS) $(LINUX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(LDFLAGS) $(LINUX_OBJS) -lc -lgcc" $(SRC)/btest.rs -o $(BUILD)/btest
 
 $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
@@ -61,7 +65,7 @@ $(BUILD)/%.linux.o: ./thirdparty/%.c | $(BUILD)
 $(BUILD)/b.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b.exe
 
-$(BUILD)/btest.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
+$(BUILD)/btest.exe: $(SRC)/btest.rs $(RSS) $(MINGW32_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/btest.rs -o $(BUILD)/btest.exe
 
 $(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
