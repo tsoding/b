@@ -35,6 +35,7 @@ pub mod sh4 {
     pub static mut ADDIN: [u8; 2<<20] = unsafe { zeroed() };
     pub static mut RAM: [u8; 512<<10] = unsafe { zeroed() };
     pub static mut CPU: CPUState = unsafe { zeroed() };
+    pub static mut OUT: *mut FILE = unsafe { zeroed() };
 
     pub unsafe fn get_t() -> bool {
         if (CPU.sr & 1) == 1 {
@@ -100,7 +101,8 @@ pub mod sh4 {
     }
 
     // Note that we don't do any sort of verification.
-    pub unsafe fn load_addin(rom: String_Builder) {
+    pub unsafe fn load_addin(rom: String_Builder, stream: *mut FILE) {
+        OUT = stream;
         if rom.count < 0x7000 {
             // TODO: Tell the user off. This shit ain't an addin.
             panic!("YOUR TAKING TOO LONG");
@@ -141,8 +143,8 @@ pub mod sh4 {
             RAM[address as usize - 0x08100000] = value;
         }
 
-        if address == (0xE5200000 + 4 + 3) {
-            printf(c!("%c"), value as c_int);
+        if address == 0xE5200007 {
+            fprintf(OUT, c!("%c"), value as c_int);
         }
     }
     pub unsafe fn write16(address: u32, value: u16) {
@@ -751,13 +753,19 @@ pub mod sh4 {
 
 }
 
-pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char, _stdout_path: Option<*const c_char>) -> Option<()> {
+pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char, stdout_path: Option<*const c_char>) -> Option<()> {
     // TODO: implement accepting command line arguments
-    // TODO: implement redirecting the stdout to _stdout_path
+    let stream = if let Some(stdout_path) = stdout_path {
+        let stream = fopen(stdout_path, c!("wb"));
+        if stream.is_null() { return None }
+        stream
+    } else {
+        stdout()
+    };
     (*output).count = 0;
     read_entire_file(output_path, output)?;
 
-    sh4::load_addin(*output);
+    sh4::load_addin(*output, stream);
     sh4::reset();
 
     while sh4::CPU.pc != 0xFFFFFFFF { // The convetion is stop executing when pc == 0xFFFFFFFF
@@ -781,16 +789,19 @@ pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char, _stdo
             //      arithmetic.
             //
             let syscall_id: u32 = sh4::CPU.r[0];
-            fprintf(stderr(), c!("UMIMPLEMENTED SYSCALL ID: %04X\n"), syscall_id as c_uint);
+            fprintf(stream, c!("UMIMPLEMENTED SYSCALL ID: %04X\n"), syscall_id as c_uint);
             panic!();
         }
         if !sh4::step(false) {
-            printf(c!("Umimplemented instruction 0x%04X @ PC=%08X\n"), sh4::read16(sh4::CPU.pc) as c_uint, sh4::CPU.pc);
+            fprintf(stream, c!("Umimplemented instruction 0x%04X @ PC=%08X\n"), sh4::read16(sh4::CPU.pc) as c_uint, sh4::CPU.pc);
             return None
         }
     }
     let code = sh4::CPU.r[0] as c_uint;
     printf(c!("\nExited with code %d\n"), code);
+    if stdout_path.is_some() {
+        fclose(stream);
+    }
 
     if code != 0 {
         return None;
