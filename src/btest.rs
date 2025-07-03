@@ -125,6 +125,7 @@ impl ReportStatus {
             ReportStatus::Disabled       => c!("-"),
         }
     }
+    
 
     fn color(self) -> *const c_char {
         match self {
@@ -551,6 +552,42 @@ pub unsafe fn replay_tests(
     Some(())
 }
 
+
+pub unsafe fn render_html(targets: *const Array<Target>, reports: *const Array<Report>, stats_by_target: *const Array<ReportStats>, output: *mut String_Builder ) {
+    sb_appendf(output, c!("<!DOCTYPE html><html lang=\"en\"><head><link rel=\"stylesheet\" href=\"styles.css\"></head>"));
+    sb_appendf(output, c!("<table id=\"results-table\""));
+        sb_appendf(output, c!("<thead>"));
+            sb_appendf(output, c!("<th>Tests</th>"));
+            for i in 0..(*targets).count {
+                let target = *(*targets).items.add(i);
+                sb_appendf(output, c!("<td>%s</td>"), target.name());
+            }
+    sb_appendf(output, c!("</thead><tbody>"));
+    for i in 0..(*reports).count {
+        let report = (*reports).items.add(i);
+        sb_appendf(output, c!("<tr>"));
+        sb_appendf(output, c!("<th class=\"case\">%s</th>"), (*report).name);
+        for j in 0..(*report).statuses.count {
+            let status = *(*report).statuses.items.add(j);
+            let color = match status {
+                ReportStatus::OK => c!("limegreen"),
+                ReportStatus::NeverRecorded => c!("lightblue"),
+                ReportStatus::StdoutMismatch => c!("yellow"),
+                ReportStatus::BuildFail => c!("red"),
+                ReportStatus::RunFail => c!("red"),
+                ReportStatus::Disabled => c!("grey")
+            };
+            sb_appendf(output, c!("<td style=\"color: %s\">%s</td>"), color, status.description());
+        }
+        sb_appendf(output, c!("</tr>"));
+    }
+    sb_appendf(output, c!("<tr><th>Stats</th></tr>"));
+    
+    // TODO: Stats
+    sb_appendf(output, c!("</tbody></table>"));
+    sb_appendf(output, c!("</html>"));
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
     let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
@@ -654,7 +691,9 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
         );
     }
-
+    sb.count = 0;
+    render_html(&targets, &reports, &stats_by_target, &mut sb);
+    write_entire_file(temp_sprintf(c!("%s/tests.html"), GARBAGE_FOLDER), sb.items as *const c_void, sb.count);
     Some(())
 }
 

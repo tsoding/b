@@ -1,0 +1,50 @@
+body, html {
+   margin: 0px;
+   background-color: black;
+   color: white;
+}
+.OK {
+  color: limegreen;
+}
+.NOTRECORDED {
+  color: lightblue;
+}
+
+.FAIL {
+  color: red;
+}
+
+.UNEXPECTED {
+  color: yellow;
+}
+
+.DISABLED {
+  color: grey;
+}
+
+th, td, tr {
+  border: 1px solid black;
+}
+
+
+thead tr td, th {
+  padding-left: 1em;
+  padding-right: 1em;
+}
+
+td {
+  text-align: center;
+}
+
+#results-table {
+    max-height: 1em;
+    white-space: nowrap;
+    padding: 5px;
+}
+
+table {
+    border-collapse: collapse;
+}
+.case {
+  font-weight: normal;
+}
