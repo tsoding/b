@@ -27,7 +27,7 @@ pub unsafe fn optimize_func(c: *mut Compiler,f:*mut Func){
 
 }
 
-pub unsafe fn eliminate_block_end(c: *mut Compiler,f: *mut Func, block: usize,style:*mut BlockStyle) -> usize {
+pub unsafe fn eliminate_block_end(f: *mut Func, block: usize,style:*mut BlockStyle) -> usize {
     let mut id = block;
 
     while id < (*f).body.count {
@@ -76,11 +76,11 @@ pub unsafe fn optimize_block(c: *mut Compiler,f: *mut Func, block: usize,style:*
                     (*style).no_readers = true;
                     return optimize_block(c,f,block,style);
                 }
-                return eliminate_block_end(c,f,id+1,style);
+                return eliminate_block_end(f,id+1,style);
 
             },
             Op::JmpLabel{..} => {
-                return eliminate_block_end(c,f,id+1,style);
+                return eliminate_block_end(f,id+1,style);
 
             }
             _ => {}
@@ -107,7 +107,7 @@ pub unsafe fn eval_constant_op_strong(op:Op,target:Target) -> Op {
 
 pub unsafe fn eval_constant_op_weak(op:Op,target:Target) -> Op {
      let mask = {
-        let bits = target_word_size(target) * 8;
+        let bits = target.word_size() * 8;
         if bits >= 64 { !0 } else { (1u64 << bits) - 1 }
     };
 
