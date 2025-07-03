@@ -248,10 +248,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
                 sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result*8);
             },
-            Op::Asm {args} => {
-                for i in 0..args.count {
-                    let arg = *args.items.add(i);
-                    sb_appendf(output, c!("    %s\n"), arg);
+            Op::Asm {stmts} => {
+                for i in 0..stmts.count {
+                    let stmt = *stmts.items.add(i);
+                    sb_appendf(output, c!("    %s\n"), stmt.line);
                 }
             }
             Op::Label {label} => {
@@ -314,7 +314,8 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
         sb_appendf(output, c!("public _%s as '%s'\n"), asm_func.name, asm_func.name);
         sb_appendf(output, c!("_%s:\n"), asm_func.name);
         for j in 0..asm_func.body.count {
-            sb_appendf(output, c!("    %s\n"), *asm_func.body.items.add(j));
+            let stmt = *asm_func.body.items.add(j);
+            sb_appendf(output, c!("    %s\n"), stmt.line);
         }
     }
 }

@@ -10,6 +10,65 @@ macro_rules! c {
     }
 }
 
+#[macro_export]
+macro_rules! enum_with_order {
+    (
+        #[derive($($traits:tt)*)]
+        enum $name:ident in $order_name:ident {
+            $($items:tt)*
+        }
+    ) => {
+        #[derive($($traits)*)]
+        pub enum $name {
+            $($items)*
+        }
+        pub const $order_name: *const [$name] = {
+            use $name::*;
+            &[$($items)*]
+        };
+    }
+}
+
+pub unsafe fn assoc_lookup_cstr_mut<Value>(assoc: *mut [(*const c_char, Value)], needle: *const c_char) -> Option<*mut Value> {
+    for i in 0..assoc.len() {
+        if strcmp((*assoc)[i].0, needle) == 0 {
+            return Some(&mut (*assoc)[i].1);
+        }
+    }
+    None
+}
+
+pub unsafe fn assoc_lookup_cstr<Value>(assoc: *const [(*const c_char, Value)], needle: *const c_char) -> Option<*const Value> {
+    for i in 0..assoc.len() {
+        if strcmp((*assoc)[i].0, needle) == 0 {
+            return Some(&(*assoc)[i].1);
+        }
+    }
+    None
+}
+
+pub unsafe fn assoc_lookup_mut<Key, Value>(assoc: *mut [(Key, Value)], needle: *const Key) -> Option<*mut Value>
+where Key: PartialEq
+{
+    for i in 0..assoc.len() {
+        if (*assoc)[i].0 == *needle {
+            return Some(&mut (*assoc)[i].1);
+        }
+    }
+    None
+}
+
+pub unsafe fn assoc_lookup<Key, Value>(assoc: *const [(Key, Value)], needle: *const Key) -> Option<*const Value>
+where Key: PartialEq
+{
+    for i in 0..assoc.len() {
+        if (*assoc)[i].0 == *needle {
+            return Some(&(*assoc)[i].1);
+        }
+    }
+    None
+}
+
 #[macro_use]
 pub mod libc {
     use core::ffi::*;
@@ -23,13 +82,17 @@ pub mod libc {
         pub fn stdout() -> *mut FILE;
         #[link_name = "get_stderr"]
         pub fn stderr() -> *mut FILE;
+        pub fn fopen(pathname: *const c_char, mode: *const c_char) -> *mut FILE;
+        pub fn fclose(stream: *mut FILE) -> c_int;
         pub fn strcmp(s1: *const c_char, s2: *const c_char) -> c_int;
         pub fn strchr(s: *const c_char, c: c_int) -> *const c_char;
         pub fn strlen(s: *const c_char) -> usize;
         pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
+        pub fn fwrite(ptr: *const c_void, size: usize, nmemb: usize, stream: *mut FILE) -> usize;
 
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;
+        pub fn strncpy(dst: *mut c_char, src: *const c_char, dsize: usize) -> *mut c_char;
         pub fn printf(fmt: *const c_char, ...) -> c_int;
         pub fn fprintf(stream: *mut FILE, fmt: *const c_char, ...) -> c_int;
         pub fn memset(dest: *mut c_void, byte: c_int, size: usize) -> c_int;
@@ -37,6 +100,7 @@ pub mod libc {
         pub fn isalpha(c: c_int) -> c_int;
         pub fn isalnum(c: c_int) -> c_int;
         pub fn isdigit(c: c_int) -> c_int;
+        pub fn toupper(c: c_int) -> c_int;
         pub fn qsort(base: *mut c_void, nmemb: usize, size: usize, compar: unsafe extern "C" fn(*const c_void, *const c_void) -> c_int);
     }
 
