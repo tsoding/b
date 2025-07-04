@@ -1552,5 +1552,47 @@
             "state": "Disabled",
             "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
         }
+    },
+    "execvp-error-checking": {
+        "gas-x86_64-windows": {
+            "expected_stdout": "OK\r\n",
+            "state": "Enabled",
+            "comment": "TODO: fix on this target"
+        },
+        "gas-x86_64-linux": {
+            "expected_stdout": "OK\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-aarch64-linux": {
+            "expected_stdout": "OK\n",
+            "state": "Enabled",
+            "comment": "TODO: fix on this target"
+        },
+        "gas-aarch64-darwin": {
+            "expected_stdout": "OK\n",
+            "state": "Enabled",
+            "comment": "TODO: fix on this target"
+        },
+        "uxn": {
+            "expected_stdout": "OK\n",
+            "state": "Disabled",
+            "comment": "Does not make sense on this platform"
+        },
+        "6502": {
+            "expected_stdout": "OK\r\n",
+            "state": "Enabled",
+            "comment": "Does not make sense on this platform"
+        },
+        "fasm-x86_64-windows": {
+            "expected_stdout": "",
+            "state": "Enabled",
+            "comment": "OK\r\n"
+        },
+        "fasm-x86_64-linux": {
+            "expected_stdout": "OK\n",
+            "state": "Enabled",
+            "comment": ""
+        }
     }
 }
