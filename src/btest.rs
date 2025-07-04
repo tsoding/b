@@ -597,7 +597,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     }
     let mut targets: Array<Target> = zeroed();
     if (*target_flags).count == 0 {
-        for j in 0..(*TARGET_ORDER).len() {
+        for j in 0..TARGET_ORDER.len() {
             let target = (*TARGET_ORDER)[j];
             if !slice_contains(da_slice(exclude_targets), &target) {
                 da_append(&mut targets, target)
