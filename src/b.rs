@@ -24,6 +24,7 @@ use core::slice;
 use nob::*;
 use flag::*;
 use crust::libc::*;
+use crust::assoc_lookup_cstr;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
@@ -979,6 +980,12 @@ pub struct Switch {
 }
 
 #[derive(Clone, Copy)]
+pub struct Variadic {
+    pub loc: Loc,
+    pub fixed_args: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
@@ -990,7 +997,7 @@ pub struct Compiler {
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
-    pub variadics: Array<(*const c_char, usize)>,
+    pub variadics: Array<(*const c_char, Variadic)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
     pub arena_names: Arena,
@@ -1022,11 +1029,11 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::OParen)?;
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
                 let func = arena::strdup(&mut (*c).arena_names, (*l).string);
-                // push if it doesn't exist
-                for i in 0..(*c).variadics.count {
-                    if strcmp((*(*c).variadics.items.add(i)).0, func) == 0 {
-                        continue 'def; // already defined
-                    }
+                let func_loc = (*l).loc;
+                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                    diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
+                    diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
+                    return None;
                 }
                 get_and_expect_token_but_continue(l, c, Token::Comma)?;
                 get_and_expect_token_but_continue(l, c, Token::IntLit)?;
@@ -1035,7 +1042,10 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     bump_error_count(c)?;
                     continue 'def;
                 }
-                da_append(&mut (*c).variadics, (func, (*l).int_number as usize));
+                da_append(&mut (*c).variadics, (func, Variadic {
+                    loc: func_loc,
+                    fixed_args: (*l).int_number as usize,
+                }));
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
             } else {
                 diagf!((*l).loc, c!("ERROR: unknown pragma `%s`\n"), name);
