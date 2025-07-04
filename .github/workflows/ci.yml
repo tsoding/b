@@ -34,7 +34,7 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PREFIX=sh4-linux-gnu PATH=$(realpath uxn11/bin):$(realpath fxsdl/fxusr/bin):$PATH ./build/btest -xt gas-aarch64-darwin
+          PREFIX=sh4-linux-gnu PATH=$(realpath uxn11/bin):$(realpath fxsdk/fxusr/bin):$PATH ./build/btest -xt gas-aarch64-darwin
   macos:
     runs-on: macos-latest
     steps:
