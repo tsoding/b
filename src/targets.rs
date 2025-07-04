@@ -6,8 +6,6 @@ use crate::strcmp;
 enum_with_order! {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Target in TARGET_ORDER {
-        Fasm_x86_64_Windows,
-        Fasm_x86_64_Linux,
         // TODO: add Gas_x86_64_Darwin
         //   Don't add Fasm_x86_64_Darwin. The fasm stuff is being deprecated soon
         Gas_x86_64_Windows,
@@ -16,6 +14,8 @@ enum_with_order! {
         Gas_AArch64_Darwin,
         Uxn,
         Mos6502,
+        Fasm_x86_64_Windows,
+        Fasm_x86_64_Linux,
     }
 }
 

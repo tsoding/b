@@ -1188,9 +1188,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     } else if cfg!(target_arch = "aarch64") && cfg!(target_os = "macos") {
         default_target = Some(Target::Gas_AArch64_Darwin);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
-        default_target = Some(Target::Fasm_x86_64_Linux);
+        default_target = Some(Target::Gas_x86_64_Linux);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-        default_target = Some(Target::Fasm_x86_64_Windows);
+        default_target = Some(Target::Gas_x86_64_Windows);
     } else {
         default_target = None;
     }
