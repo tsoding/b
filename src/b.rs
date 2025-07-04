@@ -17,6 +17,8 @@ pub mod runner;
 pub mod lexer;
 pub mod targets;
 
+pub mod opt;
+
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
@@ -27,6 +29,8 @@ use crust::libc::*;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
+use crate::opt::optimize;
+
 
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
@@ -310,6 +314,9 @@ pub struct AsmStmt {
 #[derive(Clone, Copy)]
 pub enum Op {
     Bogus,
+
+    NoOp,
+
     UnaryNot       {result: usize, arg: Arg},
     Negate         {result: usize, arg: Arg},
     Asm            {stmts: Array<AsmStmt>},
@@ -1284,6 +1291,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     if c.error_count > 0 {
         return None
     }
+
+    optimize(&mut c);
 
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();

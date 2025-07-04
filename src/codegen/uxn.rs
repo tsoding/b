@@ -200,6 +200,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
+            Op::NoOp => {},
+            
             Op::UnaryNot {result, arg} => {
                 load_arg(arg, op.loc, output, assembler);
                 // if arg == 0 then 1 else 0
