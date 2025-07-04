@@ -435,8 +435,8 @@ unsafe fn parse_digit(c: c_char, radix: Radix) -> Option<u8> {
 }
 
 unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Option<()> {
+    let saved_point = (*l).parse_point;
     while let Some(x) = peek_char(l) {
-        let saved_point = (*l).parse_point;
         let Some(d) = parse_digit(x, radix) else {
             break;
         };
