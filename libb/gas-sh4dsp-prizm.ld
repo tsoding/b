@@ -10,7 +10,7 @@ MEMORY {
     rom (rx) : o = 0x00300000, l = 2M
 
     /* Safe RAM that is always going to be present. */
-    ram (rx) : o = 0x08100010, l = 256k
+    ram (rwx) : o = 0x08100010, l = 256k
 }
 SECTIONS {
     . = ORIGIN(rom);
