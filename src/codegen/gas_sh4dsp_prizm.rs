@@ -207,7 +207,13 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
         sb_appendf(output, c!("    mov.l %s, @-r15\n"), reg);
     }
     let diff = auto_vars_count - params_count;
-    sb_appendf(output, c!("    add #-%d, r15\n"), diff * 4);
+    let offset = -((4 * diff) as isize);
+    if offset >= -128 {
+        sb_appendf(output, c!("    add #-%d, r15\n"), diff * 4);
+    } else {
+        load_literal_to_reg(output, c!("r8"), offset as u32, &mut assembler);
+        sb_appendf(output, c!("    add r8, r15\n"), diff * 4);
+    }
     sb_appendf(output, c!("    ! PROLOGUE END\n"));
 
     for i in 0..body.len() {
