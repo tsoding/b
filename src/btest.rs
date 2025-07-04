@@ -167,6 +167,7 @@ pub unsafe fn execute_test(
         Target::Fasm_x86_64_Windows => c!("exe"),
         Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+        Target::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
         Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
@@ -187,6 +188,7 @@ pub unsafe fn execute_test(
         Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
@@ -552,13 +554,15 @@ pub unsafe fn replay_tests(
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
-    let target_flags = flag_list(c!("t"), c!("Compilation targets to test on."));
-    let list_targets = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
-    let cases_flags  = flag_list(c!("c"), c!("Test cases"));
-    let list_cases   = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
-    let test_folder  = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
-    let help         = flag_bool(c!("help"), false, c!("Print this help message"));
-    let record       = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
+    let target_flags         = flag_list(c!("t"), c!("Compilation targets to test on"));
+    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from testing"));
+    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
+    let cases_flags          = flag_list(c!("c"), c!("Test cases"));
+    let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
+    let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
+    let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
+    let record               = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
+    // TODO: introduce -xc flag
     // TODO: select test cases and targets by a glob pattern
     // See if https://github.com/tsoding/glob.h can be used here
 
@@ -581,14 +585,31 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut reports: Array<Report> = zeroed();
     let mut stats_by_target: Array<ReportStats> = zeroed();
 
+    let mut exclude_targets: Array<Target> = zeroed();
+    for j in 0..(*exclude_target_flags).count {
+        let target_name = *(*exclude_target_flags).items.add(j);
+        if let Some(target) = Target::by_name(target_name) {
+            da_append(&mut exclude_targets, target)
+        } else {
+            fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
+            return None;
+        }
+    }
     let mut targets: Array<Target> = zeroed();
-    if *list_targets || (*target_flags).count == 0 {
-        da_append_many(&mut targets, TARGET_ORDER);
+    if (*target_flags).count == 0 {
+        for j in 0..TARGET_ORDER.len() {
+            let target = (*TARGET_ORDER)[j];
+            if !slice_contains(da_slice(exclude_targets), &target) {
+                da_append(&mut targets, target)
+            }
+        }
     } else {
         for j in 0..(*target_flags).count {
             let target_name = *(*target_flags).items.add(j);
             if let Some(target) = Target::by_name(target_name) {
-                da_append(&mut targets, target);
+                if !slice_contains(da_slice(exclude_targets), &target) {
+                    da_append(&mut targets, target)
+                }
             } else {
                 fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
                 return None;
@@ -596,17 +617,8 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
-    if *list_targets {
-        fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..targets.count {
-            let target = *targets.items.add(i);
-            fprintf(stderr(), c!("    %s\n"), target.name());
-        }
-        return Some(());
-    }
-
     let mut cases: Array<*const c_char> = zeroed();
-    if *list_cases || (*cases_flags).count == 0 {
+    if (*cases_flags).count == 0 {
         let mut case_files: File_Paths = zeroed();
         if !read_entire_dir(*test_folder, &mut case_files) { return None; } // TODO: memory leak. The file names are strduped to temp, but the File_Paths dynamic array itself is still allocated on the heap
         qsort(case_files.items as *mut c_void, case_files.count, size_of::<*const c_char>(), compar_cstr);
@@ -622,6 +634,17 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let case_name = *(*cases_flags).items.add(i);
             da_append(&mut cases, case_name);
         }
+    }
+
+    // TODO: maybe merge -tlist and -clist outputs if they are provided together
+
+    if *list_targets {
+        fprintf(stderr(), c!("Compilation targets:\n"));
+        for i in 0..targets.count {
+            let target = *targets.items.add(i);
+            fprintf(stderr(), c!("    %s\n"), target.name());
+        }
+        return Some(());
     }
 
     if *list_cases {

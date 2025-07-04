@@ -92,6 +92,7 @@ pub enum Token {
     Goto,
     Return,
     Asm,
+    Variadic,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
@@ -155,7 +156,10 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::Switch     => c!("keyword `switch`"),
         Token::Goto       => c!("keyword `goto`"),
         Token::Return     => c!("keyword `return`"),
+
+        // TODO: document all this magical extension keywords somewhere
         Token::Asm        => c!("keyword `__asm__`"),
+        Token::Variadic   => c!("keyword `__variadic__`"),
     }
 }
 
@@ -259,6 +263,7 @@ const KEYWORDS: *const [(*const c_char, Token)] = &[
     (c!("goto"), Token::Goto),
     (c!("return"), Token::Return),
     (c!("__asm__"), Token::Asm),
+    (c!("__variadic__"), Token::Variadic),
 ];
 
 #[derive(Clone, Copy)]
