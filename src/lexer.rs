@@ -434,22 +434,21 @@ unsafe fn parse_digit(c: c_char, radix: Radix) -> Option<u8> {
     return None;
 }
 
-unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Option<()> {
-    let saved_point = (*l).parse_point;
+unsafe fn parse_number(l: *mut Lexer, radix: Radix, report_point: Parse_Point) -> Option<()> {
     while let Some(x) = peek_char(l) {
         let Some(d) = parse_digit(x, radix) else {
             break;
         };
 
         let Some(r) = i64::checked_mul((*l).int_number as i64, radix as i64) else {
-            (*l).parse_point = saved_point;
+            (*l).parse_point = report_point;
             diagf!(loc(l), c!("LEXER ERROR: Constant integer overflow\n"));
             return None;
         };
         (*l).int_number = r as u64;
 
         let Some(r) = i64::checked_add((*l).int_number as i64, d as i64) else {
-            (*l).parse_point = saved_point;
+            (*l).parse_point = report_point;
             diagf!(loc(l), c!("LEXER ERROR: Constant integer overflow.\n"));
             return None;
         };
@@ -525,10 +524,10 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         return Some(())
     }
 
-    let saved_point = (*l).parse_point;
+    let start_of_number = (*l).parse_point;
     if skip_prefix(l, c!("0x")) {
         if (*l).historical {
-            (*l).parse_point = saved_point;
+            (*l).parse_point = start_of_number;
             diagf!(loc(l), c!("LEXER ERROR: hex literals are not available in the historical mode.\n"));
             (*l).token = Token::ParseError;
             return None;
@@ -536,19 +535,19 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
 
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
-        return parse_number(l, Radix::Hex);
+        return parse_number(l, Radix::Hex, start_of_number);
     }
 
     if skip_prefix(l, c!("0")) {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
-        return parse_number(l, Radix::Oct);
+        return parse_number(l, Radix::Oct, start_of_number);
     }
 
     if isdigit(x as c_int) != 0 {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
-        return parse_number(l, Radix::Dec);
+        return parse_number(l, Radix::Dec, start_of_number);
     }
 
     if x == '"' as c_char {
