@@ -1,7 +1,7 @@
 /* Linker script mostly taken from gint(public-domain) 
  * NOTE: B programs will _not_ natively run on an fx-CG100 with MPM as of now!!! */
 OUTPUT_ARCH(sh4)
-OUTPUT_FORMAT(binary)
+OUTPUT_FORMAT(elf32-big)
 ENTRY(start)
 
 MEMORY {

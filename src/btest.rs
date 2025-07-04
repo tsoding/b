@@ -192,11 +192,11 @@ pub unsafe fn execute_test(
         Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_SH4_Prizm       => runner::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path)),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
-        Target::Gas_SH4_Prizm       => runner::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path))
     };
     if let None = run_result {
         return Some(Outcome::RunFail);

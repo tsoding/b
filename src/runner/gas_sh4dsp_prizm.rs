@@ -765,6 +765,7 @@ pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char, stdou
     (*output).count = 0;
     read_entire_file(output_path, output)?;
 
+
     sh4::load_addin(*output, stream);
     sh4::reset();
 
