@@ -320,7 +320,6 @@ pub enum Op {
     Funcall        {result: usize, fun: Arg, args: Array<Arg>},
     Label          {label: usize},
     JmpLabel       {label: usize},
-    // TODO: Rename JmpIfNot to JmpUnless
     JmpIfNotLabel  {label: usize, arg: Arg},
     Return         {arg: Option<Arg>},
 }
@@ -404,9 +403,13 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         }
         Token::Minus => {
             let (arg, _) = compile_primary_expression(l, c)?;
-            let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
-            Some((Arg::AutoVar(index), false))
+            if let Arg::Literal(v) = arg {
+                Some((Arg::Literal(!v + 1), false))
+            } else {
+                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
+                Some((Arg::AutoVar(index), false))
+            }
         }
         Token::And => {
             let loc = (*l).loc;
@@ -487,7 +490,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 get_and_expect_token_but_continue(l, c, Token::CBracket)?;
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-                let word_size = Arg::Literal(target_word_size((*c).target));
+                let word_size = Arg::Literal((*c).target.word_size());
                 // TODO: Introduce Op::Index instruction that indices values without explicitly emit Binop::Mult and uses efficient multiplication by the size of the word at the codegen level.
                 push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
                 push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
@@ -1168,9 +1171,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 }
 
 pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, path: *const c_char) -> Option<()> {
-    let path_exists = file_exists(path);
-    if path_exists < 0 { return None; }
-    if path_exists > 0 { da_append(input_paths, path); }
+    if file_exists(path)? {
+        da_append(input_paths, path);
+    }
     Some(())
 }
 
@@ -1189,7 +1192,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     let default_target_name = if let Some(default_target) = default_target {
-        name_of_target(default_target).expect("default target name not found")
+        default_target.name()
     } else {
         ptr::null()
     };
@@ -1236,13 +1239,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if strcmp(*target_name, c!("list")) == 0 {
         fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..TARGET_NAMES.len() {
-            fprintf(stderr(), c!("    %s\n"), (*TARGET_NAMES)[i].name);
+        for i in 0..TARGET_ORDER.len() {
+            fprintf(stderr(), c!("    %s\n"), (*TARGET_ORDER)[i].name());
         }
         return Some(());
     }
 
-    let Some(target) = target_by_name(*target_name) else {
+    let Some(target) = Target::by_name(*target_name) else {
         usage();
         fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
         return None;
@@ -1269,9 +1272,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         //
         //     - rexim (2025-06-12 20:56:08)
         let libb_path = c!("./libb");
-        let libb_path_exist = file_exists(libb_path);
-        if libb_path_exist < 0 { return None; }
-        if libb_path_exist == 0 {
+        if !file_exists(libb_path)? {
             fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }
@@ -1303,7 +1304,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         let input_path = *input_paths.items.add(i);
 
         input.count = 0;
-        if !read_entire_file(input_path, &mut input) { return None; }
+        read_entire_file(input_path, &mut input)?;
 
         let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
 
@@ -1341,7 +1342,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
@@ -1382,7 +1383,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Gas_x86_64_Linux => {
@@ -1400,7 +1401,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
@@ -1433,7 +1434,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
+                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
             }
         }
         Target::Gas_x86_64_Windows => {
@@ -1457,7 +1458,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
             let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
@@ -1490,7 +1491,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         },
         Target::Gas_AArch64_Darwin => {
@@ -1508,7 +1509,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let (gas, cc) = (c!("as"), c!("cc"));
@@ -1542,7 +1543,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Fasm_x86_64_Linux => {
@@ -1560,7 +1561,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
@@ -1593,7 +1594,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args))?
+                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
             }
         }
         Target::Fasm_x86_64_Windows => {
@@ -1617,7 +1618,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
             let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
-            if !write_entire_file(output_asm_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
@@ -1650,7 +1651,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args))?;
+                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Uxn => {
@@ -1665,10 +1666,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
-                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args))?;
+                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502 => {
@@ -1684,10 +1685,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            if !write_entire_file(effective_output_path, output.items as *const c_void, output.count) { return None; }
+            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
-                runner::mos6502::run(&mut output, config, effective_output_path)?;
+                runner::mos6502::run(&mut output, config, effective_output_path, None)?;
             }
         }
     }

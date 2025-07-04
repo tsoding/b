@@ -31,14 +31,18 @@ LINUX_OBJS=\
 	$(BUILD)/flag.linux.o \
 	$(BUILD)/libc.linux.o \
 	$(BUILD)/arena.linux.o \
-	$(BUILD)/fake6502.linux.o
+	$(BUILD)/fake6502.linux.o \
+	$(BUILD)/jim.linux.o \
+	$(BUILD)/jimp.linux.o
 
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
 	$(BUILD)/flag.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
-	$(BUILD)/fake6502.mingw32.o
+	$(BUILD)/fake6502.mingw32.o \
+	$(BUILD)/jim.mingw32.o \
+	$(BUILD)/jimp.mingw32.o
 
 .PHONY: all
 all: $(BUILD)/b $(BUILD)/btest
