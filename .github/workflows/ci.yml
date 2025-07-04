@@ -16,16 +16,25 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -qq -y clang make fasm mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
+          sudo apt-get install -qq -y build-essential clang make fasm mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user xxd cmake libpng-dev binutils-sh-elf python3 libusb-1.0-0-dev libsdl2-dev gcc-sh4-linux-gnu
+          sh4-linux-gnu-gcc -v
+          git clone https://git.planet-casio.com/Lephenixnoir/fxsdk
+          cd fxsdk
+          mkdir fxusr
+          cmake -B build -DCMAKE_INSTALL_PREFIX=fxusr -DFXLINK_DISABLE_UDISKS2=1
+          make -C build
+          make -C build install
+          cd ..
+
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
-          make cli
+          make
       - name: Build Toolchain
         run: |
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt gas-aarch64-darwin
+          PREFIX=sh4-linux-gnu PATH=$(realpath uxn11/bin):$(realpath fxsdl/fxusr/bin):$PATH ./build/btest -xt gas-aarch64-darwin
   macos:
     runs-on: macos-latest
     steps:
