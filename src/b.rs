@@ -24,6 +24,7 @@ use core::slice;
 use nob::*;
 use flag::*;
 use crust::libc::*;
+use crust::assoc_lookup_cstr;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
@@ -403,9 +404,13 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         }
         Token::Minus => {
             let (arg, _) = compile_primary_expression(l, c)?;
-            let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
-            Some((Arg::AutoVar(index), false))
+            if let Arg::Literal(v) = arg {
+                Some((Arg::Literal(!v + 1), false))
+            } else {
+                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                push_opcode(Op::Negate {result: index, arg}, (*l).loc, c);
+                Some((Arg::AutoVar(index), false))
+            }
         }
         Token::And => {
             let loc = (*l).loc;
@@ -975,6 +980,12 @@ pub struct Switch {
 }
 
 #[derive(Clone, Copy)]
+pub struct Variadic {
+    pub loc: Loc,
+    pub fixed_args: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
@@ -986,6 +997,7 @@ pub struct Compiler {
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
+    pub variadics: Array<(*const c_char, Variadic)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
     pub arena_names: Arena,
@@ -1010,6 +1022,31 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
 
+        if (*l).token == Token::Variadic {
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
+            get_and_expect_token_but_continue(l, c, Token::ID)?;
+            let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+            let func_loc = (*l).loc;
+            if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
+                diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
+                return None;
+            }
+            get_and_expect_token_but_continue(l, c, Token::Comma)?;
+            get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+            if (*l).int_number == 0 {
+                diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
+                bump_error_count(c)?;
+                continue 'def;
+            }
+            da_append(&mut (*c).variadics, (func, Variadic {
+                loc: func_loc,
+                fixed_args: (*l).int_number as usize,
+            }));
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
+            continue;
+        }
         expect_token(l, Token::ID)?;
 
         let name = arena::strdup(&mut (*c).arena_names, (*l).string);
@@ -1148,10 +1185,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
         default_target = Some(Target::Gas_AArch64_Linux);
+    } else if cfg!(target_arch = "aarch64") && cfg!(target_os = "macos") {
+        default_target = Some(Target::Gas_AArch64_Darwin);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "linux") {
-        default_target = Some(Target::Fasm_x86_64_Linux);
+        default_target = Some(Target::Gas_x86_64_Linux);
     } else if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-        default_target = Some(Target::Fasm_x86_64_Windows);
+        default_target = Some(Target::Gas_x86_64_Windows);
     } else {
         default_target = None;
     }
@@ -1400,7 +1439,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64_linux::generate_program(&mut output, &c);
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1564,6 +1603,58 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
                 runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        },
+        Target::Gas_AArch64_Darwin => {
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-arch"), c!("arm64"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_aarch64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Fasm_x86_64_Linux => {

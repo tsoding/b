@@ -192,6 +192,16 @@ putchar(ch) {
     }
 }
 
+printu(n, b) {
+    auto a, c, d;
+    extrn divu, modu;
+
+    if(a=divu(n,b)) /* assignment, not test for equality */
+        printu(a, b); /* recursive */
+    c = (modu(n,b)) + '0';
+    if (c > '9') c += 7;
+    putchar(c);
+}
 printn(n, b) {
     auto a, c, d;
 
@@ -225,6 +235,15 @@ printf(str, x1, x2, x3, s4, s5, s6, s7, s8, s9, s10, s11, s12) {
                 printn(*arg, 10);
             } else if (c == 'p') {
                 printn(*arg, 16);
+            } else if (c == 'l') {
+                i += 1;
+                c = char(str, i);
+                if (c == 'l') {
+                    i += 1;
+                    c = char(str, i);
+                    if (c == 'u')
+                        printn(*arg, 10);
+                }
             } else if (c == 'c') {
                 putchar(*arg);
             } else if (c == 's') { /* clobbers `c`, the last one */
@@ -463,3 +482,29 @@ intrisic_mod (a, b) {
     return (a - (b * q));
 }
 
+divu __asm__ (
+    "mov r4, r2",
+    "mov r5, r0",
+    "mov     r2,r3",
+    "rotcl   r3",
+    "subc    r1,r1",
+    "mov     #0,r3",
+    "subc    r3,r2",
+    "div0u",
+
+    ".rept 32",
+    "rotcl   r2",
+    "div1    r0,r1",
+    ".endr",
+
+    "rotcl   r2",
+    "addc    r3,r2",
+
+    "rts",
+    "mov r2, r0"
+);
+modu (a, b) {
+    auto q;
+    q = divu(a, b);
+    return (a - (b * q));
+}

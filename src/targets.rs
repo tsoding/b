@@ -6,14 +6,17 @@ use crate::strcmp;
 enum_with_order! {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Target in TARGET_ORDER {
-        Fasm_x86_64_Windows,
-        Fasm_x86_64_Linux,
+        // TODO: add Gas_x86_64_Darwin
+        //   Don't add Fasm_x86_64_Darwin. The fasm stuff is being deprecated soon
         Gas_x86_64_Windows,
         Gas_x86_64_Linux,
         Gas_AArch64_Linux,
         Gas_SH4_Prizm,
+        Gas_AArch64_Darwin,
         Uxn,
         Mos6502,
+        Fasm_x86_64_Windows,
+        Fasm_x86_64_Linux,
     }
 }
 
@@ -26,6 +29,7 @@ impl Target {
             Self::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
             Self::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
             Self::Gas_SH4_Prizm       => c!("gas-sh4dsp-prizm"),
+            Self::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502             => c!("6502"),
         }
@@ -49,14 +53,16 @@ impl Target {
             Self::Gas_x86_64_Linux    => 8,
             Self::Gas_AArch64_Linux   => 8,
             Self::Gas_SH4_Prizm       => 4,
+            Self::Gas_AArch64_Darwin  => 8,
             Self::Uxn                 => 2,
             Self::Mos6502             => 2,
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Os {
     Linux,
     Windows,
+    Darwin,
 }
