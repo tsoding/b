@@ -92,7 +92,7 @@ pub enum Token {
     Goto,
     Return,
     Asm,
-    Pragma,
+    Variadic,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
@@ -156,8 +156,10 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         Token::Switch     => c!("keyword `switch`"),
         Token::Goto       => c!("keyword `goto`"),
         Token::Return     => c!("keyword `return`"),
+
+        // TODO: document all this magical extension keywords somewhere
         Token::Asm        => c!("keyword `__asm__`"),
-        Token::Pragma     => c!("directive `#pragma`"),
+        Token::Variadic   => c!("keyword `__variadic__`"),
     }
 }
 
@@ -261,6 +263,7 @@ const KEYWORDS: *const [(*const c_char, Token)] = &[
     (c!("goto"), Token::Goto),
     (c!("return"), Token::Return),
     (c!("__asm__"), Token::Asm),
+    (c!("__variadic__"), Token::Variadic),
 ];
 
 #[derive(Clone, Copy)]
@@ -497,27 +500,6 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
         let (prefix, token) = (*puncs)[i];
         if skip_prefix(l, prefix) {
             (*l).token = token;
-            return Some(())
-        }
-    }
-
-    if x == '#' as c_char {
-        skip_char(l);
-        skip_whitespaces(l);
-        (*l).string_storage.count = 0;
-        while let Some(x) = peek_char(l) {
-            if is_identifier(x) {
-                da_append(&mut (*l).string_storage, x);
-                skip_char(l);
-            } else {
-                break
-            }
-        }
-        da_append(&mut (*l).string_storage, 0);
-        (*l).string = (*l).string_storage.items;
-
-        if strcmp((*l).string, c!("pragma")) == 0 {
-            (*l).token = Token::Pragma;
             return Some(())
         }
     }

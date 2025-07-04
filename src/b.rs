@@ -1022,35 +1022,28 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         lexer::get_token(l)?;
         if (*l).token == Token::EOF { break 'def }
 
-        if (*l).token == Token::Pragma {
+        if (*l).token == Token::Variadic {
+            get_and_expect_token_but_continue(l, c, Token::OParen)?;
             get_and_expect_token_but_continue(l, c, Token::ID)?;
-            let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-            if strcmp(name, c!("variadic")) == 0 {
-                get_and_expect_token_but_continue(l, c, Token::OParen)?;
-                get_and_expect_token_but_continue(l, c, Token::ID)?;
-                let func = arena::strdup(&mut (*c).arena_names, (*l).string);
-                let func_loc = (*l).loc;
-                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
-                    diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
-                    diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
-                    return None;
-                }
-                get_and_expect_token_but_continue(l, c, Token::Comma)?;
-                get_and_expect_token_but_continue(l, c, Token::IntLit)?;
-                if (*l).int_number == 0 {
-                    diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
-                    bump_error_count(c)?;
-                    continue 'def;
-                }
-                da_append(&mut (*c).variadics, (func, Variadic {
-                    loc: func_loc,
-                    fixed_args: (*l).int_number as usize,
-                }));
-                get_and_expect_token_but_continue(l, c, Token::CParen)?;
-            } else {
-                diagf!((*l).loc, c!("ERROR: unknown pragma `%s`\n"), name);
-                bump_error_count(c)?;
+            let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+            let func_loc = (*l).loc;
+            if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
+                diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
+                return None;
             }
+            get_and_expect_token_but_continue(l, c, Token::Comma)?;
+            get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+            if (*l).int_number == 0 {
+                diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
+                bump_error_count(c)?;
+                continue 'def;
+            }
+            da_append(&mut (*c).variadics, (func, Variadic {
+                loc: func_loc,
+                fixed_args: (*l).int_number as usize,
+            }));
+            get_and_expect_token_but_continue(l, c, Token::CParen)?;
             continue;
         }
         expect_token(l, Token::ID)?;
