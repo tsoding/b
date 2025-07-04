@@ -1044,6 +1044,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 fixed_args: (*l).int_number as usize,
             }));
             get_and_expect_token_but_continue(l, c, Token::CParen)?;
+            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             continue;
         }
         expect_token(l, Token::ID)?;

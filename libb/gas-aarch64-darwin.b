@@ -1,4 +1,4 @@
-__variadic__(printf, 1)
+__variadic__(printf, 1);
 
 char __asm__(
     "ldrb w0, [x0, x1]",
