@@ -220,6 +220,10 @@ static bool jimp__get_token(Jimp *jimp)
                     jimp->point++;
                     jimp__append_to_string(jimp, '\\');
                     break;
+                case '"':
+                    jimp->point++;
+                    jimp__append_to_string(jimp, '"');
+                    break;
                 default:
                     jimp->token_start = jimp->point;
                     jimp_diagf(jimp, "ERROR: invalid escape sequence\n");

@@ -1330,5 +1330,42 @@
             "state": "Enabled",
             "comment": ""
         }
+    },
+    "compile-overflow": {
+        "fasm-x86_64-windows": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        },
+        "fasm-x86_64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        },
+        "gas-x86_64-windows": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        },
+        "gas-x86_64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        },
+        "gas-aarch64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        },
+        "uxn": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        },
+        "6502": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+        }
     }
 }
