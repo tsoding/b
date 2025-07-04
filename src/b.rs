@@ -1543,7 +1543,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                runner::gas_aarch64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Fasm_x86_64_Linux => {
