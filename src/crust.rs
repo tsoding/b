@@ -29,6 +29,15 @@ macro_rules! enum_with_order {
     }
 }
 
+pub unsafe fn slice_contains<Value: PartialEq>(slice: *const [Value], needle: *const Value) -> bool {
+    for i in 0..slice.len() {
+        if (*slice)[i] == *needle {
+            return true
+        }
+    }
+    false
+}
+
 pub unsafe fn assoc_lookup_cstr_mut<Value>(assoc: *mut [(*const c_char, Value)], needle: *const c_char) -> Option<*mut Value> {
     for i in 0..assoc.len() {
         if strcmp((*assoc)[i].0, needle) == 0 {
