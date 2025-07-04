@@ -183,7 +183,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": "Failed to build on record"
         }
     },
@@ -277,7 +277,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "0\n",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": ""
         }
     },
@@ -324,7 +324,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": "Failed to build on record"
         }
     },
@@ -418,7 +418,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "69\n",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": ""
         }
     },
@@ -465,7 +465,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": "Failed to build on record"
         }
     },
@@ -1217,7 +1217,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": "Failed to build on record"
         }
     },
@@ -1734,7 +1734,7 @@
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": "Failed to build on record"
         }
     },
