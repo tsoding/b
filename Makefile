@@ -3,8 +3,10 @@ SRC=src
 
 ifeq ($(OS),Darwin)
 	LDFLAGS=-lc
-else
-	LDFLAGS=
+endif
+
+ifeq ($(OS),Linux)
+	LDFLAGS=-lc -lgcc
 endif
 
 CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
