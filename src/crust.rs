@@ -100,6 +100,7 @@ pub mod libc {
         pub fn isalpha(c: c_int) -> c_int;
         pub fn isalnum(c: c_int) -> c_int;
         pub fn isdigit(c: c_int) -> c_int;
+        pub fn tolower(c: c_int) -> c_int;
         pub fn toupper(c: c_int) -> c_int;
         pub fn qsort(base: *mut c_void, nmemb: usize, size: usize, compar: unsafe extern "C" fn(*const c_void, *const c_void) -> c_int);
     }
