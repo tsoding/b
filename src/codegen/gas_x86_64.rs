@@ -94,8 +94,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             }
             Op::Store { index, arg } => {
                 sb_appendf(output, c!("    movq -%zu(%%rbp), %%rax\n"), index * 8);
-                load_arg_to_reg(arg, c!("rbx"), output, os);
-                sb_appendf(output, c!("    movq %%rbx, (%%rax)\n"));
+                load_arg_to_reg(arg, c!("rcx"), output, os);
+                sb_appendf(output, c!("    movq %%rcx, (%%rax)\n"));
             }
             Op::ExternalAssign { name, arg } => {
                 load_arg_to_reg(arg, c!("rax"), output, os);
@@ -114,18 +114,18 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), result * 8);
             }
             Op::UnaryNot { result, arg } => {
-                sb_appendf(output, c!("    xorq %%rbx, %%rbx\n"));
+                sb_appendf(output, c!("    xorq %%rcx, %%rcx\n"));
                 load_arg_to_reg(arg, c!("rax"), output, os);
                 sb_appendf(output, c!("    testq %%rax, %%rax\n"));
-                sb_appendf(output, c!("    setz %%bl\n"));
-                sb_appendf(output, c!("    movq %%rbx, -%zu(%%rbp)\n"), result * 8);
+                sb_appendf(output, c!("    setz %%cl\n"));
+                sb_appendf(output, c!("    movq %%rcx, -%zu(%%rbp)\n"), result * 8);
             }
             Op::Binop {binop, index, lhs, rhs} => {
                 load_arg_to_reg(lhs, c!("rax"), output, os);
-                load_arg_to_reg(rhs, c!("rbx"), output, os);
+                load_arg_to_reg(rhs, c!("rcx"), output, os);
                 match binop {
-                    Binop::BitOr => { sb_appendf(output, c!("    orq %%rbx, %%rax\n")); }
-                    Binop::BitAnd => { sb_appendf(output, c!("    andq %%rbx, %%rax\n")); }
+                    Binop::BitOr => { sb_appendf(output, c!("    orq %%rcx, %%rax\n")); }
+                    Binop::BitAnd => { sb_appendf(output, c!("    andq %%rcx, %%rax\n")); }
                     Binop::BitShl => {
                         load_arg_to_reg(rhs, c!("rcx"), output, os);
                         sb_appendf(output, c!("    shlq %%cl, %%rax\n"));
@@ -134,24 +134,24 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         load_arg_to_reg(rhs, c!("rcx"), output, os);
                         sb_appendf(output, c!("    shrq %%cl, %%rax\n"));
                     }
-                    Binop::Plus => { sb_appendf(output, c!("    addq %%rbx, %%rax\n")); }
-                    Binop::Minus => { sb_appendf(output, c!("    subq %%rbx, %%rax\n")); }
+                    Binop::Plus => { sb_appendf(output, c!("    addq %%rcx, %%rax\n")); }
+                    Binop::Minus => { sb_appendf(output, c!("    subq %%rcx, %%rax\n")); }
                     Binop::Mod => {
                         sb_appendf(output, c!("    cqto\n"));
-                        sb_appendf(output, c!("    idivq %%rbx\n"));
+                        sb_appendf(output, c!("    idivq %%rcx\n"));
                         sb_appendf(output, c!("    movq %%rdx, -%zu(%%rbp)\n"), index * 8);
                         continue;
                     }
                     Binop::Div => {
                         sb_appendf(output, c!("    cqto\n"));
-                        sb_appendf(output, c!("    idivq %%rbx\n"));
+                        sb_appendf(output, c!("    idivq %%rcx\n"));
                     }
                     Binop::Mult => {
-                        sb_appendf(output, c!("    imulq %%rbx, %%rax\n"));
+                        sb_appendf(output, c!("    imulq %%rcx, %%rax\n"));
                     }
                     _ => {
                         sb_appendf(output, c!("    xorq %%rdx, %%rdx\n"));
-                        sb_appendf(output, c!("    cmpq %%rbx, %%rax\n"));
+                        sb_appendf(output, c!("    cmpq %%rcx, %%rax\n"));
                         match binop {
                             Binop::Less => sb_appendf(output, c!("    setl %%dl\n")),
                             Binop::Greater => sb_appendf(output, c!("    setg %%dl\n")),
