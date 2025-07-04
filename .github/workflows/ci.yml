@@ -25,8 +25,8 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt gas-aarch64-darwin
-  macos:
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt gas-aarch64-darwin -xt gas-x86_64-darwin
+  macos-aarch64:
     runs-on: macos-latest
     steps:
       - name: Checkout
@@ -37,3 +37,14 @@ jobs:
         run: make -B
       - name: Run Tests
         run: ./build/btest -t gas-aarch64-darwin
+  macos-x86_64:
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Build Toolchain
+        run: make -B
+      - name: Run Tests
+        run: ./build/btest -t gas-x86_64-darwin
