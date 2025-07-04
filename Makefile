@@ -1,12 +1,13 @@
 BUILD=build
 SRC=src
 
-ifeq ($(OS),Darwin)
-	LDFLAGS=-lc
-endif
-
-ifeq ($(OS),Linux)
-	LDFLAGS=-lc -lgcc
+ifneq ($(OS),Windows_NT)
+    UNAMEOS = $(shell uname)
+    ifeq ($(UNAMEOS),Darwin)
+		LDFLAGS=-lc
+	else
+		LDFLAGS=-lc -lgcc
+    endif
 endif
 
 CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
