@@ -237,9 +237,10 @@ static bool jimp__get_token(Jimp *jimp)
                 jimp->token = JIMP_STRING;
                 return true;
             }
-            default:
+            default: {
                 char x = *jimp->point++;
                 jimp__append_to_string(jimp, x);
+            }
             }
         }
         jimp->token = JIMP_INVALID;
