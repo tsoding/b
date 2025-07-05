@@ -278,7 +278,8 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
 }
 
 pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Option<bool> {
-    match glob_utf8(pattern, text) {
+    let mark = temp_save();
+    let result = match glob_utf8(pattern, text) {
         Glob_Result::MATCHED   => Some(true),
         Glob_Result::UNMATCHED => Some(false),
         result => {
@@ -289,9 +290,11 @@ pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Optio
                 Glob_Result::UNMATCHED | Glob_Result::MATCHED => unreachable!(),
             };
             fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
-            return None;
+            None
         },
-    }
+    };
+    temp_rewind(mark);
+    result
 }
 
 pub unsafe fn record_tests(
