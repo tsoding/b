@@ -80,6 +80,18 @@ Both flags accept [glob](https://en.wikipedia.org/wiki/Glob_(programming)) patte
 $ ./build/btest -t *linux -c *linux
 ```
 
+If you want to exclude a specific platform you can supply the flag `-xt`.
+
+```console
+$ ./build/btest -xt fasm-x86_64-linux
+```
+
+`-xt` also accepts [glob](https://en.wikipedia.org/wiki/Glob_(programming)) patterns.
+
+```console
+$ ./build/btest -xt *-linux
+```
+
 ## References
 
 - https://en.wikipedia.org/wiki/B_(programming_language)
