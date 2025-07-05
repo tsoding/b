@@ -575,18 +575,17 @@ pub unsafe fn replay_tests(
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
-    // TODO: default target flag that is `*`
-    //   It require support for default flag lists in flag.h
-    let target_flags         = flag_list(c!("t"), c!("Compilation targets to test on. Can be a glob pattern."));
-    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from testing"));
-    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of selected compilation targets"));
-    let cases_flags          = flag_list(c!("c"), c!("Test cases to run. Can be a glob pattern."));
+    let target_flags         = flag_list(c!("t"), c!("Compilation targets to select for testing. Can be a glob pattern."));
+    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from selected ones. Can be a glob pattern"));
+    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of selected compilation targets."));
+
+    let cases_flags          = flag_list(c!("c"), c!("Test cases to select for testing. Can be a glob pattern."));
+    // TODO: introduce -xc flag similar to -xt
     let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of selected test cases"));
+
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
     let record               = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
-    // TODO: introduce -xc flag
-    // TODO: make -xt a globable
 
     if !flag_parse(argc, argv) {
         usage();
@@ -607,19 +606,9 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut reports: Array<Report> = zeroed();
     let mut stats_by_target: Array<ReportStats> = zeroed();
 
-    let mut exclude_targets: Array<Target> = zeroed();
-    for j in 0..(*exclude_target_flags).count {
-        let target_name = *(*exclude_target_flags).items.add(j);
-        if let Some(target) = Target::by_name(target_name) {
-            da_append(&mut exclude_targets, target)
-        } else {
-            fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
-            return None;
-        }
-    }
-    let mut targets: Array<Target> = zeroed();
+    let mut selected_targets: Array<Target> = zeroed();
     if (*target_flags).count == 0 {
-        da_append_many(&mut targets, TARGET_ORDER);
+        da_append_many(&mut selected_targets, TARGET_ORDER);
     } else {
         for j in 0..(*target_flags).count {
             let mut added_anything = false;
@@ -628,7 +617,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
                 let target = (*TARGET_ORDER)[j];
                 let name = target.name();
                 if matches_glob(pattern, name)? {
-                    da_append(&mut targets, target);
+                    da_append(&mut selected_targets, target);
                     added_anything = true;
                 }
             }
@@ -636,6 +625,21 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
                 fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), pattern);
                 return None;
             }
+        }
+    }
+    let mut targets: Array<Target> = zeroed();
+    for i in 0..selected_targets.count {
+        let target = *selected_targets.items.add(i);
+        let mut matches_any = false;
+        'exclude: for j in 0..(*exclude_target_flags).count {
+            let pattern = *(*exclude_target_flags).items.add(j);
+            if matches_glob(pattern, target.name())? {
+                matches_any = true;
+                break 'exclude;
+            }
+        }
+        if !matches_any {
+            da_append(&mut targets, target);
         }
     }
 
