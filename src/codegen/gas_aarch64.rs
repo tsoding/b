@@ -346,15 +346,27 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 }
             }
             Op::Label {label} => {
-                sb_appendf(output, c!("%s.label_%zu:\n"), name, label);
+                match os {
+                    Os::Linux => sb_appendf(output, c!(".L%s.label_%zu:\n"), name, label),
+                    Os::Darwin => sb_appendf(output, c!("L%s.label_%zu:\n"), name, label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
             Op::JmpLabel {label} => {
-                sb_appendf(output, c!("    b %s.label_%zu\n"), name, label);
+                match os {
+                    Os::Linux => sb_appendf(output, c!("b .L%s.label_%zu\n"), name, label),
+                    Os::Darwin => sb_appendf(output, c!("b L%s.label_%zu\n"), name, label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
             Op::JmpIfNotLabel {label, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc, os);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
-                sb_appendf(output, c!("    beq %s.label_%zu\n"), name, label);
+                match os {
+                    Os::Linux => sb_appendf(output, c!("    beq .L%s.label_%zu\n"), name, label),
+                    Os::Darwin => sb_appendf(output, c!("    beq L%s.label_%zu\n"), name, label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
         }
     }
