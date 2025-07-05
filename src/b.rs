@@ -1331,6 +1331,114 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     match target {
+        Target::Gas_SH4_Prizm => {
+            codegen::gas_sh4dsp_prizm::generate_program(&mut output, &c);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let base_path = temp_strip_suffix(effective_output_path, c!(".g3a")).unwrap_or(effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            let output_elf_path = temp_sprintf(c!("%s.elf"), base_path);
+            let output_bin_path = temp_sprintf(c!("%s.bin"), base_path);
+            let output_g3a_path = temp_sprintf(c!("%s.g3a"), base_path);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            // We do not need to worry about anyone building from an fx-CG50, so let's just assume
+            // a working GNU sh4 toolchain
+            let mut toolchain_prefix = getenv(c!("PREFIX"));
+            if toolchain_prefix.is_null() { toolchain_prefix = c!("sh-elf"); }
+            let (gas, cc, objcopy) = (
+                temp_sprintf(c!("%s-as"), toolchain_prefix),
+                temp_sprintf(c!("%s-gcc"), toolchain_prefix),
+                temp_sprintf(c!("%s-objcopy"), toolchain_prefix)
+            );
+
+            cmd_append! {
+                &mut cmd,
+                gas, c!("--big"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-no-pie"),
+            }
+            if !*nostdlib {
+                // We purposefully introduce a linker script within libb
+                // TODO: As said previously by rexim, we need to worry about the path of libb.
+                cmd_append! {
+                    &mut cmd,
+                    c!("-T"), c!("./libb/gas-sh4dsp-prizm.ld"),
+                }
+            }
+            cmd_append! {
+                &mut cmd,
+                c!("-o"), output_elf_path, output_obj_path,
+            }
+
+            if *nostdlib {
+                // No order without a stdlib
+                cmd_append! {
+                    &mut cmd,
+                    c!("-Wl,-Ttext=0x300000"),
+                    c!("-e"), c!("start"),
+                }
+            }
+
+            // Aside from the OS syscalls and libb (and fxlibc but I'm not dealing with fxlibc), we have no
+            // proper stdlib.
+            cmd_append! {
+                &mut cmd,
+                c!("-nostdlib"),
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            cmd_append! {
+                &mut cmd,
+                objcopy, output_elf_path,
+                c!("--input-target=elf32-big"),
+                c!("-j"), c!(".text*"),
+                c!("-j"), c!(".data*"),
+                c!("-O"), c!("binary"),
+                output_bin_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            cmd_append! {
+                &mut cmd,
+                c!("fxgxa"), c!("--g3a"),
+                c!("-n"), c!("B addin"),
+                output_bin_path, output_g3a_path,
+            }
+            if !*nostdlib {
+                // Also add the default icon
+                cmd_append! {
+                    &mut cmd,
+                    c!("--icon-uns=./libb/gas-sh4dsp-prizm-uns.png"),
+                    c!("--icon-sel=./libb/gas-sh4dsp-prizm-sel.png"),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_sh4dsp_prizm::run(&mut output, output_g3a_path, None)?;
+            }
+        },
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
 
