@@ -581,7 +581,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from testing"));
     let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of selected compilation targets"));
     let cases_flags          = flag_list(c!("c"), c!("Test cases to run. Can be a glob pattern."));
-    let list_cases           = flag_bool(c!("clist"), false, c!("Print te list of selected test cases"));
+    let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of selected test cases"));
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
     let record               = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
