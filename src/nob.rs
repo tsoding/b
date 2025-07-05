@@ -115,6 +115,10 @@ pub struct Cmd_Redirect {
 extern "C" {
     #[link_name = "nob_temp_sprintf"]
     pub fn temp_sprintf(format: *const c_char, ...) -> *mut c_char;
+    #[link_name = "nob_temp_save"]
+    pub fn temp_save() -> usize;
+    #[link_name = "nob_temp_rewind"]
+    pub fn temp_rewind(checkpoint: usize);
     #[link_name = "nob_sb_appendf"]
     pub fn sb_appendf(sb: *mut String_Builder, fmt: *const c_char, ...) -> c_int;
     #[link_name = "nob_sv_from_cstr"]
