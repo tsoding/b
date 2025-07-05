@@ -44,34 +44,40 @@ It doesn't crash when it encounters errors, it just collects the statuses of the
 
 ### Slicing the Test Matrix
 
-If you want to test only on a specific platform you can supply the flag `-t`
+If you want to test only on a specific platform you can supply the flag `-t`.
 
 ```console
 $ ./build/btest -t fasm-x86_64-linux
 ```
 
-You can supply several platforms
+You can supply several platforms.
 
 ```console
 $ ./build/btest -t fasm-x86_64-linux -t uxn
 ```
 
-If you want to run a specific test case you can supply flag `-c`
+If you want to run a specific test case you can supply flag `-c`.
 
 ```console
 $ ./build/btest -c upper
 ```
 
-You can do several tests
+You can do several tests.
 
 ```console
 $ ./build/btest -c upper -c vector
 ```
 
-And of course you can combine both `-c` and `-t` flags to slice the Test Matrix however you want
+And of course you can combine both `-c` and `-t` flags to slice the Test Matrix however you want.
 
 ```console
 $ ./build/btest -c upper -c vector -t fasm-x86_64-linux -t uxn
+```
+
+Both flags accept [glob](https://en.wikipedia.org/wiki/Glob_(programming)) patterns.
+
+```console
+$ ./build/btest -t *linux -c *linux
 ```
 
 ## References
