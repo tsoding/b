@@ -100,6 +100,8 @@ pub mod libc {
         pub fn fwrite(ptr: *const c_void, size: usize, nmemb: usize, stream: *mut FILE) -> usize;
 
         pub fn getenv(s: *const c_char) -> *const c_char;
+        pub fn getc(file: *mut FILE) -> c_int;
+        pub fn getchar() -> c_int;
 
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;

@@ -133,7 +133,12 @@ pub mod sh4 {
     pub unsafe fn read32(address: u32) -> u32 {
         // TODO: Alignment
         let ret = ((read16(address) as u32) << 16) | (read16(address + 2) as u32);
-        ret
+
+        if address == 0xE5200004 {
+            getchar() as u32
+        } else {
+            ret
+        }
     }
 
     pub unsafe fn write(address: u32, value: u8) {
@@ -143,9 +148,6 @@ pub mod sh4 {
             RAM[address as usize - 0x08100000] = value;
         }
 
-        if address == 0xE5200007 {
-            fprintf(OUT, c!("%c"), value as c_int);
-        }
     }
     pub unsafe fn write16(address: u32, value: u16) {
         // TODO: Alignment
@@ -156,6 +158,10 @@ pub mod sh4 {
         // TODO: Alignment
         write16(address + 0, ((value & 0xFFFF0000) >> 16) as u16);
         write16(address + 2, ((value & 0x0000FFFF) >> 0) as u16);
+
+        if address == 0xE5200004 {
+            fprintf(OUT, c!("%c"), value as c_int);
+        }
     }
 
     pub unsafe fn reset() {

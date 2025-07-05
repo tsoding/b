@@ -11,27 +11,56 @@ pub struct Assembler {
     pub funcname: *const c_char,
     pub output: *mut String_Builder,
     pub next_trampoline : usize,
-    pub next_litteral : usize
+    pub next_litteral : usize,
+
+    pub next_jmppoint : usize
 }
 
 pub unsafe fn write_nextsym(assembler: *mut Assembler) {
     let index = (*assembler).next_litteral;
     sb_appendf((*assembler).output, c!(".L_%sCL%d"), (*assembler).funcname, index as c_int);
 }
+pub unsafe fn write_jmppointsym(assembler: *mut Assembler) {
+    let next_jmpidx = (*assembler).next_jmppoint;
+    sb_appendf((*assembler).output, c!(".L%sJmp%d"), (*assembler).funcname, next_jmpidx);
+}
+pub unsafe fn write_jmppointlbl(assembler: *mut Assembler) {
+    let next_jmpidx = (*assembler).next_jmppoint;
+    sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_jmpidx);
+    sb_appendf((*assembler).output, c!(".L%sJmp%d:\n"), (*assembler).funcname, next_jmpidx);
+}
+pub unsafe fn next_jmppoint(assembler: *mut Assembler) {
+    write_jmppointlbl(assembler);
+    (*assembler).next_jmppoint += 1;
+}
+pub unsafe fn write_trampolinesym(assembler: *mut Assembler) {
+    let next_trampidx = (*assembler).next_trampoline;
+    sb_appendf((*assembler).output, c!(".L%sTrampoline%d"), (*assembler).funcname, next_trampidx);
+}
+pub unsafe fn write_trampolinelbl(assembler: *mut Assembler) {
+    sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, (*assembler).next_trampoline);
+    sb_appendf((*assembler).output, c!(".L%sTrampoline%d:\n"), (*assembler).funcname, (*assembler).next_trampoline);
+}
+pub unsafe fn next_trampoline(assembler: *mut Assembler) {
+    write_trampolinelbl(assembler);
+    (*assembler).next_trampoline += 1;
+}
 pub unsafe fn next_litteral(assembler: *mut Assembler, lit: u32) -> usize {
     let index = (*assembler).next_litteral;
-    let next_trampoline = (*assembler).next_trampoline;
+    let next_trampidx = (*assembler).next_trampoline;
     // Write a dirty "trampoline"
     sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
-    sb_appendf((*assembler).output, c!("    bra .L%sTrampoline%d\n"), (*assembler).funcname, next_trampoline);
-    sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
-    sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampoline);
-    sb_appendf((*assembler).output, c!(".L_%sCL%d: .long 0x%x\n"), (*assembler).funcname, index as c_int, lit as c_uint);
-    sb_appendf((*assembler).output, c!("    .align 2\n"), (*assembler).funcname, next_trampoline);
-    sb_appendf((*assembler).output, c!(".L%sTrampoline%d:\n"), (*assembler).funcname, next_trampoline);
 
+    sb_appendf((*assembler).output, c!("    bra "));
+    write_trampolinesym(assembler);
+    sb_appendf((*assembler).output, c!("\n"));
+
+    sb_appendf((*assembler).output, c!("    nop ! Safety NOP for delay slot issues\n"));
+    sb_appendf((*assembler).output, c!("    .align 4\n"), (*assembler).funcname, next_trampidx);
+    sb_appendf((*assembler).output, c!(".L_%sCL%d: .long 0x%x\n"), (*assembler).funcname, index as c_int, lit as c_uint);
+
+    next_trampoline(assembler);
     (*assembler).next_litteral += 1;
-    (*assembler).next_trampoline += 1;
     index
 }
 pub unsafe fn next_symbol(assembler: *mut Assembler, sym: *const c_char) -> usize {
@@ -161,7 +190,8 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     let mut assembler: Assembler = Assembler { 
         funcname: name,
         output: output,
-        next_trampoline: 0, next_litteral: 0
+        next_trampoline: 0, next_litteral: 0,
+        next_jmppoint: 0
     };
 
     // Put each symbol in its own section
@@ -501,14 +531,38 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 // (well, to be frank, GNU as, by default, does some "trampoline" magic 
                 // to ensure those jumps are always addressible (but I still think they should 
                 // be managed properly :3)
+                let label = temp_sprintf(c!("%s.label_%zu"), name, label);
+                sb_appendf(output, c!("    mov.l "));
+                write_nextsym(&mut assembler);
+                sb_appendf(output, c!(", r0 ! %s\n"));
+
                 sb_appendf(output, c!("    nop ! Safety NOP for delay slot issues\n"));
-                sb_appendf(output, c!("    bra %s.label_%zu\n"), name, label);
+                sb_appendf(output, c!("    jmp @r0\n"));
                 sb_appendf(output, c!("    nop ! Safety NOP for delay slot issues\n"));
+
+                next_symbol(&mut assembler, label);
             }
             Op::JmpIfNotLabel {label, arg} => {
+                // r0 = cond
+                // r1 = label address
+                let label = temp_sprintf(c!("%s.label_%zu"), name, label);
                 load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
+                sb_appendf(output, c!("    mov.l "));
+                write_nextsym(&mut assembler);
+                sb_appendf(output, c!(", r1 ! %s\n"));
                 sb_appendf(output, c!("    tst r0, r0\n"));
-                sb_appendf(output, c!("    bt %s.label_%zu\n"), name, label);
+
+                // If true, skip what's about to occur.
+                sb_appendf(output, c!("    bf "));
+                write_jmppointsym(&mut assembler);
+                sb_appendf(output, c!("\n"));
+
+                // Otherwise, jump straight to r1
+                sb_appendf(output, c!("    jmp @r1\n"));
+                sb_appendf(output, c!("    nop\n"));
+                
+                next_symbol(&mut assembler, label);
+                next_jmppoint(&mut assembler);
             }
         }
     }
