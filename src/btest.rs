@@ -280,21 +280,20 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
 pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Option<bool> {
     let mark = temp_save();
     let result = match glob_utf8(pattern, text) {
-        Glob_Result::MATCHED   => Some(true),
-        Glob_Result::UNMATCHED => Some(false),
-        result => {
-            let error = match result {
-                Glob_Result::OOM_ERROR      => c!("out of memory"),
-                Glob_Result::ENCODING_ERROR => c!("encoding error"),
-                Glob_Result::SYNTAX_ERROR   => c!("syntax error"),
-                Glob_Result::UNMATCHED | Glob_Result::MATCHED => unreachable!(),
-            };
-            fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
-            None
-        },
+        Glob_Result::MATCHED        => Ok(true),
+        Glob_Result::UNMATCHED      => Ok(false),
+        Glob_Result::OOM_ERROR      => Err(c!("out of memory")),
+        Glob_Result::ENCODING_ERROR => Err(c!("encoding error")),
+        Glob_Result::SYNTAX_ERROR   => Err(c!("syntax error")),
     };
     temp_rewind(mark);
-    result
+    match result {
+        Ok(result) => Some(result),
+        Err(error) => {
+            fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
+            None
+        }
+    }
 }
 
 pub unsafe fn record_tests(
