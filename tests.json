@@ -1778,6 +1778,11 @@
             "expected_stdout": "OK\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "gas-x86_64-darwin": {
+            "expected_stdout": "OK\n",
+            "state": "Enabled",
+            "comment": "TODO: fix on this target"
         }
     }
 }
