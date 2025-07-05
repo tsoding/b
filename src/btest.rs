@@ -11,6 +11,7 @@ pub mod nob;
 pub mod targets;
 pub mod runner;
 pub mod flag;
+pub mod glob;
 pub mod jim;
 pub mod jimp;
 
@@ -23,6 +24,7 @@ use nob::*;
 use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
+use glob::*;
 use jim::*;
 use jimp::*;
 
@@ -272,6 +274,25 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
         }
         printf(c!("└─%-*s"), col_width - 2*j, target.name());
         print_report_stats(stats)
+    }
+}
+
+pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Option<bool> {
+    let mark = temp_save();
+    let result = match glob_utf8(pattern, text) {
+        Glob_Result::MATCHED        => Ok(true),
+        Glob_Result::UNMATCHED      => Ok(false),
+        Glob_Result::OOM_ERROR      => Err(c!("out of memory")),
+        Glob_Result::ENCODING_ERROR => Err(c!("encoding error")),
+        Glob_Result::SYNTAX_ERROR   => Err(c!("syntax error")),
+    };
+    temp_rewind(mark);
+    match result {
+        Ok(result) => Some(result),
+        Err(error) => {
+            fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
+            None
+        }
     }
 }
 
@@ -554,17 +575,17 @@ pub unsafe fn replay_tests(
 }
 
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
-    let target_flags         = flag_list(c!("t"), c!("Compilation targets to test on"));
-    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from testing"));
-    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
-    let cases_flags          = flag_list(c!("c"), c!("Test cases"));
-    let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
+    let target_flags         = flag_list(c!("t"), c!("Compilation targets to select for testing. Can be a glob pattern."));
+    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from selected ones. Can be a glob pattern"));
+    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of selected compilation targets."));
+
+    let cases_flags          = flag_list(c!("c"), c!("Test cases to select for testing. Can be a glob pattern."));
+    // TODO: introduce -xc flag similar to -xt
+    let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of selected test cases"));
+
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
     let record               = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
-    // TODO: introduce -xc flag
-    // TODO: select test cases and targets by a glob pattern
-    // See if https://github.com/tsoding/glob.h can be used here
 
     if !flag_parse(argc, argv) {
         usage();
@@ -585,54 +606,73 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut reports: Array<Report> = zeroed();
     let mut stats_by_target: Array<ReportStats> = zeroed();
 
-    let mut exclude_targets: Array<Target> = zeroed();
-    for j in 0..(*exclude_target_flags).count {
-        let target_name = *(*exclude_target_flags).items.add(j);
-        if let Some(target) = Target::by_name(target_name) {
-            da_append(&mut exclude_targets, target)
-        } else {
-            fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
-            return None;
-        }
-    }
-    let mut targets: Array<Target> = zeroed();
+    let mut selected_targets: Array<Target> = zeroed();
     if (*target_flags).count == 0 {
-        for j in 0..TARGET_ORDER.len() {
-            let target = (*TARGET_ORDER)[j];
-            if !slice_contains(da_slice(exclude_targets), &target) {
-                da_append(&mut targets, target)
-            }
-        }
+        da_append_many(&mut selected_targets, TARGET_ORDER);
     } else {
         for j in 0..(*target_flags).count {
-            let target_name = *(*target_flags).items.add(j);
-            if let Some(target) = Target::by_name(target_name) {
-                if !slice_contains(da_slice(exclude_targets), &target) {
-                    da_append(&mut targets, target)
+            let mut added_anything = false;
+            let pattern = *(*target_flags).items.add(j);
+            for j in 0..TARGET_ORDER.len() {
+                let target = (*TARGET_ORDER)[j];
+                let name = target.name();
+                if matches_glob(pattern, name)? {
+                    da_append(&mut selected_targets, target);
+                    added_anything = true;
                 }
-            } else {
-                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
+            }
+            if !added_anything {
+                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), pattern);
                 return None;
             }
         }
     }
+    let mut targets: Array<Target> = zeroed();
+    for i in 0..selected_targets.count {
+        let target = *selected_targets.items.add(i);
+        let mut matches_any = false;
+        'exclude: for j in 0..(*exclude_target_flags).count {
+            let pattern = *(*exclude_target_flags).items.add(j);
+            if matches_glob(pattern, target.name())? {
+                matches_any = true;
+                break 'exclude;
+            }
+        }
+        if !matches_any {
+            da_append(&mut targets, target);
+        }
+    }
+
+    let mut all_cases: Array<*const c_char> = zeroed();
+
+    let mut test_files: File_Paths = zeroed();
+    if !read_entire_dir(*test_folder, &mut test_files) { return None; }
+    qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
+
+    for i in 0..test_files.count {
+        let test_file = *test_files.items.add(i);
+        if *test_file == '.' as c_char { continue; }
+        let Some(case_name) = temp_strip_suffix(test_file, c!(".b")) else { continue; };
+        da_append(&mut all_cases, case_name);
+    }
 
     let mut cases: Array<*const c_char> = zeroed();
     if (*cases_flags).count == 0 {
-        let mut case_files: File_Paths = zeroed();
-        if !read_entire_dir(*test_folder, &mut case_files) { return None; } // TODO: memory leak. The file names are strduped to temp, but the File_Paths dynamic array itself is still allocated on the heap
-        qsort(case_files.items as *mut c_void, case_files.count, size_of::<*const c_char>(), compar_cstr);
-
-        for i in 0..case_files.count {
-            let case_file = *case_files.items.add(i);
-            if *case_file == '.' as c_char { continue; }
-            let Some(case_name) = temp_strip_suffix(case_file, c!(".b")) else { continue; };
-            da_append(&mut cases, case_name);
-        }
+        cases = all_cases;
     } else {
         for i in 0..(*cases_flags).count {
-            let case_name = *(*cases_flags).items.add(i);
-            da_append(&mut cases, case_name);
+            let saved_count = cases.count;
+            let pattern = *(*cases_flags).items.add(i);
+            for i in 0..all_cases.count {
+                let case_name = *all_cases.items.add(i);
+                if matches_glob(pattern, case_name)? {
+                    da_append(&mut cases, case_name);
+                }
+            }
+            if cases.count == saved_count {
+                fprintf(stderr(), c!("ERROR: unknown test case `%s`\n"), pattern);
+                return None;
+            }
         }
     }
 
