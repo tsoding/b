@@ -40,7 +40,6 @@ pub enum ErrorKind {
 pub enum Token {
     // Terminal
     EOF,
-    ParseError,
 
     // Values
     ID,
@@ -106,7 +105,6 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
     match token {
         // Terminal
         Token::EOF        => c!("end of file"),
-        Token::ParseError => c!("parse error"),
 
         // Values
         Token::ID         => c!("identifier"),
@@ -603,6 +601,5 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
     }
 
     diagf!((*l).loc, c!("LEXER ERROR: Unknown token %c\n"), *(*l).parse_point.current as c_int);
-    (*l).token = Token::ParseError;
     Err(ErrorKind::Fatal)
 }
