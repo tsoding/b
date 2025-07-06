@@ -67,7 +67,7 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, token: Token) -> Option<()> {
 pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler, token: Token) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
-    if let None = expect_token(l, token) {
+    if expect_token(l, token).is_none() {
         (*l).parse_point = saved_point;
         bump_error_count(c)
     } else {
@@ -1331,65 +1331,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     match target {
-        Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
-                (c!("as"), c!("cc"))
-            } else {
-                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
-                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
-                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-
-            cmd_append! {
-                &mut cmd,
-                cc, if cfg!(target_os = "android") {
-                    c!("-fPIC")
-                } else {
-                    c!("-no-pie")
-                },
-                c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
         Target::Gas_x86_64_Linux => {
             codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 
@@ -1498,6 +1439,117 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         },
+        Target::Gas_x86_64_Darwin => {
+            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Darwin);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-arch"), c!("x86_64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-arch"), c!("x86_64"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_x86_64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        }
+        Target::Gas_AArch64_Linux => {
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            cmd_append! {
+                &mut cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        }
         Target::Gas_AArch64_Darwin => {
             codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
 
