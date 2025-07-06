@@ -1766,13 +1766,13 @@
         },
         "6502": {
             "expected_stdout": "OK\r\n",
-            "state": "Enabled",
+            "state": "Disabled",
             "comment": "Does not make sense on this platform"
         },
         "fasm-x86_64-windows": {
-            "expected_stdout": "",
+            "expected_stdout": "OK\r\n",
             "state": "Enabled",
-            "comment": "OK\r\n"
+            "comment": ""
         },
         "fasm-x86_64-linux": {
             "expected_stdout": "OK\n",
