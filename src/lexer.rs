@@ -541,11 +541,12 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
     if skip_prefix(l, c!("0x")) {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
+        parse_number(l, Radix::Hex)?;
         if (*l).historical {
             diagf!((*l).loc, c!("LEXER ERROR: hex literals are not available in the historical mode.\n"));
             return Err(ErrorKind::Error);
         }
-        return parse_number(l, Radix::Hex);
+        return Ok(());
     }
 
     if skip_prefix(l, c!("0")) {
