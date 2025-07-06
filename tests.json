@@ -1513,44 +1513,44 @@
     },
     "compile-overflow": {
         "fasm-x86_64-windows": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "expected_stdout": "x = 8000000000000000\r\ny = 8000000000000000\r\nz = 8000000000000000\r\n",
+            "state": "Enabled",
+            "comment": ""
         },
         "fasm-x86_64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+            "state": "Enabled",
+            "comment": ""
         },
         "gas-x86_64-windows": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "expected_stdout": "x = 8000000000000000\r\ny = 8000000000000000\r\nz = 8000000000000000\r\n",
+            "state": "Enabled",
+            "comment": ""
         },
         "gas-x86_64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+            "state": "Enabled",
+            "comment": ""
         },
         "gas-aarch64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+            "state": "Enabled",
+            "comment": ""
         },
         "gas-aarch64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+            "state": "Enabled",
+            "comment": ""
         },
         "uxn": {
             "expected_stdout": "",
             "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "comment": "The word size of this platform is too small."
         },
         "6502": {
             "expected_stdout": "",
             "state": "Disabled",
-            "comment": "TODO: Enable when we support \"negative testing\". Basically, we need to be able to test compilation errors."
+            "comment": "The word size of this platform is too small."
         }
     },
     "execvp-error-checking": {
