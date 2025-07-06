@@ -1181,6 +1181,38 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
     Some(())
 }
 
+pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
+    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
+
+    let p = if cfg!(target_os = "windows") {
+        let p1 = strrchr(path, '/' as i32);
+        let p2 = strrchr(path, '\\' as i32);
+        if p1 > p2 { p1 } else { p2 }
+    } else {
+        strrchr(path, '/' as i32)
+    };
+
+    let filename = if p.is_null() { path } else { p.add(1) };
+    let parent_len = filename.offset_from(path);
+
+    let garbage_dir = if parent_len == 0 {
+        // input path is relative and does not begin with "./" or "../", like "main.b"
+        GARBAGE_PATH_NAME
+    } else {
+        temp_sprintf(c!("%.*s%s"), parent_len, path, GARBAGE_PATH_NAME)
+    };
+
+    if !mkdir_if_not_exists(garbage_dir) { return None }
+
+    let gitignore_path = temp_sprintf(c!("%s/.gitignore"), garbage_dir);
+    if !file_exists(gitignore_path)? {
+        write_entire_file(gitignore_path, c!("*") as *const c_void, 1)?;
+    }
+
+    let base_filename = temp_strip_suffix(filename, c!(".b")).unwrap_or(filename);
+    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, base_filename, target.name()))
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
@@ -1320,6 +1352,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
+    let garbage_base = get_garbage_base(*input_paths.items, target)?;
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
@@ -1345,7 +1378,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1357,7 +1390,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 gas, c!("-o"), output_obj_path, output_asm_path,
@@ -1404,7 +1437,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1414,7 +1447,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("as"), output_asm_path, c!("-o") ,output_obj_path,
@@ -1461,7 +1494,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1471,7 +1504,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("x86_64-w64-mingw32-gcc")
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("as"), output_asm_path, c!("-o") ,output_obj_path,
@@ -1512,7 +1545,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1523,7 +1556,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
@@ -1564,7 +1597,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1574,7 +1607,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
@@ -1621,7 +1654,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
-            let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
+            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1631,7 +1664,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("x86_64-w64-mingw32-gcc")
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.obj"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
