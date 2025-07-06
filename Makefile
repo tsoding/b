@@ -17,6 +17,7 @@ RSS=\
 	$(SRC)/b.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
+	$(SRC)/glob.rs \
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
 	$(SRC)/targets.rs \
@@ -43,6 +44,7 @@ RSS=\
 POSIX_OBJS=\
 	$(BUILD)/nob.posix.o \
 	$(BUILD)/flag.posix.o \
+	$(BUILD)/glob.posix.o \
 	$(BUILD)/libc.posix.o \
 	$(BUILD)/arena.posix.o \
 	$(BUILD)/fake6502.posix.o \
@@ -52,6 +54,7 @@ POSIX_OBJS=\
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
 	$(BUILD)/flag.mingw32.o \
+	$(BUILD)/glob.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
 	$(BUILD)/fake6502.mingw32.o \
