@@ -459,8 +459,8 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                bump_error_count(c).map(|()| (Arg::Bogus, true))
+                da_append(&mut (*c).used_funcs, UsedFunc {name, loc: (*l).loc});
+                Some((Arg::External(name), true))
             } else {
                 match (*var_def).storage {
                     Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
@@ -993,6 +993,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
+    pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
@@ -1005,6 +1006,12 @@ pub struct Compiler {
     pub target: Target,
     pub error_count: usize,
     pub historical: bool
+}
+
+#[derive(Clone, Copy)]
+pub struct UsedFunc {
+    name: *const c_char,
+    loc: Loc,
 }
 
 pub const MAX_ERROR_COUNT: usize = 100;
@@ -1315,6 +1322,27 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         compile_program(&mut l, &mut c)?;
     }
     scope_pop(&mut c.vars);          // end global scope
+
+    'used_funcs: for i in 0..c.used_funcs.count {
+        let used_global = *c.used_funcs.items.add(i);
+
+        for j in 0..c.funcs.count {
+            let func = *c.funcs.items.add(j);
+            if strcmp(used_global.name, func.name) == 0 {
+                continue 'used_funcs;
+            }
+        }
+
+        for j in 0..c.asm_funcs.count {
+            let asm_func = *c.asm_funcs.items.add(j);
+            if strcmp(used_global.name, asm_func.name) == 0 {
+                continue 'used_funcs;
+            }
+        }
+
+        diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
+        bump_error_count(&mut c);
+    }
 
     if c.error_count > 0 {
         return None
