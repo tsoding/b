@@ -25,7 +25,7 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt gas-aarch64-darwin -xt gas-x86_64-darwin
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin
   macos-aarch64:
     runs-on: macos-latest
     steps:
