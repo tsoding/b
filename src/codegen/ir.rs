@@ -118,6 +118,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, arg);
                 sb_appendf(output, c!("\n"));
             }
+            Op::Index {result, arg, offset} => {
+                sb_appendf(output, c!("    auto[%zu] = ("), result);
+                dump_arg(output, arg);
+                sb_appendf(output, c!(") + (") );
+                dump_arg(output, offset);
+                sb_appendf(output, c!(" * WORD_SIZE)\n"));
+            },
         }
     }
 }

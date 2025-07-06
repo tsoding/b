@@ -315,6 +315,7 @@ pub enum Op {
     Negate         {result: usize, arg: Arg},
     Asm            {stmts: Array<AsmStmt>},
     Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
+    Index          {result: usize, arg: Arg, offset: Arg},
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
@@ -491,10 +492,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 get_and_expect_token_but_continue(l, c, Token::CBracket)?;
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-                let word_size = Arg::Literal((*c).target.word_size());
-                // TODO: Introduce Op::Index instruction that indices values without explicitly emit Binop::Mult and uses efficient multiplication by the size of the word at the codegen level.
-                push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
-                push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
+                push_opcode(Op::Index {result, arg, offset}, (*l).loc, c);
 
                 Some((Arg::Deref(result), true))
             }

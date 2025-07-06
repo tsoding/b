@@ -1249,6 +1249,28 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 instr0(out, JMP, ABS);
                 add_reloc(out, RelocationKind::Label{func_name: name, label}, asm);
             },
+            Op::Index {result, arg, offset} => {
+                load_two_args(out, offset, arg, op, asm);
+
+                // shift offset to the left by one bit
+                instr0(out, ASL, ACC);
+                instr(out, TAX);
+                instr(out, TYA);
+                instr0(out, ROL, ACC);
+                instr(out, TAY);
+                instr(out, TXA);
+
+                // add offset and arg
+                instr(out, CLC);
+                instr8(out, ADC, ZP, ZP_RHS_L);
+                instr(out, TAX);
+                instr(out, TYA);
+                instr8(out, ADC, ZP, ZP_RHS_H);
+                instr(out, TAY);
+                instr(out, TXA);
+
+                store_auto(out, result, asm);
+            },
         }
     }
 

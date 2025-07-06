@@ -263,6 +263,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 sb_appendf(output, c!("    test rax, rax\n"));
                 sb_appendf(output, c!("    jz .label_%zu\n"), label);
             }
+            Op::Index {result, arg, offset} => {
+                load_arg_to_reg(arg, c!("rax"), output);
+                load_arg_to_reg(offset, c!("rcx"), output);
+                sb_appendf(output, c!("    lea rax, [rax+rcx*8]\n"));
+                sb_appendf(output, c!("    mov [rbp-%zu], rax\n"), result * 8);
+            },
         }
     }
     sb_appendf(output, c!("    mov rax, 0\n"));
