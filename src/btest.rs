@@ -125,7 +125,7 @@ impl ReportStatus {
             ReportStatus::Disabled       => c!("-"),
         }
     }
-    
+
 
     fn color(self) -> *const c_char {
         match self {
@@ -553,7 +553,7 @@ pub unsafe fn replay_tests(
 }
 
 
-pub unsafe fn render_html(targets: *const Array<Target>, reports: *const Array<Report>, stats_by_target: *const Array<ReportStats>, output: *mut String_Builder ) {
+pub unsafe fn render_html(targets: *const Array<Target>, reports: *const Array<Report>, _stats_by_target: *const Array<ReportStats>, output: *mut String_Builder ) {
     sb_appendf(output, c!("<!DOCTYPE html><html lang=\"en\"><head><link rel=\"stylesheet\" href=\"styles.css\"></head>"));
     sb_appendf(output, c!("<table id=\"results-table\""));
         sb_appendf(output, c!("<thead>"));
@@ -582,8 +582,8 @@ pub unsafe fn render_html(targets: *const Array<Target>, reports: *const Array<R
         sb_appendf(output, c!("</tr>"));
     }
     sb_appendf(output, c!("<tr><th>Stats</th></tr>"));
-    
-    // TODO: Stats
+
+    // TODO: Incorporate stats_by_target into the HTML report
     sb_appendf(output, c!("</tbody></table>"));
     sb_appendf(output, c!("</html>"));
 }
