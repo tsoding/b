@@ -21,8 +21,12 @@ RSS=\
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
 	$(SRC)/targets.rs \
+	$(SRC)/jim.rs \
+	$(SRC)/jimp.rs \
 	$(SRC)/codegen/fasm_x86_64.rs \
 	$(SRC)/codegen/gas_aarch64.rs \
+	$(SRC)/codegen/gas_x86_64.rs \
+	$(SRC)/codegen/mos6502.rs \
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs \
@@ -30,6 +34,7 @@ RSS=\
 	$(SRC)/runner/fasm_x86_64_windows.rs \
 	$(SRC)/runner/gas_x86_64_linux.rs \
 	$(SRC)/runner/gas_x86_64_windows.rs \
+	$(SRC)/runner/gas_x86_64_darwin.rs \
 	$(SRC)/runner/gas_aarch64_linux.rs \
 	$(SRC)/runner/gas_aarch64_darwin.rs \
 	$(SRC)/runner/mod.rs \
