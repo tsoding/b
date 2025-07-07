@@ -1056,6 +1056,19 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
+            Token::Extrn => {
+                if (*c).historical {
+                    diagf!((*l).loc, c!("ERROR: top level extrn declarations are not allowed in the historical mode\n"));
+                    bump_error_count(c)?;
+                }
+                while (*l).token != Token::SemiColon {
+                    get_and_expect_token(l, Token::ID)?;
+                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    name_declare_if_not_exists(&mut (*c).extrns, name);
+                    declare_var(c, name, (*l).loc, Storage::External {name})?;
+                    get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                }
+            }
             _ => {
                 expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
