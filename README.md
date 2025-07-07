@@ -89,7 +89,13 @@ $ ./build/btest -xt fasm-x86_64-linux
 `-xt` also accepts [glob](https://en.wikipedia.org/wiki/Glob_(programming)) patterns.
 
 ```console
-$ ./build/btest -xt *-linux
+$ ./build/btest -xt *linux
+```
+
+`-xc` is just like `-xt` but for test cases.
+
+```console
+$ ./build/btest -xt *linux -xc asm*
 ```
 
 ## References
