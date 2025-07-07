@@ -1825,6 +1825,11 @@
             "expected_stdout": "No forward declaration is required\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "gas-x86_64-darwin": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
         }
     }
 }
