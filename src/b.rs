@@ -457,7 +457,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         }
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
         Token::ID => {
-            let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
@@ -709,7 +709,7 @@ pub unsafe fn compile_asm_stmts(l: *mut Lexer, c: *mut Compiler, stmts: *mut Arr
             get_and_expect_token(l, Token::String)?;
             match (*l).token {
                 Token::String => {
-                    let line = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    let line = arena::strdup(&mut (*c).arena, (*l).string);
                     let loc = (*l).loc;
                     da_append(stmts, AsmStmt { line, loc });
                 }
@@ -744,7 +744,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Extrn => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 name_declare_if_not_exists(&mut (*c).extrns, name);
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
@@ -754,10 +754,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Auto => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
-                // TODO: Automatic variable names should only need function lifetime.
-                //   Could use .arena_labels here but naming would be confusing.
-                //   Rename .arena_labels to indicate function lifetime first?
-                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                 declare_var(c, name, (*l).loc, Storage::Auto {index})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
@@ -840,7 +837,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::Goto => {
             get_and_expect_token(l, Token::ID)?;
-            let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_gotos, Goto {name, loc, addr});
@@ -914,7 +911,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         _ => {
             if (*l).token == Token::ID {
-                let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let name_loc = (*l).loc;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
@@ -1000,8 +997,17 @@ pub struct Compiler {
     pub variadics: Array<(*const c_char, Variadic)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
-    pub arena_names: Arena,
-    pub arena_labels: Arena,
+    /// Arena into which the Compiler allocates all the names and
+    /// objects that need to live for the duration of the
+    /// compilation. Even if some object/names don't need to live that
+    /// long (for example, function labels need to live only for the
+    /// duration of that function compilation), just letting them live
+    /// longer makes the memory management easier.
+    ///
+    /// Basically just dump everything into this arena and if you ever
+    /// need to reset the state of the Compiler, just reset all its
+    /// Dynamic Arrays and this Arena.
+    pub arena: Arena,
     pub target: Target,
     pub error_count: usize,
     pub historical: bool
@@ -1034,7 +1040,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Token::Variadic => {
                 get_and_expect_token_but_continue(l, c, Token::OParen)?;
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
-                let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let func = arena::strdup(&mut (*c).arena, (*l).string);
                 let func_loc = (*l).loc;
                 if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
                     // TODO: report all the duplicate variadics maybe?
@@ -1058,7 +1064,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Token::Extrn => {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
-                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    let name = arena::strdup(&mut (*c).arena, (*l).string);
                     name_declare_if_not_exists(&mut (*c).extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
@@ -1066,7 +1072,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             }
             _ => {
                 expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let name_loc = (*l).loc;
                 declare_var(c, name, name_loc, Storage::External{name})?;
 
@@ -1083,7 +1089,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             (*l).parse_point = saved_point;
                             'params: loop {
                                 get_and_expect_token(l, Token::ID)?;
-                                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                let name = arena::strdup(&mut (*c).arena, (*l).string);
                                 let name_loc = (*l).loc;
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                                 declare_var(c, name, name_loc, Storage::Auto{index})?;
@@ -1109,7 +1115,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             }
                             (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
                         }
-                        arena::reset(&mut (*c).arena_labels);
 
                         da_append(&mut (*c).funcs, Func {
                             name,
@@ -1162,7 +1167,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                 Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                                 Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                                 Token::ID => {
-                                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                    let name = arena::strdup(&mut (*c).arena, (*l).string);
                                     let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
                                     let var = find_var_near(scope, name);
                                     if var.is_null() {
@@ -1334,8 +1339,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s.b"), libb_path, *target_name));
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
     }
 
     // Logging what files are actually being compiled so nothing is hidden from the user.
