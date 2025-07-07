@@ -1327,6 +1327,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut input: String_Builder = zeroed();
 
     scope_push(&mut c.vars);          // begin global scope
+
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
 
@@ -1337,28 +1338,17 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
         compile_program(&mut l, &mut c)?;
     }
-    scope_pop(&mut c.vars);          // end global scope
 
-    'used_funcs: for i in 0..c.used_funcs.count {
+    for i in 0..c.used_funcs.count {
         let used_global = *c.used_funcs.items.add(i);
 
-        for j in 0..c.funcs.count {
-            let func = *c.funcs.items.add(j);
-            if strcmp(used_global.name, func.name) == 0 {
-                continue 'used_funcs;
-            }
+        if find_var_deep(&mut c.vars, used_global.name).is_null() {
+            diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
+            bump_error_count(&mut c);
         }
-
-        for j in 0..c.asm_funcs.count {
-            let asm_func = *c.asm_funcs.items.add(j);
-            if strcmp(used_global.name, asm_func.name) == 0 {
-                continue 'used_funcs;
-            }
-        }
-
-        diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
-        bump_error_count(&mut c);
     }
+
+    scope_pop(&mut c.vars);          // end global scope
 
     if c.error_count > 0 {
         return None
