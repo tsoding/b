@@ -459,7 +459,7 @@
             "comment": "Doesn't make sense for this target"
         },
         "6502": {
-            "expected_stdout": "",
+            "expected_stdout": "69\r\n1\r\n0\r\n1\r\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -1211,7 +1211,7 @@
             "comment": "Doesn't make sense for this target"
         },
         "6502": {
-            "expected_stdout": "",
+            "expected_stdout": "SUCCESS\r\n",
             "state": "Enabled",
             "comment": ""
         },
