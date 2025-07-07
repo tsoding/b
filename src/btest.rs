@@ -168,6 +168,7 @@ pub unsafe fn execute_test(
     let program_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
         Target::Fasm_x86_64_Windows => c!("exe"),
         Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
+        Target::Gas_x86_64_Darwin   => c!("gas-x86_64-darwin"),
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
         Target::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
         Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
@@ -193,6 +194,7 @@ pub unsafe fn execute_test(
         Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
@@ -204,7 +206,7 @@ pub unsafe fn execute_test(
     da_append(sb, 0);                   // NULL-terminating the stdout
     printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
 
-    if let None = run_result {
+    if run_result.is_none() {
         Some(Outcome::RunFail)
     } else {
         Some(Outcome::RunSuccess{stdout: strdup((*sb).items)}) // TODO: memory leak

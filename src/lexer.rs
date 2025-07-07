@@ -445,19 +445,19 @@ unsafe fn parse_number(l: *mut Lexer, radix: Radix, report_point: Parse_Point) -
             break;
         };
 
-        let Some(r) = i64::checked_mul((*l).int_number as i64, radix as i64) else {
+        let Some(r) = (*l).int_number.checked_mul(radix as u64) else {
             (*l).parse_point = report_point;
             diagf!(loc(l), c!("LEXER ERROR: Constant integer overflow\n"));
             return None;
         };
-        (*l).int_number = r as u64;
+        (*l).int_number = r;
 
-        let Some(r) = i64::checked_add((*l).int_number as i64, d as i64) else {
+        let Some(r) = (*l).int_number.checked_add(d as u64) else {
             (*l).parse_point = report_point;
             diagf!(loc(l), c!("LEXER ERROR: Constant integer overflow.\n"));
             return None;
         };
-        (*l).int_number = r as u64;
+        (*l).int_number = r;
         skip_char(l);
     };
 
