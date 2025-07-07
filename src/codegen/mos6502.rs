@@ -1250,15 +1250,11 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 add_reloc(out, RelocationKind::Label{func_name: name, label}, asm);
             },
             Op::Index {result, arg, offset} => {
-                load_two_args(out, offset, arg, op, asm);
+                load_two_args(out, arg, offset, op, asm);
 
                 // shift offset to the left by one bit
-                instr0(out, ASL, ACC);
-                instr(out, TAX);
-                instr(out, TYA);
-                instr0(out, ROL, ACC);
-                instr(out, TAY);
-                instr(out, TXA);
+                instr8(out, ASL, ZP, ZP_RHS_L);
+                instr8(out, ROL, ZP, ZP_RHS_H);
 
                 // add offset and arg
                 instr(out, CLC);
