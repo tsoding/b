@@ -364,7 +364,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, out: *mut String_Builder, asm: *mut A
         Arg::RefAutoVar(index) => load_auto_var_ref(out, index, asm),
         Arg::Literal(value) => {
             if value >= 65536 {
-                diagf!(loc, c!("WARNING: contant $%X out of range for 16 bits\n"), value);
+                diagf!(loc, c!("WARNING: contant $%llX out of range for 16 bits\n"), value);
             }
             instr8(out, LDA, IMM, value as u8);
             instr8(out, LDY, IMM, (value >> 8) as u8);

@@ -1,3 +1,5 @@
+__variadic__(printf, 1);
+
 sx64 __asm__(
     "sxtw x0, w0",
     "ret"
