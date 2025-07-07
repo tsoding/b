@@ -743,6 +743,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             scope_pop(&mut (*c).vars);
             Some(())
         }
+        Token::SemiColon => {
+            Some(())
+        }
         Token::Extrn => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
