@@ -1594,5 +1594,47 @@
             "state": "Enabled",
             "comment": ""
         }
+    },
+    "out_of_order_funcalls": {
+        "gas-x86_64-windows": {
+            "expected_stdout": "No forward declaration is required\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-x86_64-linux": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-aarch64-linux": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-aarch64-darwin": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "uxn": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "6502": {
+            "expected_stdout": "No forward declaration is required\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "fasm-x86_64-windows": {
+            "expected_stdout": "No forward declaration is required\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "fasm-x86_64-linux": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
+        }
     }
 }
