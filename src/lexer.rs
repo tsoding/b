@@ -448,7 +448,7 @@ unsafe fn parse_digit(c: c_char, radix: Radix) -> Option<u8> {
 }
 
 unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
-    let mut result = Ok(());
+    let mut overflow = false;
     while let Some(x) = peek_char(l) {
         let Some(d) = parse_digit(x, radix) else {
             break;
@@ -456,21 +456,26 @@ unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
         skip_char(l);
 
         let Some(r) = i64::checked_mul((*l).int_number as i64, radix as i64) else {
-            result = Err(ErrorKind::Error);
+            overflow = true;
             continue;
         };
         (*l).int_number = r as u64;
 
         let Some(r) = i64::checked_add((*l).int_number as i64, d as i64) else {
-            result = Err(ErrorKind::Error);
+            overflow = true;
             continue;
         };
         (*l).int_number = r as u64;
     }
-    if !result.is_ok() {
-        diagf!((*l).loc, c!("LEXER ERROR: Constant integer overflow\n"));
+    if (*l).historical && matches!(radix, Radix::Hex) {
+        diagf!((*l).loc, c!("LEXER ERROR: hex literals are not available in historical mode\n"));
+        return Err(ErrorKind::Error);
     }
-    result
+    if overflow {
+        diagf!((*l).loc, c!("LEXER ERROR: integer literal overflow\n"));
+        return Err(ErrorKind::Error);
+    }
+    Ok(())
 }
 
 pub unsafe fn get_token(l: *mut Lexer) -> Result {
@@ -541,12 +546,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
     if skip_prefix(l, c!("0x")) {
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
-        parse_number(l, Radix::Hex)?;
-        if (*l).historical {
-            diagf!((*l).loc, c!("LEXER ERROR: hex literals are not available in the historical mode.\n"));
-            return Err(ErrorKind::Error);
-        }
-        return Ok(());
+        return parse_number(l, Radix::Hex);
     }
 
     if skip_prefix(l, c!("0")) {
