@@ -37,6 +37,13 @@ pub unsafe fn get_token(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     }
 }
 
+pub unsafe fn peek_token(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
+    match lexer::peek_token(l) {
+        Some(_) => Some(()),
+        None    => bump_error_count(c).and(None),
+    }
+}
+
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
         if (*tokens)[i] == (*l).token {
@@ -73,13 +80,11 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, c: *mut Compiler, token: Token
 }
 
 pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler, token: Token) -> Option<()> {
-    let saved_point = (*l).parse_point;
-    get_token(l, c)?;
+    peek_token(l, c)?;
     if let None = expect_token(l, token) {
-        (*l).parse_point = saved_point;
         bump_error_count(c)
     } else {
-        Some(())
+        get_token(l, c)
     }
 }
 
