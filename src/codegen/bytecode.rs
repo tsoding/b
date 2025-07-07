@@ -77,39 +77,39 @@ pub unsafe fn push_opcode(output: *mut Array<u8>, op: usize) {
 
 pub unsafe fn dump_arg(output: *mut Array<u8>, arg: Arg) {
     match arg {
-        Arg::External(name)     => {
-            push_opcode(output, 0x07);
-            append_string(output, name);
+        Arg::Bogus              => {
+            push_opcode(output, 0x00);
+        } 
+        Arg::AutoVar(index)     => {
+            push_opcode(output, 0x01);
+            append_u64(output, index.try_into().unwrap());
         }
         Arg::Deref(index)       => {
             push_opcode(output, 0x02);
             append_u64(output, index.try_into().unwrap());
         }
-        Arg::RefAutoVar(index)  => {
-            push_opcode(output, 0x04);
-            append_u64(output, index.try_into().unwrap());
-        }
-        Arg::RefExternal(name)  => {
+         Arg::RefExternal(name)  => {
             push_opcode(output, 0x3);
             append_string(output, name);
+        }
+       Arg::RefAutoVar(index)  => {
+            push_opcode(output, 0x04);
+            append_u64(output, index.try_into().unwrap());
         }
         Arg::Literal(value)     => {
             push_opcode(output, 0x05);
             append_u64(output, value.try_into().unwrap());
-        }
-        Arg::AutoVar(index)     => {
-            push_opcode(output, 0x01);
-            append_u64(output, index.try_into().unwrap());
         }
         Arg::DataOffset(offset) => {
             push_opcode(output, 0x06);
             printf(c!("%i\n"), offset);
             append_u64(output, offset.try_into().unwrap());
         }
-        Arg::Bogus              => {
-            push_opcode(output, 0x00);
-        } 
-    };
+        Arg::External(name)     => {
+            push_opcode(output, 0x07);
+            append_string(output, name);
+        }
+   };
 }
 
 pub unsafe fn append_u8(output: *mut Array<u8>, content: u8) {
@@ -185,10 +185,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 push_opcode(output, 0x07);
                 append_u64(output, index.try_into().unwrap());
                 match binop {
-                    Binop::BitOr        => push_opcode(output, 0x0B),
-                    Binop::BitAnd       => push_opcode(output, 0x0C), 
-                    Binop::BitShl       => push_opcode(output, 0x0D),
-                    Binop::BitShr       => push_opcode(output, 0x0E),
                     Binop::Plus         => push_opcode(output, 0x00), 
                     Binop::Minus        => push_opcode(output, 0x01), 
                     Binop::Mod          => push_opcode(output, 0x02),
@@ -200,18 +196,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Binop::NotEqual     => push_opcode(output, 0x08),
                     Binop::GreaterEqual => push_opcode(output, 0x09),
                     Binop::LessEqual    => push_opcode(output, 0x0A), 
+                    Binop::BitOr        => push_opcode(output, 0x0B),
+                    Binop::BitAnd       => push_opcode(output, 0x0C), 
+                    Binop::BitShl       => push_opcode(output, 0x0D),
+                    Binop::BitShr       => push_opcode(output, 0x0E), 
                 };
                 dump_arg(output, lhs);
                 dump_arg(output, rhs);
-            }
-            Op::Funcall{result, fun, args} => {
-                push_opcode(output, 0x0C);
-                append_u64(output, result.try_into().unwrap());
-                dump_arg_call(fun, output);
-                append_u64(output, args.count.try_into().unwrap());
-                for i in 0..args.count {
-                    dump_arg(output, *args.items.add(i));
-                }
             }
             Op::Asm {stmts} => {
                 push_opcode(output, 0x08);
@@ -234,6 +225,15 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 push_opcode(output, 0x0B);
                 append_u64(output, label.try_into().unwrap());
                 dump_arg(output, arg);
+            }
+            Op::Funcall{result, fun, args} => {
+                push_opcode(output, 0x0C);
+                append_u64(output, result.try_into().unwrap());
+                dump_arg_call(fun, output);
+                append_u64(output, args.count.try_into().unwrap());
+                for i in 0..args.count {
+                    dump_arg(output, *args.items.add(i));
+                }
             }
         }
     }
