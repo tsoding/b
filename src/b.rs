@@ -21,6 +21,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
 use core::slice;
+use core::cmp;
 use nob::*;
 use flag::*;
 use crust::libc::*;
@@ -1194,7 +1195,7 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
     let p = if cfg!(target_os = "windows") {
         let p1 = strrchr(path, '/' as i32);
         let p2 = strrchr(path, '\\' as i32);
-        if p1 > p2 { p1 } else { p2 }
+        cmp::max(p1, p2)
     } else {
         strrchr(path, '/' as i32)
     };
