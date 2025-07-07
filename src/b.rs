@@ -1027,154 +1027,159 @@ pub unsafe fn bump_error_count(c: *mut Compiler) -> Option<()> {
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     'def: loop {
         lexer::get_token(l)?;
-        if (*l).token == Token::EOF { break 'def }
-
-        if (*l).token == Token::Variadic {
-            get_and_expect_token_but_continue(l, c, Token::OParen)?;
-            get_and_expect_token_but_continue(l, c, Token::ID)?;
-            let func = arena::strdup(&mut (*c).arena_names, (*l).string);
-            let func_loc = (*l).loc;
-            if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
-                diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
-                diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
-                return None;
-            }
-            get_and_expect_token_but_continue(l, c, Token::Comma)?;
-            get_and_expect_token_but_continue(l, c, Token::IntLit)?;
-            if (*l).int_number == 0 {
-                diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
-                bump_error_count(c)?;
-                continue 'def;
-            }
-            da_append(&mut (*c).variadics, (func, Variadic {
-                loc: func_loc,
-                fixed_args: (*l).int_number as usize,
-            }));
-            get_and_expect_token_but_continue(l, c, Token::CParen)?;
-            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-            continue;
-        }
-        expect_token(l, Token::ID)?;
-
-        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-        let name_loc = (*l).loc;
-        declare_var(c, name, name_loc, Storage::External{name})?;
-
-        let saved_point = (*l).parse_point;
-        lexer::get_token(l)?;
-
-        if (*l).token == Token::OParen { // Function definition
-            scope_push(&mut (*c).vars); // begin function scope
-            let mut params_count = 0;
-            let saved_point = (*l).parse_point;
-            lexer::get_token(l)?;
-            if (*l).token != Token::CParen {
-                (*l).parse_point = saved_point;
-                'params: loop {
-                    get_and_expect_token(l, Token::ID)?;
-                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                    let name_loc = (*l).loc;
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    declare_var(c, name, name_loc, Storage::Auto{index})?;
-                    params_count += 1;
-                    get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
-                    match (*l).token {
-                        Token::CParen => break 'params,
-                        Token::Comma => continue 'params,
-                        _ => unreachable!(),
-                    }
-                }
-            }
-            compile_statement(l, c)?;
-            scope_pop(&mut (*c).vars); // end function scope
-
-            for i in 0..(*c).func_gotos.count {
-                let used_label = *(*c).func_gotos.items.add(i);
-                let existing_label = find_goto_label(&(*c).func_goto_labels, used_label.name);
-                if existing_label.is_null() {
-                    diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
+        match (*l).token {
+            Token::EOF => break 'def,
+            Token::Variadic => {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                get_and_expect_token_but_continue(l, c, Token::ID)?;
+                let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let func_loc = (*l).loc;
+                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                    diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
+                    diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
                     bump_error_count(c)?;
-                    continue;
+                    continue 'def;
                 }
-                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
-            }
-            arena::reset(&mut (*c).arena_labels);
-
-            da_append(&mut (*c).funcs, Func {
-                name,
-                name_loc,
-                body: (*c).func_body,
-                params_count,
-                auto_vars_count: (*c).auto_vars_ator.max,
-            });
-            (*c).func_body = zeroed();
-            (*c).func_goto_labels.count = 0;
-            (*c).func_gotos.count = 0;
-            (*c).auto_vars_ator = zeroed();
-            (*c).op_label_count = 0;
-        } else if (*l).token == Token::Asm { // Assembly function definition
-            let mut body: Array<AsmStmt> = zeroed();
-            compile_asm_stmts(l, c, &mut body)?;
-            da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
-        } else { // Variable definition
-            (*l).parse_point = saved_point;
-
-            let mut global = Global {
-                name,
-                values: zeroed(),
-                is_vec: false,
-                minimum_size: 0,
-            };
-
-            // TODO: This code is ugly
-            // couldn't find a better way to write it while keeping accurate error messages
-            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
-
-            if (*l).token == Token::OBracket {
-                global.is_vec = true;
-                get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
-                if (*l).token == Token::IntLit {
-                    global.minimum_size = (*l).int_number as usize;
-                    get_and_expect_token_but_continue(l, c, Token::CBracket)?;
+                get_and_expect_token_but_continue(l, c, Token::Comma)?;
+                get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                if (*l).int_number == 0 {
+                    diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
+                    bump_error_count(c)?;
+                    continue 'def;
                 }
-                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                da_append(&mut (*c).variadics, (func, Variadic {
+                    loc: func_loc,
+                    fixed_args: (*l).int_number as usize,
+                }));
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
+            _ => {
+                expect_token(l, Token::ID)?;
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name_loc = (*l).loc;
+                declare_var(c, name, name_loc, Storage::External{name})?;
 
-            while (*l).token != Token::SemiColon {
-                let value = match (*l).token {
-                    Token::Minus => {
-                        get_and_expect_token(l, Token::IntLit)?;
-                        ImmediateValue::Literal(!(*l).int_number + 1)
-                    }
-                    Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
-                    Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
-                    Token::ID => {
-                        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                        let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
-                        let var = find_var_near(scope, name);
-                        if var.is_null() {
-                            diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                            bump_error_count(c)?;
+                let saved_point = (*l).parse_point;
+                lexer::get_token(l)?;
+
+                match (*l).token {
+                    Token::OParen => { // Function definition
+                        scope_push(&mut (*c).vars); // begin function scope
+                        let mut params_count = 0;
+                        let saved_point = (*l).parse_point;
+                        lexer::get_token(l)?;
+                        if (*l).token != Token::CParen {
+                            (*l).parse_point = saved_point;
+                            'params: loop {
+                                get_and_expect_token(l, Token::ID)?;
+                                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                let name_loc = (*l).loc;
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                declare_var(c, name, name_loc, Storage::Auto{index})?;
+                                params_count += 1;
+                                get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
+                                match (*l).token {
+                                    Token::CParen => break 'params,
+                                    Token::Comma => continue 'params,
+                                    _ => unreachable!(),
+                                }
+                            }
                         }
-                        ImmediateValue::Name(name)
-                    }
-                    _ => unreachable!()
-                };
-                da_append(&mut global.values, value);
+                        compile_statement(l, c)?;
+                        scope_pop(&mut (*c).vars); // end function scope
 
-                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
-                if (*l).token == Token::Comma {
-                    get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
-                } else {
-                    break;
+                        for i in 0..(*c).func_gotos.count {
+                            let used_label = *(*c).func_gotos.items.add(i);
+                            let existing_label = find_goto_label(&(*c).func_goto_labels, used_label.name);
+                            if existing_label.is_null() {
+                                diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
+                                bump_error_count(c)?;
+                                continue;
+                            }
+                            (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
+                        }
+                        arena::reset(&mut (*c).arena_labels);
+
+                        da_append(&mut (*c).funcs, Func {
+                            name,
+                            name_loc,
+                            body: (*c).func_body,
+                            params_count,
+                            auto_vars_count: (*c).auto_vars_ator.max,
+                        });
+                        (*c).func_body = zeroed();
+                        (*c).func_goto_labels.count = 0;
+                        (*c).func_gotos.count = 0;
+                        (*c).auto_vars_ator = zeroed();
+                        (*c).op_label_count = 0;
+                    }
+                    Token::Asm => { // Assembly function definition
+                        let mut body: Array<AsmStmt> = zeroed();
+                        compile_asm_stmts(l, c, &mut body)?;
+                        da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
+                    }
+                    _ => { // Variable definition
+                        (*l).parse_point = saved_point;
+
+                        let mut global = Global {
+                            name,
+                            values: zeroed(),
+                            is_vec: false,
+                            minimum_size: 0,
+                        };
+
+                        // TODO: This code is ugly
+                        // couldn't find a better way to write it while keeping accurate error messages
+                        get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+
+                        if (*l).token == Token::OBracket {
+                            global.is_vec = true;
+                            get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
+                            if (*l).token == Token::IntLit {
+                                global.minimum_size = (*l).int_number as usize;
+                                get_and_expect_token_but_continue(l, c, Token::CBracket)?;
+                            }
+                            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                        }
+
+                        while (*l).token != Token::SemiColon {
+                            let value = match (*l).token {
+                                Token::Minus => {
+                                    get_and_expect_token(l, Token::IntLit)?;
+                                    ImmediateValue::Literal(!(*l).int_number + 1)
+                                }
+                                Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
+                                Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
+                                Token::ID => {
+                                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                    let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
+                                    let var = find_var_near(scope, name);
+                                    if var.is_null() {
+                                        diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
+                                        bump_error_count(c)?;
+                                    }
+                                    ImmediateValue::Name(name)
+                                }
+                                _ => unreachable!()
+                            };
+                            da_append(&mut global.values, value);
+
+                            get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                            if (*l).token == Token::Comma {
+                                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if !global.is_vec && global.values.count == 0 {
+                            da_append(&mut global.values, ImmediateValue::Literal(0));
+                        }
+                        da_append(&mut (*c).globals, global)
+                    }
                 }
             }
-
-            if !global.is_vec && global.values.count == 0 {
-                da_append(&mut global.values, ImmediateValue::Literal(0));
-            }
-            da_append(&mut (*c).globals, global)
-
         }
     }
 
