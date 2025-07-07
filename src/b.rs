@@ -1381,7 +1381,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
-    let garbage_base = get_garbage_base(*input_paths.items, target)?;
+    let garbage_base = if (*output_path).is_null() {
+        get_garbage_base(*input_paths.items, target)?
+    } else {
+        get_garbage_base(*output_path, target)?
+    };
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
