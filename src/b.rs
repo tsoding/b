@@ -459,7 +459,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                da_append(&mut (*c).called_names, CalledName {name, loc: (*l).loc});
+                da_append(&mut (*c).used_funcs, UsedFunc {name, loc: (*l).loc});
                 Some((Arg::External(name), true))
             } else {
                 match (*var_def).storage {
@@ -993,7 +993,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
-    pub called_names: Array<CalledName>,
+    pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
@@ -1009,7 +1009,7 @@ pub struct Compiler {
 }
 
 #[derive(Clone, Copy)]
-pub struct CalledName {
+pub struct UsedFunc {
     name: *const c_char,
     loc: Loc,
 }
@@ -1323,24 +1323,24 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
     scope_pop(&mut c.vars);          // end global scope
 
-    'called_names: for i in 0..c.called_names.count {
-        let called_name = *c.called_names.items.add(i);
+    'used_funcs: for i in 0..c.used_funcs.count {
+        let used_global = *c.used_funcs.items.add(i);
 
         for j in 0..c.funcs.count {
             let func = *c.funcs.items.add(j);
-            if strcmp(called_name.name, func.name) == 0 {
-                continue 'called_names;
+            if strcmp(used_global.name, func.name) == 0 {
+                continue 'used_funcs;
             }
         }
 
         for j in 0..c.asm_funcs.count {
             let asm_func = *c.asm_funcs.items.add(j);
-            if strcmp(called_name.name, asm_func.name) == 0 {
-                continue 'called_names;
+            if strcmp(used_global.name, asm_func.name) == 0 {
+                continue 'used_funcs;
             }
         }
 
-        diagf!(called_name.loc, c!("ERROR: could not find name `%s`\n"), called_name.name);
+        diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
         bump_error_count(&mut c);
     }
 
