@@ -1144,6 +1144,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         }
                         arena::reset(&mut (*c).arena_labels);
 
+                        // Automatically clear the iota counter
+                        (*c).iota_counter = 0;
+
                         da_append(&mut (*c).funcs, Func {
                             name,
                             name_loc,
