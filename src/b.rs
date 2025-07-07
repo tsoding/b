@@ -1015,6 +1015,9 @@ pub struct UsedFunc {
 }
 
 pub const MAX_ERROR_COUNT: usize = 100;
+/// The point of this function is to indicate that a compilation error happened, but continue the compilation anyway
+/// even if the state of the Compiler became bogus. This is needed to report as many compilation errors as possible.
+/// After calling this function always continue the compilation like nothing happened.
 pub unsafe fn bump_error_count(c: *mut Compiler) -> Option<()> {
     (*c).error_count += 1;
     if (*c).error_count >= MAX_ERROR_COUNT {
@@ -1035,17 +1038,16 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let func = arena::strdup(&mut (*c).arena_names, (*l).string);
                 let func_loc = (*l).loc;
                 if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                    // TODO: report all the duplicate variadics?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
                     bump_error_count(c)?;
-                    continue 'def;
                 }
                 get_and_expect_token_but_continue(l, c, Token::Comma)?;
                 get_and_expect_token_but_continue(l, c, Token::IntLit)?;
                 if (*l).int_number == 0 {
                     diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
                     bump_error_count(c)?;
-                    continue 'def;
                 }
                 da_append(&mut (*c).variadics, (func, Variadic {
                     loc: func_loc,
