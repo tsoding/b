@@ -233,6 +233,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Os::Darwin              => sb_appendf(output, c!("    jz L%s_label_%zu\n"), name, label),
                 };
             }
+            Op::Index {result, arg, offset} => {
+                load_arg_to_reg(arg, c!("rax"), output, os);
+                load_arg_to_reg(offset, c!("rcx"), output, os);
+                sb_appendf(output, c!("    leaq (%%rax, %%rcx, 8), %%rax\n"));
+                sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), result * 8);
+            },
         }
     }
     sb_appendf(output, c!("    movq $0, %%rax\n"));
