@@ -67,7 +67,7 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, token: Token) -> Option<()> {
 pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler, token: Token) -> Option<()> {
     let saved_point = (*l).parse_point;
     lexer::get_token(l)?;
-    if let None = expect_token(l, token) {
+    if expect_token(l, token).is_none() {
         (*l).parse_point = saved_point;
         bump_error_count(c)
     } else {
@@ -459,8 +459,8 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                bump_error_count(c).map(|()| (Arg::Bogus, true))
+                da_append(&mut (*c).used_funcs, UsedFunc {name, loc: (*l).loc});
+                Some((Arg::External(name), true))
             } else {
                 match (*var_def).storage {
                     Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
@@ -993,6 +993,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
+    pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
@@ -1005,6 +1006,12 @@ pub struct Compiler {
     pub target: Target,
     pub error_count: usize,
     pub historical: bool
+}
+
+#[derive(Clone, Copy)]
+pub struct UsedFunc {
+    name: *const c_char,
+    loc: Loc,
 }
 
 pub const MAX_ERROR_COUNT: usize = 100;
@@ -1348,6 +1355,27 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
     scope_pop(&mut c.vars);          // end global scope
 
+    'used_funcs: for i in 0..c.used_funcs.count {
+        let used_global = *c.used_funcs.items.add(i);
+
+        for j in 0..c.funcs.count {
+            let func = *c.funcs.items.add(j);
+            if strcmp(used_global.name, func.name) == 0 {
+                continue 'used_funcs;
+            }
+        }
+
+        for j in 0..c.asm_funcs.count {
+            let asm_func = *c.asm_funcs.items.add(j);
+            if strcmp(used_global.name, asm_func.name) == 0 {
+                continue 'used_funcs;
+            }
+        }
+
+        diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
+        bump_error_count(&mut c);
+    }
+
     if c.error_count > 0 {
         return None
     }
@@ -1531,6 +1559,58 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         },
+        Target::Gas_x86_64_Darwin => {
+            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Darwin);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-arch"), c!("x86_64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            cmd_append! {
+                &mut cmd,
+                cc, c!("-arch"), c!("x86_64"), c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_x86_64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        }
         Target::Gas_AArch64_Darwin => {
             codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
 
