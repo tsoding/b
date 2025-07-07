@@ -40,8 +40,27 @@ realloc(ptr, size) {
    with the `divmod` test
 */
 _div(a, b) {
-    auto d;
+    auto d, sign;
+    sign = 0;
+    if (a < 0) {
+        sign = !sign;
+        a = -a;
+    }
+    if (b < 0) {
+        sign = !sign;
+        b = -a;
+    }
+
     d = 0; while(a >= b) {
+        a = a - b;
+        d++;
+    }
+    if (sign) d = -d;
+    return (d);
+}
+_udiv(a, b) {
+    auto d;
+    d = 0; while(a >= b | a < 0) {
         a = a - b;
         d++;
     }
@@ -58,18 +77,29 @@ _rem (a, b) {
     }
     return (a);
 }
+_urem(a, b) {
+    auto d;
+    while(a >= b | a < 0) {
+        a = a - b;
+    }
+    return (a);
+}
 
 printn(n, b, sign) {
-    auto a, c, d;
+    auto a, c, d, __div, __rem;
+
+    /* use correct div/rem based on sign */
+    __div = sign ? &_div : &_udiv;
+    __rem = sign ? &_rem : &_urem;
 
     if (sign & n < 0) {
         putchar('-');
         n = -n;
     }
 
-    if(a=_div(n, b)) /* assignment, not test for equality */
+    if(a=__div(n, b)) /* assignment, not test for equality */
         printn(a, b, 0); /* recursive */
-    c = _rem(n,b) + '0';
+    c = __rem(n,b) + '0';
     if (c > '9') c += 7;
     putchar(c);
 }
