@@ -21,6 +21,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
 use core::slice;
+use core::cmp;
 use nob::*;
 use flag::*;
 use crust::libc::*;
@@ -1204,6 +1205,38 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
     Some(())
 }
 
+pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
+    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
+
+    let p = if cfg!(target_os = "windows") {
+        let p1 = strrchr(path, '/' as i32);
+        let p2 = strrchr(path, '\\' as i32);
+        cmp::max(p1, p2)
+    } else {
+        strrchr(path, '/' as i32)
+    };
+
+    let filename = if p.is_null() { path } else { p.add(1) };
+    let parent_len = filename.offset_from(path);
+
+    let garbage_dir = if parent_len == 0 {
+        // input path is relative and does not begin with "./" or "../", like "main.b"
+        GARBAGE_PATH_NAME
+    } else {
+        temp_sprintf(c!("%.*s%s"), parent_len, path, GARBAGE_PATH_NAME)
+    };
+
+    if !mkdir_if_not_exists(garbage_dir) { return None }
+
+    let gitignore_path = temp_sprintf(c!("%s/.gitignore"), garbage_dir);
+    if !file_exists(gitignore_path)? {
+        write_entire_file(gitignore_path, c!("*") as *const c_void, 1)?;
+    }
+
+    let base_filename = temp_strip_suffix(filename, c!(".b")).unwrap_or(filename);
+    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, base_filename, target.name()))
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
@@ -1354,6 +1387,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
+    let garbage_base = if (*output_path).is_null() {
+        get_garbage_base(*input_paths.items, target)?
+    } else {
+        get_garbage_base(*output_path, target)?
+    };
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
@@ -1365,6 +1403,65 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     match target {
+        Target::Gas_AArch64_Linux => {
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            cmd_append! {
+                &mut cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        }
         Target::Gas_x86_64_Linux => {
             codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 
@@ -1379,7 +1476,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1389,7 +1486,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("as"), output_asm_path, c!("-o") ,output_obj_path,
@@ -1436,7 +1533,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1446,7 +1543,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("x86_64-w64-mingw32-gcc")
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("as"), output_asm_path, c!("-o") ,output_obj_path,
@@ -1525,65 +1622,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::gas_x86_64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
-        Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
-                (c!("as"), c!("cc"))
-            } else {
-                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
-                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
-                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-
-            cmd_append! {
-                &mut cmd,
-                cc, if cfg!(target_os = "android") {
-                    c!("-fPIC")
-                } else {
-                    c!("-no-pie")
-                },
-                c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
         Target::Gas_AArch64_Darwin => {
             codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
 
@@ -1598,7 +1636,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1609,7 +1647,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
@@ -1650,7 +1688,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1660,7 +1698,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
@@ -1707,7 +1745,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
-            let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
+            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1717,7 +1755,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("x86_64-w64-mingw32-gcc")
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.obj"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,

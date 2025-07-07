@@ -95,6 +95,7 @@ pub mod libc {
         pub fn fclose(stream: *mut FILE) -> c_int;
         pub fn strcmp(s1: *const c_char, s2: *const c_char) -> c_int;
         pub fn strchr(s: *const c_char, c: c_int) -> *const c_char;
+        pub fn strrchr(s: *const c_char, c: c_int) -> *const c_char;
         pub fn strlen(s: *const c_char) -> usize;
         pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
         pub fn fwrite(ptr: *const c_void, size: usize, nmemb: usize, stream: *mut FILE) -> usize;
