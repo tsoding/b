@@ -455,6 +455,15 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
             Some((arg, false))
         }
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
+        Token::Iota => {
+            if (*c).historical {
+                diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                None
+            } else {
+                (*c).iota_counter += 1;
+                Some((Arg::Literal(((*c).iota_counter - 1) as u64), false))
+            }
+        }
         Token::ID => {
             let name = arena::strdup(&mut (*c).arena_names, (*l).string);
 
@@ -735,6 +744,17 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     lexer::get_token(l)?;
 
     match (*l).token {
+            Token::Reset => {
+                // Reset shouldn't be used outside of an historical context
+                if (*c).historical {
+                    diagf!((*l).loc, c!("ERROR: cannot use reset in historical mode\n"));
+                    bump_error_count(c)
+                } else {
+                    get_and_expect_token(l, Token::SemiColon)?;
+                    (*c).iota_counter = 0;
+                    Some(())
+                }
+            }
         Token::OCurly => {
             scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -996,6 +1016,7 @@ pub struct Compiler {
     pub func_gotos: Array<Goto>,
     pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
+    pub iota_counter: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
@@ -1064,6 +1085,16 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     name_declare_if_not_exists(&mut (*c).extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                }
+            }
+            Token::Reset => {
+                // Reset shouldn't be used outside of an historical context
+                if (*c).historical {
+                    diagf!((*l).loc, c!("ERROR: cannot use reset in historical mode\n"));
+                    bump_error_count(c)?;
+                } else {
+                    get_and_expect_token(l, Token::SemiColon)?;
+                    (*c).iota_counter = 0;
                 }
             }
             _ => {
@@ -1143,7 +1174,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                         // TODO: This code is ugly
                         // couldn't find a better way to write it while keeping accurate error messages
-                        get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+                        get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket, Token::Iota])?;
 
                         if (*l).token == Token::OBracket {
                             global.is_vec = true;
@@ -1160,6 +1191,14 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                 Token::Minus => {
                                     get_and_expect_token(l, Token::IntLit)?;
                                     ImmediateValue::Literal(!(*l).int_number + 1)
+                                }
+                                Token::Iota => {
+                                    if (*c).historical { 
+                                        diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                                        bump_error_count(c)?;
+                                    }
+                                    (*c).iota_counter += 1;
+                                    ImmediateValue::Literal(((*c).iota_counter - 1) as u64)
                                 }
                                 Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                                 Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
