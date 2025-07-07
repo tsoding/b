@@ -235,6 +235,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     dump_arg(output, *args.items.add(i));
                 }
             }
+            Op::Index{result, arg, offset} => {
+                push_opcode(output, 0x0D);
+                append_u64(output, result.try_into().unwrap());
+                dump_arg(output, arg);
+                dump_arg(output, offset);
+            }
         }
     }
 }

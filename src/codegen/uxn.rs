@@ -507,6 +507,14 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 // return
                 write_op(output, UxnOp::JMP2r);
             }
+            Op::Index {result, arg, offset} => {
+                load_arg(arg, op.loc, output, assembler);
+                load_arg(offset, op.loc, output, assembler);
+                write_lit(output, 0x10);
+                write_op(output, UxnOp::SFT2);
+                write_op(output, UxnOp::ADD2);
+                store_auto(output, result);
+            },
         }
     }
 

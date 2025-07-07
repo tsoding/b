@@ -21,6 +21,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
 use core::slice;
+use core::cmp;
 use nob::*;
 use flag::*;
 use crust::libc::*;
@@ -315,6 +316,7 @@ pub enum Op {
     Negate         {result: usize, arg: Arg},
     Asm            {stmts: Array<AsmStmt>},
     Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
+    Index          {result: usize, arg: Arg, offset: Arg},
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
     Store          {index: usize, arg: Arg},
@@ -459,8 +461,8 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
-                diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                bump_error_count(c).map(|()| (Arg::Bogus, true))
+                da_append(&mut (*c).used_funcs, UsedFunc {name, loc: (*l).loc});
+                Some((Arg::External(name), true))
             } else {
                 match (*var_def).storage {
                     Storage::Auto{index} => Some((Arg::AutoVar(index), true)),
@@ -491,10 +493,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 get_and_expect_token_but_continue(l, c, Token::CBracket)?;
 
                 let result = allocate_auto_var(&mut (*c).auto_vars_ator);
-                let word_size = Arg::Literal((*c).target.word_size());
-                // TODO: Introduce Op::Index instruction that indices values without explicitly emit Binop::Mult and uses efficient multiplication by the size of the word at the codegen level.
-                push_opcode(Op::Binop {binop: Binop::Mult, index: result, lhs: offset, rhs: word_size}, (*l).loc, c);
-                push_opcode(Op::Binop {binop: Binop::Plus, index: result, lhs: arg, rhs: Arg::AutoVar(result)}, (*l).loc, c);
+                push_opcode(Op::Index {result, arg, offset}, (*l).loc, c);
 
                 Some((Arg::Deref(result), true))
             }
@@ -993,6 +992,7 @@ pub struct Compiler {
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
+    pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub data: Array<u8>,
@@ -1007,7 +1007,16 @@ pub struct Compiler {
     pub historical: bool
 }
 
+#[derive(Clone, Copy)]
+pub struct UsedFunc {
+    name: *const c_char,
+    loc: Loc,
+}
+
 pub const MAX_ERROR_COUNT: usize = 100;
+/// The point of this function is to indicate that a compilation error happened, but continue the compilation anyway
+/// even if the state of the Compiler became bogus. This is needed to report as many compilation errors as possible.
+/// After calling this function always continue the compilation like nothing happened.
 pub unsafe fn bump_error_count(c: *mut Compiler) -> Option<()> {
     (*c).error_count += 1;
     if (*c).error_count >= MAX_ERROR_COUNT {
@@ -1020,154 +1029,167 @@ pub unsafe fn bump_error_count(c: *mut Compiler) -> Option<()> {
 pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     'def: loop {
         lexer::get_token(l)?;
-        if (*l).token == Token::EOF { break 'def }
-
-        if (*l).token == Token::Variadic {
-            get_and_expect_token_but_continue(l, c, Token::OParen)?;
-            get_and_expect_token_but_continue(l, c, Token::ID)?;
-            let func = arena::strdup(&mut (*c).arena_names, (*l).string);
-            let func_loc = (*l).loc;
-            if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
-                diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
-                diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
-                return None;
+        match (*l).token {
+            Token::EOF => break 'def,
+            Token::Variadic => {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                get_and_expect_token_but_continue(l, c, Token::ID)?;
+                let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let func_loc = (*l).loc;
+                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                    // TODO: report all the duplicate variadics maybe?
+                    diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
+                    diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
+                    bump_error_count(c)?;
+                }
+                get_and_expect_token_but_continue(l, c, Token::Comma)?;
+                get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                if (*l).int_number == 0 {
+                    diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
+                    bump_error_count(c)?;
+                }
+                da_append(&mut (*c).variadics, (func, Variadic {
+                    loc: func_loc,
+                    fixed_args: (*l).int_number as usize,
+                }));
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
-            get_and_expect_token_but_continue(l, c, Token::Comma)?;
-            get_and_expect_token_but_continue(l, c, Token::IntLit)?;
-            if (*l).int_number == 0 {
-                diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
-                bump_error_count(c)?;
-                continue 'def;
-            }
-            da_append(&mut (*c).variadics, (func, Variadic {
-                loc: func_loc,
-                fixed_args: (*l).int_number as usize,
-            }));
-            get_and_expect_token_but_continue(l, c, Token::CParen)?;
-            get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-            continue;
-        }
-        expect_token(l, Token::ID)?;
-
-        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-        let name_loc = (*l).loc;
-        declare_var(c, name, name_loc, Storage::External{name})?;
-
-        let saved_point = (*l).parse_point;
-        lexer::get_token(l)?;
-
-        if (*l).token == Token::OParen { // Function definition
-            scope_push(&mut (*c).vars); // begin function scope
-            let mut params_count = 0;
-            let saved_point = (*l).parse_point;
-            lexer::get_token(l)?;
-            if (*l).token != Token::CParen {
-                (*l).parse_point = saved_point;
-                'params: loop {
+            Token::Extrn => {
+                while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
                     let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                    let name_loc = (*l).loc;
-                    let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                    declare_var(c, name, name_loc, Storage::Auto{index})?;
-                    params_count += 1;
-                    get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
-                    match (*l).token {
-                        Token::CParen => break 'params,
-                        Token::Comma => continue 'params,
-                        _ => unreachable!(),
-                    }
+                    name_declare_if_not_exists(&mut (*c).extrns, name);
+                    declare_var(c, name, (*l).loc, Storage::External {name})?;
+                    get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-            compile_statement(l, c)?;
-            scope_pop(&mut (*c).vars); // end function scope
+            _ => {
+                expect_token(l, Token::ID)?;
+                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name_loc = (*l).loc;
+                declare_var(c, name, name_loc, Storage::External{name})?;
 
-            for i in 0..(*c).func_gotos.count {
-                let used_label = *(*c).func_gotos.items.add(i);
-                let existing_label = find_goto_label(&(*c).func_goto_labels, used_label.name);
-                if existing_label.is_null() {
-                    diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
-                    bump_error_count(c)?;
-                    continue;
-                }
-                (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
-            }
-            arena::reset(&mut (*c).arena_labels);
+                let saved_point = (*l).parse_point;
+                lexer::get_token(l)?;
 
-            da_append(&mut (*c).funcs, Func {
-                name,
-                name_loc,
-                body: (*c).func_body,
-                params_count,
-                auto_vars_count: (*c).auto_vars_ator.max,
-            });
-            (*c).func_body = zeroed();
-            (*c).func_goto_labels.count = 0;
-            (*c).func_gotos.count = 0;
-            (*c).auto_vars_ator = zeroed();
-            (*c).op_label_count = 0;
-        } else if (*l).token == Token::Asm { // Assembly function definition
-            let mut body: Array<AsmStmt> = zeroed();
-            compile_asm_stmts(l, c, &mut body)?;
-            da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
-        } else { // Variable definition
-            (*l).parse_point = saved_point;
-
-            let mut global = Global {
-                name,
-                values: zeroed(),
-                is_vec: false,
-                minimum_size: 0,
-            };
-
-            // TODO: This code is ugly
-            // couldn't find a better way to write it while keeping accurate error messages
-            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
-
-            if (*l).token == Token::OBracket {
-                global.is_vec = true;
-                get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
-                if (*l).token == Token::IntLit {
-                    global.minimum_size = (*l).int_number as usize;
-                    get_and_expect_token_but_continue(l, c, Token::CBracket)?;
-                }
-                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
-            }
-
-            while (*l).token != Token::SemiColon {
-                let value = match (*l).token {
-                    Token::Minus => {
-                        get_and_expect_token(l, Token::IntLit)?;
-                        ImmediateValue::Literal(!(*l).int_number + 1)
-                    }
-                    Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
-                    Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
-                    Token::ID => {
-                        let name = arena::strdup(&mut (*c).arena_names, (*l).string);
-                        let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
-                        let var = find_var_near(scope, name);
-                        if var.is_null() {
-                            diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
-                            bump_error_count(c)?;
+                match (*l).token {
+                    Token::OParen => { // Function definition
+                        scope_push(&mut (*c).vars); // begin function scope
+                        let mut params_count = 0;
+                        let saved_point = (*l).parse_point;
+                        lexer::get_token(l)?;
+                        if (*l).token != Token::CParen {
+                            (*l).parse_point = saved_point;
+                            'params: loop {
+                                get_and_expect_token(l, Token::ID)?;
+                                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                let name_loc = (*l).loc;
+                                let index = allocate_auto_var(&mut (*c).auto_vars_ator);
+                                declare_var(c, name, name_loc, Storage::Auto{index})?;
+                                params_count += 1;
+                                get_and_expect_tokens(l, &[Token::CParen, Token::Comma])?;
+                                match (*l).token {
+                                    Token::CParen => break 'params,
+                                    Token::Comma => continue 'params,
+                                    _ => unreachable!(),
+                                }
+                            }
                         }
-                        ImmediateValue::Name(name)
-                    }
-                    _ => unreachable!()
-                };
-                da_append(&mut global.values, value);
+                        compile_statement(l, c)?;
+                        scope_pop(&mut (*c).vars); // end function scope
 
-                get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
-                if (*l).token == Token::Comma {
-                    get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
-                } else {
-                    break;
+                        for i in 0..(*c).func_gotos.count {
+                            let used_label = *(*c).func_gotos.items.add(i);
+                            let existing_label = find_goto_label(&(*c).func_goto_labels, used_label.name);
+                            if existing_label.is_null() {
+                                diagf!(used_label.loc, c!("ERROR: label `%s` used but not defined\n"), used_label.name);
+                                bump_error_count(c)?;
+                                continue;
+                            }
+                            (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
+                        }
+                        arena::reset(&mut (*c).arena_labels);
+
+                        da_append(&mut (*c).funcs, Func {
+                            name,
+                            name_loc,
+                            body: (*c).func_body,
+                            params_count,
+                            auto_vars_count: (*c).auto_vars_ator.max,
+                        });
+                        (*c).func_body = zeroed();
+                        (*c).func_goto_labels.count = 0;
+                        (*c).func_gotos.count = 0;
+                        (*c).auto_vars_ator = zeroed();
+                        (*c).op_label_count = 0;
+                    }
+                    Token::Asm => { // Assembly function definition
+                        let mut body: Array<AsmStmt> = zeroed();
+                        compile_asm_stmts(l, c, &mut body)?;
+                        da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
+                    }
+                    _ => { // Variable definition
+                        (*l).parse_point = saved_point;
+
+                        let mut global = Global {
+                            name,
+                            values: zeroed(),
+                            is_vec: false,
+                            minimum_size: 0,
+                        };
+
+                        // TODO: This code is ugly
+                        // couldn't find a better way to write it while keeping accurate error messages
+                        get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket])?;
+
+                        if (*l).token == Token::OBracket {
+                            global.is_vec = true;
+                            get_and_expect_tokens(l, &[Token::IntLit, Token::CBracket])?;
+                            if (*l).token == Token::IntLit {
+                                global.minimum_size = (*l).int_number as usize;
+                                get_and_expect_token_but_continue(l, c, Token::CBracket)?;
+                            }
+                            get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon])?;
+                        }
+
+                        while (*l).token != Token::SemiColon {
+                            let value = match (*l).token {
+                                Token::Minus => {
+                                    get_and_expect_token(l, Token::IntLit)?;
+                                    ImmediateValue::Literal(!(*l).int_number + 1)
+                                }
+                                Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
+                                Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
+                                Token::ID => {
+                                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                    let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
+                                    let var = find_var_near(scope, name);
+                                    if var.is_null() {
+                                        diagf!((*l).loc, c!("ERROR: could not find name `%s`\n"), name);
+                                        bump_error_count(c)?;
+                                    }
+                                    ImmediateValue::Name(name)
+                                }
+                                _ => unreachable!()
+                            };
+                            da_append(&mut global.values, value);
+
+                            get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
+                            if (*l).token == Token::Comma {
+                                get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID])?;
+                            } else {
+                                break;
+                            }
+                        }
+
+                        if !global.is_vec && global.values.count == 0 {
+                            da_append(&mut global.values, ImmediateValue::Literal(0));
+                        }
+                        da_append(&mut (*c).globals, global)
+                    }
                 }
             }
-
-            if !global.is_vec && global.values.count == 0 {
-                da_append(&mut global.values, ImmediateValue::Literal(0));
-            }
-            da_append(&mut (*c).globals, global)
-
         }
     }
 
@@ -1179,6 +1201,38 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
         da_append(input_paths, path);
     }
     Some(())
+}
+
+pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
+    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
+
+    let p = if cfg!(target_os = "windows") {
+        let p1 = strrchr(path, '/' as i32);
+        let p2 = strrchr(path, '\\' as i32);
+        cmp::max(p1, p2)
+    } else {
+        strrchr(path, '/' as i32)
+    };
+
+    let filename = if p.is_null() { path } else { p.add(1) };
+    let parent_len = filename.offset_from(path);
+
+    let garbage_dir = if parent_len == 0 {
+        // input path is relative and does not begin with "./" or "../", like "main.b"
+        GARBAGE_PATH_NAME
+    } else {
+        temp_sprintf(c!("%.*s%s"), parent_len, path, GARBAGE_PATH_NAME)
+    };
+
+    if !mkdir_if_not_exists(garbage_dir) { return None }
+
+    let gitignore_path = temp_sprintf(c!("%s/.gitignore"), garbage_dir);
+    if !file_exists(gitignore_path)? {
+        write_entire_file(gitignore_path, c!("*") as *const c_void, 1)?;
+    }
+
+    let base_filename = temp_strip_suffix(filename, c!(".b")).unwrap_or(filename);
+    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, base_filename, target.name()))
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
@@ -1304,6 +1358,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut input: String_Builder = zeroed();
 
     scope_push(&mut c.vars);          // begin global scope
+
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
 
@@ -1314,12 +1369,27 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
         compile_program(&mut l, &mut c)?;
     }
+
+    for i in 0..c.used_funcs.count {
+        let used_global = *c.used_funcs.items.add(i);
+
+        if find_var_deep(&mut c.vars, used_global.name).is_null() {
+            diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
+            bump_error_count(&mut c);
+        }
+    }
+
     scope_pop(&mut c.vars);          // end global scope
 
     if c.error_count > 0 {
         return None
     }
 
+    let garbage_base = if (*output_path).is_null() {
+        get_garbage_base(*input_paths.items, target)?
+    } else {
+        get_garbage_base(*output_path, target)?
+    };
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
@@ -1331,6 +1401,65 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     match target {
+        Target::Gas_AArch64_Linux => {
+            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            printf(c!("INFO: Generated %s\n"), output_asm_path);
+
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                &mut cmd,
+                gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            cmd_append! {
+                &mut cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), effective_output_path, output_obj_path,
+            }
+            if *nostdlib {
+                cmd_append! {
+                    &mut cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            for i in 0..(*linker).count {
+                cmd_append!{
+                    &mut cmd,
+                    *(*linker).items.add(i),
+                }
+            }
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        }
         Target::Gas_x86_64_Linux => {
             codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
 
@@ -1345,7 +1474,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1355,7 +1484,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("as"), output_asm_path, c!("-o") ,output_obj_path,
@@ -1402,7 +1531,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), base_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1412,7 +1541,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("x86_64-w64-mingw32-gcc")
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("as"), output_asm_path, c!("-o") ,output_obj_path,
@@ -1491,65 +1620,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::gas_x86_64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
-        Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
-                (c!("as"), c!("cc"))
-            } else {
-                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
-                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
-                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-
-            cmd_append! {
-                &mut cmd,
-                cc, if cfg!(target_os = "android") {
-                    c!("-fPIC")
-                } else {
-                    c!("-no-pie")
-                },
-                c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
         Target::Gas_AArch64_Darwin => {
             codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
 
@@ -1564,7 +1634,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1575,7 +1645,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
@@ -1616,7 +1686,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
-            let output_asm_path = temp_sprintf(c!("%s.asm"), effective_output_path);
+            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1626,7 +1696,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 return None;
             }
 
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,
@@ -1673,7 +1743,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
 
-            let output_asm_path = temp_sprintf(c!("%s.asm"), base_path);
+            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_asm_path);
 
@@ -1683,7 +1753,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 c!("x86_64-w64-mingw32-gcc")
             };
 
-            let output_obj_path = temp_sprintf(c!("%s.obj"), base_path);
+            let output_obj_path = temp_sprintf(c!("%s.obj"), garbage_base);
             cmd_append! {
                 &mut cmd,
                 c!("fasm"), output_asm_path, output_obj_path,

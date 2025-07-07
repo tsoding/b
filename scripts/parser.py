@@ -105,7 +105,10 @@ def parse_function(f):
                 op['arguments'] = []
                 for _ in range(argument_count):
                     op['arguments'].append(parse_argument(f))
-            
+            case 0x0D:
+                op["index"] = parse_u64(f)
+                op["arg"] = parse_argument(f)
+                op["offset"] = parse_argument(f)
             case _:
                 assert False, f"Opcode 0x{opcode:02x} not recognised"
         func['ops'].append(op)
@@ -245,6 +248,8 @@ for f in bcode["functions"]:
                     print(f", {dump_argument(i)}", end='')
 
                 print(")")
+            case 0x0D:
+                print(f"\tauto[{op["index"]}] = {dump_argument(op["arg"])}[{dump_argument(op["offset"])}]")
             case _:
                 print(f"\tDUMMY: {op["opcode"]} ")
 

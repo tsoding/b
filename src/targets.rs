@@ -44,21 +44,6 @@ impl Target {
         }
         None
     }
-
-    pub unsafe fn word_size(self) -> u64 {
-        match self {
-            Self::Fasm_x86_64_Windows => 8,
-            Self::Fasm_x86_64_Linux   => 8,
-            Self::Gas_x86_64_Windows  => 8,
-            Self::Gas_x86_64_Linux    => 8,
-            Self::Gas_x86_64_Darwin   => 8,
-            Self::Gas_AArch64_Linux   => 8,
-            Self::Gas_AArch64_Darwin  => 8,
-            Self::Bytecode            => 8,
-            Self::Uxn                 => 2,
-            Self::Mos6502             => 2,
-        }
-    }
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
