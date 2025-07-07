@@ -1038,7 +1038,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let func = arena::strdup(&mut (*c).arena_names, (*l).string);
                 let func_loc = (*l).loc;
                 if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
-                    // TODO: report all the duplicate variadics?
+                    // TODO: report all the duplicate variadics maybe?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
                     bump_error_count(c)?;
@@ -1057,10 +1057,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
             Token::Extrn => {
-                if (*c).historical {
-                    diagf!((*l).loc, c!("ERROR: top level extrn declarations are not allowed in the historical mode\n"));
-                    bump_error_count(c)?;
-                }
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
                     let name = arena::strdup(&mut (*c).arena_names, (*l).string);
