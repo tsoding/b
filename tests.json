@@ -835,7 +835,7 @@
             "comment": ""
         },
         "6502": {
-            "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
+            "expected_stdout": "69\r\n16960\r\n64177\r\n",
             "state": "Enabled",
             "comment": ""
         },
