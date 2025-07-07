@@ -582,7 +582,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of selected compilation targets."));
 
     let cases_flags          = flag_list(c!("c"), c!("Test cases to select for testing. Can be a glob pattern."));
-    // TODO: introduce -xc flag similar to -xt
+    let exclude_cases_flags  = flag_list(c!("xc"), c!("Test cases to exclude from selected ones. Can be a glob pattern"));
     let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of selected test cases"));
 
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
@@ -658,23 +658,38 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         da_append(&mut all_cases, case_name);
     }
 
-    let mut cases: Array<*const c_char> = zeroed();
+    let mut selected_cases: Array<*const c_char> = zeroed();
     if (*cases_flags).count == 0 {
-        cases = all_cases;
+        selected_cases = all_cases;
     } else {
         for i in 0..(*cases_flags).count {
-            let saved_count = cases.count;
+            let saved_count = selected_cases.count;
             let pattern = *(*cases_flags).items.add(i);
             for i in 0..all_cases.count {
                 let case_name = *all_cases.items.add(i);
                 if matches_glob(pattern, case_name)? {
-                    da_append(&mut cases, case_name);
+                    da_append(&mut selected_cases, case_name);
                 }
             }
-            if cases.count == saved_count {
+            if selected_cases.count == saved_count {
                 fprintf(stderr(), c!("ERROR: unknown test case `%s`\n"), pattern);
                 return None;
             }
+        }
+    }
+    let mut cases: Array<*const c_char> = zeroed();
+    for i in 0..selected_cases.count {
+        let case = *selected_cases.items.add(i);
+        let mut matches_any = false;
+        'exclude: for j in 0..(*exclude_cases_flags).count {
+            let pattern = *(*exclude_cases_flags).items.add(j);
+            if matches_glob(pattern, case)? {
+                matches_any = true;
+                break 'exclude;
+            }
+        }
+        if !matches_any {
+            da_append(&mut cases, case);
         }
     }
 
