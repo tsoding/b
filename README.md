@@ -34,6 +34,8 @@ Find the project documentation at [./docs/](./docs/).
 
 - https://en.wikipedia.org/wiki/B_(programming_language)
 - https://www.nokia.com/bell-labs/about/dennis-m-ritchie/kbman.html
+- https://www.nokia.com/bell-labs/about/dennis-m-ritchie/bref.html
+- https://www.nokia.com/bell-labs/about/dennis-m-ritchie/btut.html
 - https://github.com/tsoding/good_training_language
 - https://www.felixcloutier.com/x86/
 - https://www.scs.stanford.edu/~zyedidia/arm64/
