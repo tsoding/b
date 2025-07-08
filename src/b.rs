@@ -195,7 +195,7 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
     Some(())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Arg {
     /// Bogus value of an Arg.
     ///
@@ -303,13 +303,13 @@ impl Binop {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct AsmStmt {
     line: *const c_char,
     loc: Loc,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Op {
     Bogus,
     UnaryNot       {result: usize, arg: Arg},
@@ -824,7 +824,6 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Return => {
             get_and_expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
-                push_opcode(Op::AutoAssign { index: (*c).return_auto, arg: Arg::Literal(0) }, (*l).loc, c);
                 push_opcode(Op::JmpLabel { label: (*c).return_label }, (*l).loc, c);
             } else if (*l).token == Token::OParen {
                 let (arg, _) = compile_expression(l, c)?;
@@ -1109,14 +1108,17 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         (*c).return_auto = allocate_auto_var(&mut (*c).auto_vars_ator);
                         (*c).return_label = allocate_label_index(c);
                         compile_statement(l, c)?;
-                        if let Some(last_op) = da_last(&(*c).func_body) {
-                            if !matches!((*last_op).opcode, Op::JmpLabel { .. }) {
+                        // setup function epilogue
+                        if let Some(last_op) = da_last_mut(&mut (*c).func_body) {
+                            if (*last_op).opcode == (Op::JmpLabel { label: (*c).return_label }) { 
+                                *last_op = OpWithLocation { opcode: Op::Label { label: (*c).return_label }, loc: (*l).loc };
+                            } else {
                                 push_opcode(Op::AutoAssign { index: (*c).return_auto, arg: Arg::Literal(0) }, (*l).loc, c);
+                                push_opcode(Op::Label { label: (*c).return_label }, (*l).loc, c);
                             }
                         } else {
                             push_opcode(Op::AutoAssign { index: (*c).return_auto, arg: Arg::Literal(0) }, (*l).loc, c);
                         }
-                        push_opcode(Op::Label { label: (*c).return_label }, (*l).loc, c);
                         push_opcode(Op::Return { arg: Some(Arg::AutoVar((*c).return_auto)) }, (*l).loc, c);
                         scope_pop(&mut (*c).vars); // end function scope
 

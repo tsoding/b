@@ -3,7 +3,7 @@ use core::slice;
 use crate::crust::libc;
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Array<T> {
     pub items: *mut T,
     pub count: usize,

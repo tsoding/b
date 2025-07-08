@@ -3,7 +3,7 @@ use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct Loc {
     pub input_path: *const c_char,
     pub line_number: c_int,
