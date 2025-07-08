@@ -31,6 +31,7 @@ macro_rules! missingf {
 
 pub type Result = core::result::Result<(), ErrorKind>;
 
+#[derive(Clone, Copy)]
 pub enum ErrorKind {
     Error,
     Fatal,
@@ -291,6 +292,9 @@ pub struct Lexer {
     pub string: *const c_char,
     pub int_number: u64,
     pub loc: Loc,
+
+    pub next_result: Option<Result>,
+    pub next_point: Parse_Point,
 }
 
 pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *const c_char, historical: bool) -> Lexer {
@@ -302,6 +306,7 @@ pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *
     l.parse_point.line_start  = input_stream;
     l.parse_point.line_number = 1;
     l.historical = historical;
+    l.next_result = None;
     l
 }
 
@@ -478,7 +483,27 @@ unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
     Ok(())
 }
 
+pub unsafe fn peek_token(l: *mut Lexer) -> Option<Token> {
+    let Some(result) = (*l).next_result else {
+        let saved_point = (*l).parse_point;
+        (*l).next_result = Some(get_token(l));
+        (*l).next_point = (*l).parse_point;
+        (*l).parse_point = saved_point;
+        return peek_token(l);
+    };
+    match result {
+        Ok(())                => Some((*l).token),
+        Err(ErrorKind::Error) => Some((*l).token),
+        Err(ErrorKind::Fatal) => None,
+    }
+}
+
 pub unsafe fn get_token(l: *mut Lexer) -> Result {
+    if let Some(result) = (*l).next_result.take() {
+        (*l).parse_point = (*l).next_point;
+        return result;
+    }
+
     'comments: loop {
         skip_whitespaces(l);
 

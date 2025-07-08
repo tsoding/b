@@ -38,6 +38,13 @@ pub unsafe fn get_token(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     }
 }
 
+pub unsafe fn peek_token(l: *mut Lexer, c: *mut Compiler) -> Option<Token> {
+    match lexer::peek_token(l) {
+        Some(token) => Some(token),
+        None        => bump_error_count(c).and(None),
+    }
+}
+
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
         if (*tokens)[i] == (*l).token {
@@ -74,13 +81,11 @@ pub unsafe fn get_and_expect_token(l: *mut Lexer, c: *mut Compiler, token: Token
 }
 
 pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler, token: Token) -> Option<()> {
-    let saved_point = (*l).parse_point;
-    get_token(l, c)?;
-    if expect_token(l, token).is_none() {
-        (*l).parse_point = saved_point;
+    peek_token(l, c)?;
+    if let None = expect_token(l, token) {
         bump_error_count(c)
     } else {
-        Some(())
+        get_token(l, c)
     }
 }
 
@@ -798,16 +803,15 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             compile_statement(l, c)?;
 
-            let saved_point = (*l).parse_point;
-            get_token(l, c)?;
+            peek_token(l, c)?;
             if (*l).token == Token::Else {
+                get_token(l, c)?;
                 let out_label = allocate_label_index(c);
                 push_opcode(Op::JmpLabel{label: out_label}, (*l).loc, c);
                 push_opcode(Op::Label{label: else_label}, (*l).loc, c);
                     compile_statement(l, c)?;
                 push_opcode(Op::Label{label: out_label}, (*l).loc, c);
             } else {
-                (*l).parse_point = saved_point;
                 push_opcode(Op::Label{label: else_label}, (*l).loc, c);
             }
 
