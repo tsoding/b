@@ -484,13 +484,13 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
 
         let saved_point = (*l).parse_point;
         if skip_prefix(l, c!("//")) {
+            skip_until(l, c!("\n"));
             if (*l).historical {
                 (*l).parse_point = saved_point;
                 diagf!(loc(l), c!("LEXER ERROR: C++ style comments are not available in the historical mode.\n"));
-                // TODO: Convert to recoverable error. Need to advance lexer to not get stuck.
+                // TODO: Convert to recoverable error. The problem is we don't yet have a token at this point, so can't return non-fatal here.
                 return Err(ErrorKind::Fatal);
             }
-            skip_until(l, c!("\n"));
             continue 'comments;
         }
 
