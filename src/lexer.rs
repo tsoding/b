@@ -506,7 +506,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
 
     let Some(x) = peek_char(l) else {
         (*l).token = Token::EOF;
-        return Ok(())
+        return Ok(());
     };
 
     let puncts = if !(*l).historical { PUNCTS } else { HISTORICAL_PUNCTS };
@@ -514,7 +514,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
         let (prefix, token) = (*puncts)[i];
         if skip_prefix(l, prefix) {
             (*l).token = token;
-            return Ok(())
+            return Ok(());
         }
     }
 
@@ -540,7 +540,7 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
             }
         }
 
-        return Ok(())
+        return Ok(());
     }
 
     if skip_prefix(l, c!("0x")) {
