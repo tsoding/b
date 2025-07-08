@@ -66,3 +66,5 @@ $ ./build/btest -xt *linux
 ```console
 $ ./build/btest -xt *linux -xc asm*
 ```
+
+<!-- TODO: document -record and tests.json -->
