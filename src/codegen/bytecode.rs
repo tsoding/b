@@ -57,6 +57,7 @@ use core::ffi::*;
 use crate::nob::*;
 use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
 use crate::crust::libc::*;
+use crate::lexer::Loc;
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut Array<u8>) {
     match arg {
@@ -135,9 +136,9 @@ pub unsafe fn append_string(output: *mut Array<u8>, content: *const c_char) {
     sb_appendf(output as *mut String_Builder, c!("%s"), content );
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut Array<u8>) {
+pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], name_loc: Loc, output: *mut Array<u8>) {
     append_string(output, name);
-    append_string(output, (*body)[0].loc.input_path);
+    append_string(output, name_loc.input_path);
     append_u64(output, params_count.try_into().unwrap());
     append_u64(output, auto_vars_count.try_into().unwrap());
     append_u64(output, body.len().try_into().unwrap());
@@ -248,7 +249,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 pub unsafe fn generate_funcs(output: *mut Array<u8>, funcs: *const [Func]) {
     append_u64(output, funcs.len().try_into().unwrap());
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), (*funcs)[i].name_loc, output);
     }
 }
 
@@ -266,7 +267,7 @@ pub unsafe fn generate_globals(output: *mut Array<u8>, globals: *const [Global])
         append_string(output, global.name);      
         append_u64(output, global.values.count.try_into().unwrap());
         for j in 0..global.values.count {
-            let item = *global.values.items.add(i);
+            let item = *global.values.items.add(j);
             match (item) {
                 ImmediateValue::Name(name) => {
                     push_opcode(output, 0x00);

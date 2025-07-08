@@ -29,6 +29,7 @@ RSS=\
 	$(SRC)/codegen/mos6502.rs \
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
+	$(SRC)/codegen/bytecode.rs \
 	$(SRC)/codegen/mod.rs \
 	$(SRC)/runner/fasm_x86_64_linux.rs \
 	$(SRC)/runner/fasm_x86_64_windows.rs \
