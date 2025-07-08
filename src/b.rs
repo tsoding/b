@@ -531,21 +531,36 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
     }
 }
 
+pub unsafe fn push_binop_opcode_or_overload_call(binop: Binop, result: usize, lhs: Arg, rhs: Arg, loc: Loc,
+                                                 c: *mut Compiler) {
+    for i in 0..(*c).op_overloads.count {
+        let (bop, fun) = *(*c).op_overloads.items.add(i);
+        if binop == bop {
+            let mut args: Array<Arg> = zeroed();
+            da_append(&mut args, lhs);
+            da_append(&mut args, rhs);
+            push_opcode(Op::Funcall {result, fun: Arg::External(fun), args}, loc, c);
+            return;
+        }
+    }
+    push_opcode(Op::Binop {binop, index: result, lhs, rhs}, loc, c);
+}
+
 // TODO: communicate to the caller of this function that it expects `lhs` to be an lvalue
 pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
     match lhs {
         Arg::Deref(index) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+            push_binop_opcode_or_overload_call(binop, tmp, lhs, rhs, loc, c);
             push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
         },
         Arg::External(name) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
+            push_binop_opcode_or_overload_call(binop, tmp, lhs, rhs, loc, c);
             push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
         }
         Arg::AutoVar(index) => {
-            push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
+            push_binop_opcode_or_overload_call(binop, index, lhs, rhs, loc, c)
         }
         Arg::Bogus => {
             // Bogus value does not compile to anything
@@ -572,7 +587,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
                 let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
 
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
+                push_binop_opcode_or_overload_call(binop, index, lhs, rhs, (*l).loc, c);
                 lhs = Arg::AutoVar(index);
 
                 lvalue = false;
@@ -998,6 +1013,7 @@ pub struct Compiler {
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub variadics: Array<(*const c_char, Variadic)>,
+    pub op_overloads: Array<(Binop, *const c_char)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
     /// Arena into which the Compiler allocates all the names and
@@ -1064,6 +1080,26 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
+            Token::Operator => {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                lexer::get_token(l)?;
+                let binop = match Binop::from_token((*l).token) {
+                    Some(binop) => Some(binop),
+                    None => {
+                        diagf!((*l).loc, c!("ERROR: expected binary operator, but got %s\n"),
+                               lexer::display_token((*l).token));
+                        None
+                    }
+                }?;
+                get_and_expect_token_but_continue(l, c, Token::Comma)?;
+                get_and_expect_token_but_continue(l, c, Token::ID)?;
+
+                let func = arena::strdup(&mut (*c).arena, (*l).string);
+                da_append(&mut (*c).op_overloads, (binop, func));
+
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
+            },
             Token::Extrn => {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
