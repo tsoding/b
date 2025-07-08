@@ -376,10 +376,6 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             },
         }
     }
-    sb_appendf(output, c!("    mov x0, 0\n"));
-    sb_appendf(output, c!("    add sp, sp, %zu\n"), stack_size);
-    sb_appendf(output, c!("    ldp x29, x30, [sp], 2*8\n"));
-    sb_appendf(output, c!("    ret\n"));
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], variadics: *const [(*const c_char, Variadic)], os: Os) {

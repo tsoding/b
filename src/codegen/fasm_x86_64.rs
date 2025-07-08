@@ -271,10 +271,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
         }
     }
-    sb_appendf(output, c!("    mov rax, 0\n"));
-    sb_appendf(output, c!("    mov rsp, rbp\n"));
-    sb_appendf(output, c!("    pop rbp\n"));
-    sb_appendf(output, c!("    ret\n"));
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
