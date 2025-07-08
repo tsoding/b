@@ -33,8 +33,8 @@ pub type Result = core::result::Result<(), ErrorKind>;
 
 #[derive(Clone, Copy)]
 pub enum ErrorKind {
-    Error,
-    Fatal,
+    Error, // An (invalid) token is available; compilation can continue.
+    Fatal, // No token is available; compilation must be terminated.
 }
 
 #[derive(Clone, Copy, PartialEq)]
