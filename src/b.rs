@@ -733,6 +733,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     lexer::get_token(l)?;
 
     match (*l).token {
+        Token::SemiColon => {
+            Some(())
+        },
         Token::OCurly => {
             scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -749,7 +752,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
-            Some(())
+            compile_statement(l, c)
         }
         Token::Auto => {
             while (*l).token != Token::SemiColon {
@@ -774,7 +777,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-            Some(())
+            compile_statement(l, c)
         }
         Token::If => {
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
