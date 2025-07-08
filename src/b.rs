@@ -921,10 +921,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             if peek_token(l, c)? == Token::ID {
                 let saved_point = (*l).parse_point;
                 get_token(l, c)?;
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
-                let name_loc = (*l).loc;
                 get_token(l, c)?;
                 if (*l).token == Token::Colon {
+                    let name = arena::strdup(&mut (*c).arena, (*l).string);
+                    let name_loc = (*l).loc;
                     let label = allocate_label_index(c);
                     push_opcode(Op::Label{label}, name_loc, c);
                     define_goto_label(c, name, name_loc, label)?;
