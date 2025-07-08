@@ -464,6 +464,43 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 Some((Arg::Literal(((*c).iota_counter - 1) as u64), false))
             }
         }
+        Token::IotaReset => {
+            if (*c).historical {
+                diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                None
+            } else {
+                (*c).iota_counter = 1;
+                Some((Arg::Literal(((*c).iota_counter-1) as u64), false))
+            }
+        }
+        Token::IotaSkip => {
+            let prev = (*c).iota_counter;
+            if (*c).historical {
+                diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                None
+            } else {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                let v = (*l).int_number;
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                (*c).iota_counter += v as usize;
+                Some((Arg::Literal(prev as u64), false))
+            }
+        }
+        Token::IotaSet => {
+            let prev = (*c).iota_counter;
+            if (*c).historical {
+                diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                None
+            } else {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                let v = (*l).int_number;
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                (*c).iota_counter = v as usize;
+                Some((Arg::Literal(prev as u64), false))
+            }
+        }
         Token::ID => {
             let name = arena::strdup(&mut (*c).arena_names, (*l).string);
 
@@ -744,17 +781,6 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     lexer::get_token(l)?;
 
     match (*l).token {
-            Token::Reset => {
-                // Reset shouldn't be used outside of an historical context
-                if (*c).historical {
-                    diagf!((*l).loc, c!("ERROR: cannot use reset in historical mode\n"));
-                    bump_error_count(c)
-                } else {
-                    get_and_expect_token(l, Token::SemiColon)?;
-                    (*c).iota_counter = 0;
-                    Some(())
-                }
-            }
         Token::OCurly => {
             scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -1087,16 +1113,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-            Token::Reset => {
-                // Reset shouldn't be used outside of an historical context
-                if (*c).historical {
-                    diagf!((*l).loc, c!("ERROR: cannot use reset in historical mode\n"));
-                    bump_error_count(c)?;
-                } else {
-                    get_and_expect_token(l, Token::SemiColon)?;
-                    (*c).iota_counter = 0;
-                }
-            }
             _ => {
                 expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena_names, (*l).string);
@@ -1177,7 +1193,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                         // TODO: This code is ugly
                         // couldn't find a better way to write it while keeping accurate error messages
-                        get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket, Token::Iota])?;
+                        get_and_expect_tokens(l, &[Token::Minus, Token::IntLit, Token::CharLit, Token::String, Token::ID, Token::SemiColon, Token::OBracket, Token::Iota, Token::IotaSkip, Token::IotaSet, Token::IotaReset])?;
 
                         if (*l).token == Token::OBracket {
                             global.is_vec = true;
@@ -1196,12 +1212,51 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                     ImmediateValue::Literal(!(*l).int_number + 1)
                                 }
                                 Token::Iota => {
+                                    let prev = (*c).iota_counter;
                                     if (*c).historical { 
                                         diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
                                         bump_error_count(c)?;
                                     }
                                     (*c).iota_counter += 1;
-                                    ImmediateValue::Literal(((*c).iota_counter - 1) as u64)
+                                    ImmediateValue::Literal(prev as u64)
+                                }
+                                Token::IotaReset => {
+                                    if (*c).historical { 
+                                        diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                                        bump_error_count(c)?;
+                                    }
+                                    (*c).iota_counter = 1;
+                                    ImmediateValue::Literal(((*c).iota_counter-1) as u64)
+                                }
+                                Token::IotaSkip => {
+                                    let prev = (*c).iota_counter;
+                                    if (*c).historical { 
+                                        diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                                        bump_error_count(c)?;
+                                    }
+
+                                    get_and_expect_token(l, Token::OParen)?;
+                                    get_and_expect_token(l, Token::IntLit)?;
+                                    let v = (*l).int_number;
+                                    get_and_expect_token(l, Token::CParen)?;
+
+                                    (*c).iota_counter += v as usize;
+                                    ImmediateValue::Literal(prev as u64)
+                                }
+                                Token::IotaSet => {
+                                    let prev = (*c).iota_counter;
+                                    if (*c).historical { 
+                                        diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
+                                        bump_error_count(c)?;
+                                    }
+
+                                    get_and_expect_token(l, Token::OParen)?;
+                                    get_and_expect_token(l, Token::IntLit)?;
+                                    let v = (*l).int_number;
+                                    get_and_expect_token(l, Token::CParen)?;
+
+                                    (*c).iota_counter = v as usize;
+                                    ImmediateValue::Literal(prev as u64)
                                 }
                                 Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                                 Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
