@@ -292,7 +292,9 @@ pub struct Lexer {
     pub string: *const c_char,
     pub int_number: u64,
     pub loc: Loc,
+
     pub next_result: Option<Result>,
+    pub next_point: Parse_Point,
 }
 
 pub unsafe fn new(input_path: *const c_char, input_stream: *const c_char, eof: *const c_char, historical: bool) -> Lexer {
@@ -482,15 +484,20 @@ unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
 }
 
 pub unsafe fn peek_token(l: *mut Lexer) -> Option<Token> {
-    match (*l).next_result.get_or_insert_with(|| get_token(l)) {
+    let saved_point = (*l).parse_point;
+    let token = match (*l).next_result.get_or_insert_with(|| get_token(l)) {
         Ok(())                => Some((*l).token),
         Err(ErrorKind::Error) => Some((*l).token),
         Err(ErrorKind::Fatal) => None,
-    }
+    };
+    (*l).next_point = (*l).parse_point;
+    (*l).parse_point = saved_point;
+    token
 }
 
 pub unsafe fn get_token(l: *mut Lexer) -> Result {
     if let Some(result) = (*l).next_result.take() {
+        (*l).parse_point = (*l).next_point;
         return result;
     }
 

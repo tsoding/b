@@ -804,16 +804,15 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
             compile_statement(l, c)?;
 
-            let saved_point = (*l).parse_point;
-            get_token(l, c)?;
+            peek_token(l, c)?;
             if (*l).token == Token::Else {
+                get_token(l, c)?;
                 let out_label = allocate_label_index(c);
                 push_opcode(Op::JmpLabel{label: out_label}, (*l).loc, c);
                 push_opcode(Op::Label{label: else_label}, (*l).loc, c);
                     compile_statement(l, c)?;
                 push_opcode(Op::Label{label: out_label}, (*l).loc, c);
             } else {
-                (*l).parse_point = saved_point;
                 push_opcode(Op::Label{label: else_label}, (*l).loc, c);
             }
 
@@ -1066,16 +1065,14 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         let name_loc = (*l).loc;
         declare_var(c, name, name_loc, Storage::External{name})?;
 
-        let saved_point = (*l).parse_point;
-        get_token(l, c)?;
+        peek_token(l, c)?;
 
         if (*l).token == Token::OParen { // Function definition
+            get_token(l, c)?;
             scope_push(&mut (*c).vars); // begin function scope
             let mut params_count = 0;
-            let saved_point = (*l).parse_point;
-            get_token(l, c)?;
+            peek_token(l, c)?;
             if (*l).token != Token::CParen {
-                (*l).parse_point = saved_point;
                 'params: loop {
                     get_and_expect_token(l, c, Token::ID)?;
                     let name = arena::strdup(&mut (*c).arena_names, (*l).string);
@@ -1090,6 +1087,8 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         _ => unreachable!(),
                     }
                 }
+            } else {
+                get_token(l, c)?;
             }
             compile_statement(l, c)?;
             scope_pop(&mut (*c).vars); // end function scope
@@ -1119,12 +1118,11 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             (*c).auto_vars_ator = zeroed();
             (*c).op_label_count = 0;
         } else if (*l).token == Token::Asm { // Assembly function definition
+            get_token(l, c)?;
             let mut body: Array<AsmStmt> = zeroed();
             compile_asm_stmts(l, c, &mut body)?;
             da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
         } else { // Variable definition
-            (*l).parse_point = saved_point;
-
             let mut global = Global {
                 name,
                 values: zeroed(),
