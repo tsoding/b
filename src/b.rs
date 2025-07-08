@@ -84,9 +84,9 @@ pub unsafe fn get_and_expect_token_but_continue(l: *mut Lexer, c: *mut Compiler,
     }
 }
 
-pub unsafe fn get_and_expect_tokens(l: *mut Lexer, c: *mut Compiler, clexes: *const [Token]) -> Option<()> {
+pub unsafe fn get_and_expect_tokens(l: *mut Lexer, c: *mut Compiler, tokens: *const [Token]) -> Option<()> {
     get_token(l, c)?;
-    expect_tokens(l, clexes)
+    expect_tokens(l, tokens)
 }
 
 pub unsafe fn expect_token_id(l: *mut Lexer, id: *const c_char) -> Option<()> {
