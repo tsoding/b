@@ -468,11 +468,11 @@ unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
         (*l).int_number = r;
     }
     if (*l).historical && matches!(radix, Radix::Hex) {
-        diagf!((*l).loc, c!("LEXER ERROR: hex literals are not available in historical mode\n"));
+        diagf!((*l).loc, c!("LEXER ERROR: Hex literals are not available in historical mode\n"));
         return Err(ErrorKind::Error);
     }
     if overflow {
-        diagf!((*l).loc, c!("LEXER ERROR: integer literal overflow\n"));
+        diagf!((*l).loc, c!("LEXER ERROR: Integer literal overflow\n"));
         return Err(ErrorKind::Error);
     }
     Ok(())
