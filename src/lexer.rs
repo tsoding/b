@@ -508,10 +508,10 @@ pub unsafe fn get_token(l: *mut Lexer) -> Result {
         (*l).token = Token::EOF;
         return Ok(())
     };
-    let puncs = if !(*l).historical { PUNCTS } else { HISTORICAL_PUNCTS };
 
-    for i in 0..puncs.len() {
-        let (prefix, token) = (*puncs)[i];
+    let puncts = if !(*l).historical { PUNCTS } else { HISTORICAL_PUNCTS };
+    for i in 0..puncts.len() {
+        let (prefix, token) = (*puncts)[i];
         if skip_prefix(l, prefix) {
             (*l).token = token;
             return Ok(())
