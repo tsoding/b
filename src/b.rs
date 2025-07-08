@@ -536,16 +536,16 @@ pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut 
     match lhs {
         Arg::Deref(index) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Binop{binop, index: tmp, lhs, rhs}, loc, c);
+            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
             push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
         },
         Arg::External(name) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_opcode(Op::Binop{binop, index: tmp, lhs, rhs}, loc, c);
+            push_opcode(Op::Binop {binop, index: tmp, lhs, rhs}, loc, c);
             push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
         }
         Arg::AutoVar(index) => {
-            push_opcode(Op::Binop{binop, index, lhs, rhs}, loc, c)
+            push_opcode(Op::Binop {binop, index, lhs, rhs}, loc, c)
         }
         Arg::Bogus => {
             // Bogus value does not compile to anything
@@ -572,7 +572,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
                 let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
 
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop{binop, index, lhs, rhs}, (*l).loc, c);
+                push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
                 lhs = Arg::AutoVar(index);
 
                 lvalue = false;
@@ -870,7 +870,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     label: (*switch_frame).label
                 }, case_loc, c);
 
-                push_opcode(Op::Binop{
+                push_opcode(Op::Binop {
                     binop: Binop::Equal,
                     index: (*switch_frame).cond,
                     lhs: (*switch_frame).value,
