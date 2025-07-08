@@ -13,7 +13,7 @@ f3(a, b) {
 
 __operator__(*,  f1);
 __operator__(>>, f2);
-__operator__(|,  f3);
+__operator__(<=,  f3);
 
 __operator__(<<, f);
 
@@ -25,6 +25,6 @@ cout 1;
 endl "\n";
 
 main() {
-    printf("result = %d\n", ((2 * 3) >> 4) | 5);
+    printf("result = %d\n", ((2 * 3) >> 4) <= 5);
     cout << "Testing B++" << endl;
 }
