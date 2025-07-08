@@ -450,22 +450,22 @@ unsafe fn parse_digit(c: c_char, radix: Radix) -> Option<u8> {
 unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
     let mut overflow = false;
     while let Some(x) = peek_char(l) {
-        let Some(d) = parse_digit(x, radix) else {
+        let Some(digit) = parse_digit(x, radix) else {
             break;
         };
         skip_char(l);
 
-        let Some(r) = i64::checked_mul((*l).int_number as i64, radix as i64) else {
+        let Some(r) = (*l).int_number.checked_mul(radix as u64) else {
             overflow = true;
             continue;
         };
-        (*l).int_number = r as u64;
+        (*l).int_number = r;
 
-        let Some(r) = i64::checked_add((*l).int_number as i64, d as i64) else {
+        let Some(r) = (*l).int_number.checked_add(digit as u64) else {
             overflow = true;
             continue;
         };
-        (*l).int_number = r as u64;
+        (*l).int_number = r;
     }
     if (*l).historical && matches!(radix, Radix::Hex) {
         diagf!((*l).loc, c!("LEXER ERROR: hex literals are not available in historical mode\n"));

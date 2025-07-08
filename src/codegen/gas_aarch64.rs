@@ -346,16 +346,34 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 }
             }
             Op::Label {label} => {
-                sb_appendf(output, c!("%s.label_%zu:\n"), name, label);
+                match os {
+                    Os::Linux => sb_appendf(output, c!(".L%s.label_%zu:\n"), name, label),
+                    Os::Darwin => sb_appendf(output, c!("L%s.label_%zu:\n"), name, label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
             Op::JmpLabel {label} => {
-                sb_appendf(output, c!("    b %s.label_%zu\n"), name, label);
+                match os {
+                    Os::Linux => sb_appendf(output, c!("b .L%s.label_%zu\n"), name, label),
+                    Os::Darwin => sb_appendf(output, c!("b L%s.label_%zu\n"), name, label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
             Op::JmpIfNotLabel {label, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc, os);
                 sb_appendf(output, c!("    cmp x0, 0\n"));
-                sb_appendf(output, c!("    beq %s.label_%zu\n"), name, label);
+                match os {
+                    Os::Linux => sb_appendf(output, c!("    beq .L%s.label_%zu\n"), name, label),
+                    Os::Darwin => sb_appendf(output, c!("    beq L%s.label_%zu\n"), name, label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
+            Op::Index {result, arg, offset} => {
+                load_arg_to_reg(arg, c!("x0"), output, op.loc, os);
+                load_arg_to_reg(offset, c!("x1"), output, op.loc, os);
+                sb_appendf(output, c!("    add x0, x0, x1, lsl 3\n"));
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
+            },
         }
     }
     sb_appendf(output, c!("    mov x0, 0\n"));
