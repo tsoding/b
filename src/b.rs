@@ -531,36 +531,21 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
     }
 }
 
-pub unsafe fn push_binop_opcode_or_overload_call(binop: Binop, result: usize, lhs: Arg, rhs: Arg, loc: Loc,
-                                                 c: *mut Compiler) {
-    for i in 0..(*c).op_overloads.count {
-        let (bop, fun) = *(*c).op_overloads.items.add(i);
-        if binop == bop {
-            let mut args: Array<Arg> = zeroed();
-            da_append(&mut args, lhs);
-            da_append(&mut args, rhs);
-            push_opcode(Op::Funcall {result, fun: Arg::External(fun), args}, loc, c);
-            return;
-        }
-    }
-    push_opcode(Op::Binop {binop, index: result, lhs, rhs}, loc, c);
-}
-
 // TODO: communicate to the caller of this function that it expects `lhs` to be an lvalue
 pub unsafe fn compile_binop(lhs: Arg, rhs: Arg, binop: Binop, loc: Loc, c: *mut Compiler) {
     match lhs {
         Arg::Deref(index) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_binop_opcode_or_overload_call(binop, tmp, lhs, rhs, loc, c);
+            push_opcode(Op::Binop{binop, index: tmp, lhs, rhs}, loc, c);
             push_opcode(Op::Store {index, arg: Arg::AutoVar(tmp)}, loc, c);
         },
         Arg::External(name) => {
             let tmp = allocate_auto_var(&mut (*c).auto_vars_ator);
-            push_binop_opcode_or_overload_call(binop, tmp, lhs, rhs, loc, c);
+            push_opcode(Op::Binop{binop, index: tmp, lhs, rhs}, loc, c);
             push_opcode(Op::ExternalAssign {name, arg: Arg::AutoVar(tmp)}, loc, c)
         }
         Arg::AutoVar(index) => {
-            push_binop_opcode_or_overload_call(binop, index, lhs, rhs, loc, c)
+            push_opcode(Op::Binop{binop, index, lhs, rhs}, loc, c)
         }
         Arg::Bogus => {
             // Bogus value does not compile to anything
@@ -587,7 +572,7 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
                 let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
 
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_binop_opcode_or_overload_call(binop, index, lhs, rhs, (*l).loc, c);
+                push_opcode(Op::Binop{binop, index, lhs, rhs}, (*l).loc, c);
                 lhs = Arg::AutoVar(index);
 
                 lvalue = false;
@@ -1420,6 +1405,26 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         if find_var_deep(&mut c.vars, used_global.name).is_null() {
             diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
             bump_error_count(&mut c);
+        }
+    }
+
+    // resolve operators
+    for i in 0..c.funcs.count {
+        let f = *c.funcs.items.add(i);
+        for j in 0..f.body.count {
+            let op = f.body.items.add(j);
+            if let Op::Binop {binop, index, lhs, rhs} = (*op).opcode {
+                for i in 0..c.op_overloads.count {
+                    let (bop, fun) = *c.op_overloads.items.add(i);
+                    if binop == bop {
+                        let mut args: Array<Arg> = zeroed();
+                        da_append(&mut args, lhs);
+                        da_append(&mut args, rhs);
+                        (*op).opcode = Op::Funcall {result: index, fun: Arg::External(fun), args};
+                        break;
+                    }
+                }
+            }
         }
     }
 

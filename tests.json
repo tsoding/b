@@ -1878,5 +1878,12 @@
             "state": "Enabled",
             "comment": ""
         }
+    },
+    "operator_overloading": {
+        "6502": {
+            "expected_stdout": "1: 2 * 3\r\n2: 5 + 4\r\n3: 1 - 5\r\nresult = 11\r\n",
+            "state": "Enabled",
+            "comment": ""
+        }
     }
 }
