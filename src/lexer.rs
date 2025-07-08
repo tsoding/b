@@ -499,7 +499,8 @@ pub unsafe fn peek_token(l: *mut Lexer) -> Option<Token> {
 }
 
 pub unsafe fn get_token(l: *mut Lexer) -> Result {
-    if let Some(result) = (*l).next_result.take() {
+    if let Some(result) = (*l).next_result {
+        (*l).next_result = None;
         (*l).parse_point = (*l).next_point;
         return result;
     }
