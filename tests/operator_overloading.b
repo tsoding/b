@@ -15,6 +15,16 @@ __operator__(*,  f1);
 __operator__(>>, f2);
 __operator__(|,  f3);
 
+__operator__(<<, f);
+
+f(s, w) {
+    printf("%s", w);
+    return (s);
+}
+cout 1;
+endl "\n";
+
 main() {
     printf("result = %d\n", ((2 * 3) >> 4) | 5);
+    cout << "Testing B++" << endl;
 }
