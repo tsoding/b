@@ -484,15 +484,18 @@ unsafe fn parse_number(l: *mut Lexer, radix: Radix) -> Result {
 }
 
 pub unsafe fn peek_token(l: *mut Lexer) -> Option<Token> {
-    let saved_point = (*l).parse_point;
-    let token = match (*l).next_result.get_or_insert_with(|| get_token(l)) {
+    let Some(result) = (*l).next_result else {
+        let saved_point = (*l).parse_point;
+        (*l).next_result = Some(get_token(l));
+        (*l).next_point = (*l).parse_point;
+        (*l).parse_point = saved_point;
+        return peek_token(l);
+    };
+    match result {
         Ok(())                => Some((*l).token),
         Err(ErrorKind::Error) => Some((*l).token),
         Err(ErrorKind::Fatal) => None,
-    };
-    (*l).next_point = (*l).parse_point;
-    (*l).parse_point = saved_point;
-    token
+    }
 }
 
 pub unsafe fn get_token(l: *mut Lexer) -> Result {

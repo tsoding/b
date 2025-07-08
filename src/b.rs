@@ -37,10 +37,10 @@ pub unsafe fn get_token(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     }
 }
 
-pub unsafe fn peek_token(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
+pub unsafe fn peek_token(l: *mut Lexer, c: *mut Compiler) -> Option<Token> {
     match lexer::peek_token(l) {
-        Some(_) => Some(()),
-        None    => bump_error_count(c).and(None),
+        Some(token) => Some(token),
+        None        => bump_error_count(c).and(None),
     }
 }
 
