@@ -11,7 +11,7 @@
   <sub>Logo by Strawberry 🍓</sub>
 </p>
 
-Compiler for the B Programming Language implemented in [Crust](https://github.com/tsoding/crust)
+Compiler for the [B Programming Language](https://en.wikipedia.org/wiki/B_(programming_language)) implemented in [Crust](https://github.com/tsoding/crust).
 
 ## Dependencies
 
