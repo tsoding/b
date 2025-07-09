@@ -830,14 +830,14 @@
             "comment": ""
         },
         "uxn": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
+            "expected_stdout": "69\n16960\n64177\n",
             "state": "Enabled",
-            "comment": ""
+            "comment": "Since 6502 word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
         },
         "6502": {
             "expected_stdout": "69\r\n16960\r\n64177\r\n",
             "state": "Enabled",
-            "comment": ""
+            "comment": "Since 6502 word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "69\n1000000\n123456789987654321\n",
