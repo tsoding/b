@@ -924,32 +924,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         instr(out, TXA);
                     },
                     Binop::Mod => {
-                        // !! TODO !! this should be implemented here and not as a B functions.
-                        // TODO: current mod implementation is linear, we can do better.
-                        load_arg(rhs, op.loc, out, asm);
-                        push16(out, asm);
-                        load_arg(lhs, op.loc, out, asm);
-
-                        instr0(out, JSR, ABS);
-                        add_reloc(out, RelocationKind::External{name: c!("_rem"), offset: 0,
-                                                                   byte: Byte::Both}, asm);
-                        instr(out, TAX);
-                        pop16_discard(out, asm);
-                        instr(out, TXA);
+                        diagf!(op.loc, c!("FATAL: tried to use Mod operation, define using __operator__ instead\n"));
+                        abort();
                     },
                     Binop::Div => {
-                        // !! TODO !! this should be implemented here and not as a B functions.
-                        // TODO: current div implementation is linear, we can do better.
-                        load_arg(rhs, op.loc, out, asm);
-                        push16(out, asm);
-                        load_arg(lhs, op.loc, out, asm);
-
-                        instr0(out, JSR, ABS);
-                        add_reloc(out, RelocationKind::External{name: c!("_div"), offset: 0,
-                                                                   byte: Byte::Both}, asm);
-                        instr(out, TAX);
-                        pop16_discard(out, asm);
-                        instr(out, TXA);
+                        diagf!(op.loc, c!("FATAL: tried to use Div operation, define using __operator__ instead\n"));
+                        abort();
                     },
                     Binop::Mult => {
                         load_two_args(out, lhs, rhs, op, asm);
@@ -1313,7 +1293,7 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
                     }
                 }
                 printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
-                unreachable!();
+                abort();
             },
             RelocationKind::External{name, offset, byte} => {
                 for i in 0..(*asm).externals.count {
@@ -1329,7 +1309,7 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
                     }
                 }
                 printf(c!("linking failed. could not find extern `%s'\n"), name);
-                unreachable!();
+                abort();
             },
             RelocationKind::AddressRel{idx} => {
                 let jaddr = *(*asm).addresses.items.add(idx);

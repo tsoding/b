@@ -1404,5 +1404,53 @@
             "state": "Enabled",
             "comment": ""
         }
+    },
+    "operator_overloading": {
+        "6502": {
+            "expected_stdout": "1: 2 * 3\r\n2: 5 + 4\r\n3: 1 - 5\r\nresult = 11\r\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-x86_64-windows": {
+            "expected_stdout": "1: 2 * 3\r\n2: 5 + 4\r\n3: 1 - 5\r\nresult = 11\r\nTesting B++\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-x86_64-linux": {
+            "expected_stdout": "1: 2 * 3\n2: 5 + 4\n3: 1 - 5\nresult = 11\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        }
+        "gas-x86_64-darwin": {
+            "expected_stdout": "1: 2 * 3\n2: 5 + 4\n3: 1 - 5\nresult = 11\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-aarch64-linux": {
+            "expected_stdout": "1: 2 * 3\n2: 5 + 4\n3: 1 - 5\nresult = 11\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-aarch64-darwin": {
+            "expected_stdout": "1: 2 * 3\n2: 5 + 4\n3: 1 - 5\nresult = 11\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "uxn": {
+            "expected_stdout": "1: 2 * 3\n2: 5 + 4\n3: 1 - 5\nresult = 11\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "fasm-x86_64-windows": {
+            "expected_stdout": "1: 2 * 3\r\n2: 5 + 4\r\n3: 1 - 5\r\nresult = 11\r\nTesting B++\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "fasm-x86_64-linux": {
+            "expected_stdout": "1: 2 * 3\n2: 5 + 4\n3: 1 - 5\nresult = 11\nTesting B++\n",
+            "state": "Enabled",
+            "comment": ""
+        }
+
     }
 }

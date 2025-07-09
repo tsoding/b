@@ -1,3 +1,6 @@
+__operator__(/, _div);
+__operator__(%, _rem);
+
 exit(code) {
     0(code);
 }
@@ -33,12 +36,6 @@ realloc(ptr, size) {
     return (malloc(size));
 }
 
-/* TODO: Try to implement this function with assembly
-   Problem with this implementation is that it is not
-   mapped to the operator
-   We cannot call this function `div` as it conflicts
-   with the `divmod` test
-*/
 _div(a, b) {
     auto d;
     d = 0; while(a >= b) {
@@ -67,9 +64,9 @@ printn(n, b, sign) {
         n = -n;
     }
 
-    if(a=_div(n, b)) /* assignment, not test for equality */
+    if(a=n/b) /* assignment, not test for equality */
         printn(a, b, 0); /* recursive */
-    c = _rem(n,b) + '0';
+    c = n%b + '0';
     if (c > '9') c += 7;
     putchar(c);
 }

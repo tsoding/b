@@ -870,7 +870,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     label: (*switch_frame).label
                 }, case_loc, c);
 
-                push_opcode(Op::Binop{
+                push_opcode(Op::Binop {
                     binop: Binop::Equal,
                     index: (*switch_frame).cond,
                     lhs: (*switch_frame).value,
@@ -998,6 +998,7 @@ pub struct Compiler {
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
     pub variadics: Array<(*const c_char, Variadic)>,
+    pub op_overloads: Array<(Binop, *const c_char)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
     /// Arena into which the Compiler allocates all the names and
@@ -1064,6 +1065,26 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
+            Token::Operator => {
+                get_and_expect_token_but_continue(l, c, Token::OParen)?;
+                lexer::get_token(l)?;
+                let binop = match Binop::from_token((*l).token) {
+                    Some(binop) => Some(binop),
+                    None => {
+                        diagf!((*l).loc, c!("ERROR: expected binary operator, but got %s\n"),
+                               lexer::display_token((*l).token));
+                        None
+                    }
+                }?;
+                get_and_expect_token_but_continue(l, c, Token::Comma)?;
+                get_and_expect_token_but_continue(l, c, Token::ID)?;
+
+                let func = arena::strdup(&mut (*c).arena, (*l).string);
+                da_append(&mut (*c).op_overloads, (binop, func));
+
+                get_and_expect_token_but_continue(l, c, Token::CParen)?;
+                get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
+            },
             Token::Extrn => {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
@@ -1379,6 +1400,26 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         if find_var_deep(&mut c.vars, used_global.name).is_null() {
             diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
             bump_error_count(&mut c);
+        }
+    }
+
+    // resolve operators
+    for i in 0..c.funcs.count {
+        let f = *c.funcs.items.add(i);
+        for j in 0..f.body.count {
+            let op = f.body.items.add(j);
+            if let Op::Binop {binop, index, lhs, rhs} = (*op).opcode {
+                for i in 0..c.op_overloads.count {
+                    let (bop, fun) = *c.op_overloads.items.add(i);
+                    if binop == bop {
+                        let mut args: Array<Arg> = zeroed();
+                        da_append(&mut args, lhs);
+                        da_append(&mut args, rhs);
+                        (*op).opcode = Op::Funcall {result: index, fun: Arg::External(fun), args};
+                        break;
+                    }
+                }
+            }
         }
     }
 
