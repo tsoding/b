@@ -159,7 +159,7 @@ pub struct Report {
 
 pub unsafe fn execute_test(
     // Inputs
-    test_folder: *const c_char, name: *const c_char, target: Target,
+    test_folder: *const c_char, name: *const c_char, target: Target, opt: bool,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
 ) -> Option<Outcome> {
@@ -181,6 +181,9 @@ pub unsafe fn execute_test(
         input_path,
         c!("-t"), target.name(),
         c!("-o"), program_path,
+    }
+    if opt {
+        da_append(cmd, c!("-O"));
     }
     if !cmd_run_sync_and_reset(cmd) {
         return Some(Outcome::BuildFail);
@@ -296,7 +299,7 @@ pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Optio
 
 pub unsafe fn record_tests(
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: *mut Bat,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: *mut Bat, opt: bool,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
     reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>,
@@ -325,7 +328,7 @@ pub unsafe fn record_tests(
                     TestState::Enabled => {
                         let outcome = execute_test(
                             // Inputs
-                            test_folder, case_name, target,
+                            test_folder, case_name, target, opt,
                             // Outputs
                             cmd, sb,
                         )?;
@@ -343,7 +346,7 @@ pub unsafe fn record_tests(
             } else {
                 let outcome = execute_test(
                     // Inputs
-                    test_folder, case_name, target,
+                    test_folder, case_name, target, opt,
                     // Outputs
                     cmd, sb,
                 )?;
@@ -510,7 +513,7 @@ pub unsafe fn save_bat_to_json_file(
 pub unsafe fn replay_tests(
     // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: Bat,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: Bat, opt: bool,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>, jim: *mut Jim,
 ) -> Option<()> {
@@ -538,7 +541,7 @@ pub unsafe fn replay_tests(
                     TestState::Enabled => {
                         let outcome = execute_test(
                             // Inputs
-                            test_folder, case_name, target,
+                            test_folder, case_name, target, opt,
                             // Outputs
                             cmd, sb,
                         )?;
@@ -565,7 +568,7 @@ pub unsafe fn replay_tests(
             } else {
                 let outcome = execute_test(
                     // Inputs
-                    test_folder, case_name, target,
+                    test_folder, case_name, target, opt,
                     // Outputs
                     cmd, sb,
                 )?;
@@ -632,6 +635,8 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let action_flag          = flag_str(c!("a"), default_action.name(), c!("Action to perform. Use -alist to get the list of available actions"));
     let list_actions         = flag_bool(c!("alist"), false, c!("Print the list of all available actions."));
     let record               = flag_bool(c!("record"), false, strdup(temp_sprintf(c!("DEPRECATED! Please use `-%s %s` flag instead."), flag_name(action_flag), Action::Record.name()))); // TODO: memory leak
+
+    let opt                  = flag_bool(c!("O"), false, c!("Enable compiler optimizations"));
 
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
@@ -804,7 +809,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let mut bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             record_tests(
                 // Inputs
-                *test_folder, da_slice(cases), da_slice(targets), &mut bat,
+                *test_folder, da_slice(cases), da_slice(targets), &mut bat, *opt,
                 // Outputs
                 &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
             )?;
@@ -814,7 +819,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             replay_tests(
                 // Inputs
-                *test_folder, da_slice(cases), da_slice(targets), bat,
+                *test_folder, da_slice(cases), da_slice(targets), bat, *opt,
                 // Outputs
                 &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
             );
