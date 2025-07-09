@@ -460,8 +460,39 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
                 None
             } else {
-                (*c).iota_counter += 1;
-                Some((Arg::Literal(((*c).iota_counter - 1) as u64), false))
+                // TODO: If we get a = or a =+ with a constant, consider that
+                let prev = (*c).iota_counter;
+                let save_point = (*l).parse_point;
+                lexer::get_token(l)?;
+                if let Some(_) = Binop::from_assign_token((*l).token) {
+                    match (*l).token {
+                        Token::Eq => {
+                            // Now, except a literal
+                            get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                            let v = (*l).int_number;
+                            (*c).iota_counter = (v as usize) + 1;
+
+                            Some((Arg::Literal(v as u64), false))
+                        }
+                        Token::PlusEq => {
+                            get_and_expect_token_but_continue(l, c, Token::IntLit)?;
+                            let v = (*l).int_number;
+                            (*c).iota_counter += v as usize;
+
+                            Some((Arg::Literal(prev as u64), false))
+                        }
+                        _ => {
+                            diagf!((*l).loc, c!("ERROR: iota does not support '%s' operator\n"), lexer::display_token((*l).token));
+                            None
+                        }
+                    }
+                } else {
+                    // Sorry. Return Everything
+                    (*l).parse_point = save_point;
+
+                    (*c).iota_counter += 1;
+                    Some((Arg::Literal(prev as u64), false))
+                }
             }
         }
         Token::IotaReset => {
@@ -470,6 +501,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 None
             } else {
                 (*c).iota_counter = 1;
+                // Only iota itself get to be an lvalue
                 Some((Arg::Literal(((*c).iota_counter-1) as u64), false))
             }
         }
@@ -484,11 +516,11 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 let v = (*l).int_number;
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 (*c).iota_counter += v as usize;
+                // Only iota itself get to be an lvalue
                 Some((Arg::Literal(prev as u64), false))
             }
         }
         Token::IotaSet => {
-            let prev = (*c).iota_counter;
             if (*c).historical {
                 diagf!((*l).loc, c!("ERROR: iota is not allowed in historical mode\n"));
                 None
@@ -497,8 +529,8 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
                 get_and_expect_token_but_continue(l, c, Token::IntLit)?;
                 let v = (*l).int_number;
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
-                (*c).iota_counter = v as usize;
-                Some((Arg::Literal(prev as u64), false))
+                (*c).iota_counter = (v as usize) + 1;
+                Some((Arg::Literal(v), false))
             }
         }
         Token::ID => {
@@ -644,7 +676,7 @@ pub unsafe fn compile_assign_expression(l: *mut Lexer, c: *mut Compiler) -> Opti
     while let Some(binop) = Binop::from_assign_token((*l).token) {
         let binop_loc = (*l).loc;
         let (rhs, _) = compile_assign_expression(l, c)?;
-
+        
         if !lvalue {
             diagf!(binop_loc, c!("ERROR: cannot assign to rvalue\n"));
             return bump_error_count(c).map(|()| (Arg::Bogus, false));
@@ -1255,7 +1287,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                     let v = (*l).int_number;
                                     get_and_expect_token(l, Token::CParen)?;
 
-                                    (*c).iota_counter = v as usize;
+                                    (*c).iota_counter = (v as usize) + 1;
                                     ImmediateValue::Literal(prev as u64)
                                 }
                                 Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
