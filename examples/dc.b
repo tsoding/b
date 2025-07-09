@@ -310,7 +310,43 @@ li_sub(li1, li2) {
     return (li_new(0));
 }
 
-/* TODO: This method of multiplication is slow! */
+/* TODO: This method of exp/multiplication is slow! */
+li_exp(li1, li2) {
+    if ((li1[0] == LI_NUMTYPE) & (li1[0] == LI_NUMTYPE)) {
+        extrn li_free, li_lt, li_get, li_mul;
+        auto sum;
+        auto one;
+        auto zero;
+
+        sum = li_new(1);
+        zero = li_new(0);
+        one = li_new(1);
+        li1 = li_copy(li1);
+        li2 = li_copy(li2);
+
+        li2[LI_NUM_SIGN] = 0;
+
+        while (li_lt(zero, li2))
+        {
+            auto nsum; nsum = li_mul(sum, li1);
+            li_free(sum);
+            sum = nsum;
+
+            auto ncount; ncount = li_add(zero, one);
+            li_free(zero);
+            zero = ncount;
+        }
+
+        if (li_iszero(sum)) sum[LI_NUM_SIGN] = 0;
+
+        li_free(li1);
+        li_free(li2);
+        li_free(zero);
+        li_free(one);
+        return (sum);
+    }
+    return (li_new(0));
+}
 li_mul(li1, li2) {
     if ((li1[0] == LI_NUMTYPE) & (li1[0] == LI_NUMTYPE)) {
         extrn li_free, li_lt, li_get;
@@ -575,6 +611,7 @@ stk_pop() {
         printf("?! no more values ?!\n");
         return (li_new(0));
     }
+
     li = stack_zone[--stack_index];
     return (li);
 }
@@ -626,6 +663,17 @@ rpn_mul() {
     li_b = stk_pop();
     li_a = stk_pop();
     sum = li_mul(li_a, li_b);
+    stk_push(sum);
+    li_free(li_a);
+    li_free(li_b);
+}
+rpn_exp() {
+    auto li_b, li_a, sum;
+    extrn li_exp;
+
+    li_b = stk_pop();
+    li_a = stk_pop();
+    sum = li_exp(li_a, li_b);
     stk_push(sum);
     li_free(li_a);
     li_free(li_b);
@@ -775,6 +823,8 @@ rpn_lt(r) {
     if (li_lt(li_a, li_b)) {
         extrn dc_registers;
         auto reg; reg = dc_registers[r];
+
+        // TODO
         if (li_type(reg) == LI_STRTYPE) execute(&reg[1]);
         else                            stk_push(li_copy(reg));
     }
@@ -782,14 +832,43 @@ rpn_lt(r) {
     li_free(li_a);
     li_free(li_b);
 }
-rpn_show() {
+
+rpn_showstr(li) {
+    auto charsize; charsize = li_newlen(8);
+    auto a, c1, c;
+    li_setb2(charsize, 8, 1);
+    a = li_div(li, charsize);
+    c1 = li_mod(li, charsize);
+
+    if (!li_iszero(a))
+        rpn_showstr(a);
+    c = li_ton(c1);
+    printf("%c", c);
+
+    li_free(a);
+    li_free(c1);
+    li_free(charsize);
+}
+rpn_popshow() {
+    auto li_a, charsize;
+    extrn printf;
+    extrn dc_obase;
+
+    li_a = stk_pop();
+    if (li_type(li_a) != LI_STRTYPE)
+        rpn_showstr(li_a);
+    else
+        printf("%s", &li_a[1]);
+    li_free(li_a);
+}
+rpn_show(end) {
     auto li_a;
     extrn printf;
     extrn dc_obase;
 
     li_a = stk_pop();
     li_show(li_a, dc_obase);
-    printf("\n");
+    printf("%s", end);
     stk_push(li_a);
 }
 rpn_pushlen() {
@@ -895,16 +974,19 @@ execute(in) {
              if (chr == '+') rpn_add();
         else if (chr == '-') rpn_sub();
         else if (chr == '*') rpn_mul();
+        else if (chr == '^') rpn_exp();
         else if (chr == '/') rpn_div();
         else if (chr == '%') rpn_mod();
         else if (chr == 'd') rpn_dup();
         else if (chr == 'r') rpn_swap();
         else if (chr == 'f') stk_show();
         else if (chr == 'c') stk_clear();
-        else if (chr == 'p') rpn_show();
-        else if (chr == 'n') { rpn_show(); li_free(stk_pop()); }
+        else if (chr == 'p') rpn_show("\n");
+        else if (chr == 'P') rpn_popshow();
+        else if (chr == 'n') { rpn_show(""); li_free(stk_pop()); }
         else if (chr == 'k') { extrn dc_sf; li_free(dc_sf); dc_sf = stk_pop(); }            /* TODO: Skalefactors */
         else if (chr == 'K') { extrn dc_sf; stk_push(li_copy(dc_sf)); }
+        else if (chr == 'q') { return(1); }
         else if (chr == 'Z') rpn_pushlen();
         else if (chr == 'i') rpn_seti();
         else if (chr == 'o') rpn_seto();
@@ -949,7 +1031,8 @@ execute(in) {
                 stk_push(li);
             } else {
                 /* Execute that string */
-                execute(&li[1]);
+                if (execute(&li[1]) == 1)
+                    return(0);
             }
         }
         else if (chr == '[') {
@@ -989,6 +1072,7 @@ execute(in) {
         }
 
     }
+    return(0);
 }
 
 dc_ibase 10;
