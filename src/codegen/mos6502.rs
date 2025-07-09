@@ -757,11 +757,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
-            Op::Return {arg} => {
-                if let Some(arg) = arg {
-                    load_arg(arg, op.loc, out, asm);
-                }
-
+            Op::SetRetReg { arg } => {
+                load_arg(arg, op.loc, out, asm);
+            }
+            Op::Return => {
                 if stack_size > 0 {
                     // seriously... we don't have enough registers to save A to...
                     instr8(out, STA, ZP, ZP_TMP_0);

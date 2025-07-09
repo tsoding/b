@@ -324,7 +324,8 @@ pub enum Op {
     Label          {label: usize},
     JmpLabel       {label: usize},
     JmpIfNotLabel  {label: usize, arg: Arg},
-    Return         {arg: Option<Arg>},
+    SetRetReg      {arg: Arg},
+    Return,
 }
 
 #[derive(Clone, Copy)]
@@ -832,7 +833,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 let (arg, _) = compile_expression(l, c)?;
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-                push_opcode(Op::AutoAssign { index: (*c).return_auto, arg }, (*l).loc, c);
+                push_opcode(Op::SetRetReg { arg }, (*l).loc, c);
                 push_opcode(Op::JmpLabel { label: (*c).return_label }, (*l).loc, c);
             } else {
                 unreachable!();
@@ -1002,7 +1003,6 @@ pub struct Compiler {
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
     pub return_label: usize,
-    pub return_auto: usize,
     /// Arena into which the Compiler allocates all the names and
     /// objects that need to live for the duration of the
     /// compilation. Even if some object/names don't need to live that
@@ -1108,7 +1108,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                 }
                             }
                         }
-                        (*c).return_auto = allocate_auto_var(&mut (*c).auto_vars_ator);
                         (*c).return_label = allocate_label_index(c);
                         compile_statement(l, c)?;
                         // setup function epilogue
@@ -1116,13 +1115,13 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             if (*last_op).opcode == (Op::JmpLabel { label: (*c).return_label }) { 
                                 *last_op = OpWithLocation { opcode: Op::Label { label: (*c).return_label }, loc: (*l).loc };
                             } else {
-                                push_opcode(Op::AutoAssign { index: (*c).return_auto, arg: Arg::Literal(0) }, (*l).loc, c);
+                                push_opcode(Op::SetRetReg { arg: Arg::Literal(0) }, (*l).loc, c);
                                 push_opcode(Op::Label { label: (*c).return_label }, (*l).loc, c);
                             }
                         } else {
-                            push_opcode(Op::AutoAssign { index: (*c).return_auto, arg: Arg::Literal(0) }, (*l).loc, c);
+                            push_opcode(Op::SetRetReg { arg: Arg::Literal(0) }, (*l).loc, c);
                         }
-                        push_opcode(Op::Return { arg: Some(Arg::AutoVar((*c).return_auto)) }, (*l).loc, c);
+                        push_opcode(Op::Return, (*l).loc, c);
                         scope_pop(&mut (*c).vars); // end function scope
 
                         for i in 0..(*c).func_gotos.count {

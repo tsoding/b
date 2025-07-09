@@ -34,12 +34,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
-            Op::Return {arg} => {
-                sb_appendf(output, c!("    return "));
-                if let Some(arg) = arg {
-                    dump_arg(output, arg);
-                }
+            Op::SetRetReg { arg } => {
+                sb_appendf(output, c!("    ret_reg = "));
+                dump_arg(output, arg);
                 sb_appendf(output, c!("\n"));
+            }
+            Op::Return => {
+                sb_appendf(output, c!("    return\n"));
             },
             Op::Store{index, arg} => {
                 sb_appendf(output, c!("    store deref[%zu], "), index);

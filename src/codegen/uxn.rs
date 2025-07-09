@@ -482,15 +482,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::JCI);
                 write_label_rel(output, *labels.items.add(label), assembler, 0);
             }
-            Op::Return {arg} => {
+            Op::SetRetReg { arg } => {
                 // Put return value in the FIRST_ARG
-                if let Some(arg) = arg {
-                    load_arg(arg, op.loc,  output, assembler);
-                } else {
-                    write_lit2(output, 0);
-                }
+                load_arg(arg, op.loc,  output, assembler);
                 write_lit_stz2(output, FIRST_ARG);
-
+            }
+            Op::Return => {
                 // restore SP from BP
                 write_lit_ldz2(output, BP);
                 write_lit_stz2(output, SP);
