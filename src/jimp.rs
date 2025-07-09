@@ -93,4 +93,5 @@ pub unsafe fn jimp_object_end(jimp: *mut Jimp) -> Option<()> {
 extern "C" {
     pub fn jimp_begin(jimp: *mut Jimp, file_path: *const c_char, input: *const c_char, input_size: usize);
     pub fn jimp_unknown_member(jimp: *mut Jimp);
+    pub fn jimp_diagf(jimp: *mut Jimp, fmt: *const c_char, ...);
 }
