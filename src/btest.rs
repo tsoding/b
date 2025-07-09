@@ -128,6 +128,7 @@ impl ReportStatus {
         }
     }
 
+
     fn color(self) -> *const c_char {
         match self {
             ReportStatus::OK             => GREEN,
@@ -136,6 +137,17 @@ impl ReportStatus {
             ReportStatus::BuildFail      => RED,
             ReportStatus::RunFail        => RED,
             ReportStatus::Disabled       => GREY,
+        }
+    }
+
+    fn html_color(self) -> *const c_char {
+        match self {
+            ReportStatus::OK => c!("limegreen"),
+            ReportStatus::NeverRecorded => c!("lightblue"),
+            ReportStatus::StdoutMismatch => c!("yellow"),
+            ReportStatus::BuildFail => c!("red"),
+            ReportStatus::RunFail => c!("red"),
+            ReportStatus::Disabled => c!("grey"),
         }
     }
 
@@ -576,6 +588,46 @@ pub unsafe fn replay_tests(
     Some(())
 }
 
+
+pub unsafe fn render_html(targets: *const Array<Target>, reports: *const Array<Report>, _stats_by_target: *const Array<ReportStats>, output: *mut String_Builder ) {
+    sb_appendf(output, c!("<!DOCTYPE html>\n"));
+    sb_appendf(output, c!("<html lang=\"en\">\n"));
+    sb_appendf(output, c!("  <head>\n"));
+    sb_appendf(output, c!("    <link rel=\"stylesheet\" href=\"styles.css\">\n"));
+    sb_appendf(output, c!("  </head>\n"));
+    sb_appendf(output, c!("  <body>\n"));
+    sb_appendf(output, c!("    <table id=\"results-table\">\n"));
+    sb_appendf(output, c!("    <thead>\n"));
+    sb_appendf(output, c!("      <tr>\n"));
+    sb_appendf(output, c!("        <th>Tests</th>\n"));
+    for i in 0..(*targets).count {
+        let target = *(*targets).items.add(i);
+        sb_appendf(output, c!("        <td>%s</td>\n"), target.name());
+    }
+    sb_appendf(output, c!("      </tr>\n"));
+    sb_appendf(output, c!("    </thead>\n"));
+    sb_appendf(output, c!("    <tbody>\n"));
+    for i in 0..(*reports).count {
+        let report = (*reports).items.add(i);
+        sb_appendf(output, c!("      <tr>\n"));
+        sb_appendf(output, c!("        <th class=\"case\">%s</th>\n"), (*report).name);
+        for j in 0..(*report).statuses.count {
+            let status = *(*report).statuses.items.add(j);
+            sb_appendf(output, c!("        <td style=\"color: %s\">%s</td>\n"), status.html_color(), status.description());
+        }
+        sb_appendf(output, c!("      </tr>\n"));
+    }
+    sb_appendf(output, c!("      <tr>\n"));
+    sb_appendf(output, c!("        <th>Stats</th>\n"));
+    sb_appendf(output, c!("      </tr>\n"));
+
+    // TODO: Incorporate stats_by_target into the HTML report
+    sb_appendf(output, c!("    </tbody>\n"));
+    sb_appendf(output, c!("    </table>\n"));
+    sb_appendf(output, c!("  </body>\n"));
+    sb_appendf(output, c!("</html>\n"));
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let target_flags         = flag_list(c!("t"), c!("Compilation targets to select for testing. Can be a glob pattern."));
     let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from selected ones. Can be a glob pattern"));
@@ -734,7 +786,9 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
         );
     }
-
+    sb.count = 0;
+    render_html(&targets, &reports, &stats_by_target, &mut sb);
+    write_entire_file(temp_sprintf(c!("%s/tests.html"), GARBAGE_FOLDER), sb.items as *const c_void, sb.count);
     Some(())
 }
 
