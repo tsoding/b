@@ -1,4 +1,23 @@
-// The B compiler itself
+//! # The B compiler
+//!
+//! ## Logging
+//!
+//! Right now there are 3 mechanisms to log anything in the compiler:
+//! 1. Just directly output anything to stdout/stderr with (f)printf
+//! 2. lexer::diagf()
+//! 3. nob::log()
+//!
+//! Direct printf-ing is used primarily for printing help
+//! messages. Flags like `-help`, `-t list`, etc.
+//!
+//! lexer::diagf() is used for reporting compiler diagnostics that
+//! have a specific location within the source code the compiler is
+//! analysing.
+//!
+//! nob::log() is used for reporting things that the compiler is doing
+//! outside of direct analysis of the user's source code (like
+//! creating files or calling external programs) that are potentially
+//! affected by the -q flag.
 #![no_main]
 #![no_std]
 #![allow(non_upper_case_globals)]
@@ -1271,6 +1290,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
     let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
+    let quiet       = flag_bool(c!("q"), false, c!("Makes the compiler yap less about what it's doing"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1292,6 +1312,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
+    if *quiet {
+        minimal_log_level = Log_Level::WARNING;
+    }
+
     if *help {
         usage();
         return Some(());
@@ -1299,7 +1323,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if (*target_name).is_null() {
         usage();
-        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag.\n"), flag_name(target_name));
+        log(Log_Level::ERROR, c!("No value is provided for -%s flag."), flag_name(target_name));
         return None;
     }
 
@@ -1313,13 +1337,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let Some(target) = Target::by_name(*target_name) else {
         usage();
-        fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
+        log(Log_Level::ERROR, c!("Unknown target `%s`"), *target_name);
         return None;
     };
 
     if input_paths.count == 0 {
         usage();
-        fprintf(stderr(), c!("ERROR: no inputs are provided\n"));
+        log(Log_Level::ERROR, c!("no inputs are provided"));
         return None;
     }
 
@@ -1339,24 +1363,21 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         //     - rexim (2025-06-12 20:56:08)
         let libb_path = c!("./libb");
         if !file_exists(libb_path)? {
-            fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
+            log(Log_Level::ERROR, c!("No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag."), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }
         include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
         include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
     }
 
-    // Logging what files are actually being compiled so nothing is hidden from the user.
-    // TODO: There should be some sort of -q mode which suppress all the logging like this.
-    //
-    //     - rexim (2025-06-12 20:18:02)
-    printf(c!("INFO: Compiling files "));
+    let mut sb: String_Builder = zeroed();
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
-        if i > 0 { printf(c!(" ")); }
-        printf(c!("%s"), input_path);
+        if i > 0 { sb_appendf(&mut sb, c!(", ")); }
+        sb_appendf(&mut sb, c!("%s"), input_path);
     }
-    printf(c!("\n"));
+    da_append(&mut sb, 0);
+    log(Log_Level::INFO, c!("compiling files %s"), sb.items);
 
     let mut input: String_Builder = zeroed();
 
@@ -1420,7 +1441,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
                 (c!("as"), c!("cc"))
@@ -1479,11 +1500,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
+                log(Log_Level::ERROR, c!("Cross-compilation of x86_64 linux is not supported for now"));
                 return None;
             }
 
@@ -1536,7 +1557,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
@@ -1587,12 +1608,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let (gas, cc) = (c!("as"), c!("cc"));
 
             if !(cfg!(target_os = "macos")) {
-                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
                 return None;
             }
 
@@ -1639,12 +1660,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let (gas, cc) = (c!("as"), c!("cc"));
 
             if !(cfg!(target_os = "macos")) {
-                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
                 return None;
             }
 
@@ -1688,7 +1709,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            log(Log_Level::INFO, c!("generated %s\n"), effective_output_path);
             if *run {
                 runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
             }
@@ -1707,7 +1728,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            log(Log_Level::INFO, c!("generated %s"), effective_output_path);
             if *run {
                 runner::mos6502::run(&mut output, config, effective_output_path, None)?;
             }
