@@ -733,6 +733,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     lexer::get_token(l)?;
 
     match (*l).token {
+        Token::SemiColon => {
+            Some(())
+        },
         Token::OCurly => {
             scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -749,7 +752,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
-            Some(())
+            compile_statement(l, c)
         }
         Token::Auto => {
             while (*l).token != Token::SemiColon {
@@ -774,7 +777,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-            Some(())
+            compile_statement(l, c)
         }
         Token::If => {
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
@@ -1362,11 +1365,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     // Logging what files are actually being compiled so nothing is hidden from the user.
     // TODO: There should be some sort of -q mode which suppress all the logging like this.
-    //   Including the logging from external tools like fasm, but this is already a bit harder.
-    //   May require some stdout redirecting capabilities of nob.h.
-    //   -q mode might be important for behavioral testing in a style of https://github.com/tsoding/rere.py.
-    //   I do not plan to actually use rere.py in this project since I don't want to depend on yet another language.
-    //   But I do plan to have similar testing tool written in Crust.
     //
     //     - rexim (2025-06-12 20:18:02)
     printf(c!("INFO: Compiling files "));
@@ -1692,114 +1690,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
                 runner::gas_aarch64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
-        Target::Fasm_x86_64_Linux => {
-            codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("fasm"), output_asm_path, output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
-            }
-        }
-        Target::Fasm_x86_64_Windows => {
-            codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
-
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.obj"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("fasm"), output_asm_path, output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
         Target::Uxn => {

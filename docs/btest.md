@@ -16,13 +16,13 @@ It doesn't crash when it encounters errors, it just collects the statuses of the
 If you want to test only on a specific platform you can supply the flag `-t`.
 
 ```console
-$ ./build/btest -t fasm-x86_64-linux
+$ ./build/btest -t gas-x86_64-linux
 ```
 
 You can supply several platforms.
 
 ```console
-$ ./build/btest -t fasm-x86_64-linux -t uxn
+$ ./build/btest -t gas-x86_64-linux -t uxn
 ```
 
 If you want to run a specific test case you can supply flag `-c`.
@@ -40,7 +40,7 @@ $ ./build/btest -c upper -c vector
 And of course you can combine both `-c` and `-t` flags to slice the Test Matrix however you want.
 
 ```console
-$ ./build/btest -c upper -c vector -t fasm-x86_64-linux -t uxn
+$ ./build/btest -c upper -c vector -t gas-x86_64-linux -t uxn
 ```
 
 Both flags accept [glob](https://en.wikipedia.org/wiki/Glob_(programming)) patterns.
@@ -52,7 +52,7 @@ $ ./build/btest -t *linux -c *linux
 If you want to exclude a specific platform you can supply the flag `-xt`.
 
 ```console
-$ ./build/btest -xt fasm-x86_64-linux
+$ ./build/btest -xt gas-x86_64-linux
 ```
 
 `-xt` also accepts [glob](https://en.wikipedia.org/wiki/Glob_(programming)) patterns.
@@ -66,3 +66,5 @@ $ ./build/btest -xt *linux
 ```console
 $ ./build/btest -xt *linux -xc asm*
 ```
+
+<!-- TODO: document -a <action> and tests.json -->
