@@ -84,7 +84,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     Binop::Equal        => sb_appendf(output, c!(" == ")),
                     Binop::NotEqual     => sb_appendf(output, c!(" != ")),
                     Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
-                    Binop::LessEqual    => sb_appendf(output, c!(" < ")),
+                    Binop::LessEqual    => sb_appendf(output, c!(" <= ")),
                 };
                 dump_arg(output, rhs);
                 sb_appendf(output, c!("\n"));
@@ -118,6 +118,13 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 dump_arg(output, arg);
                 sb_appendf(output, c!("\n"));
             }
+            Op::Index {result, arg, offset} => {
+                sb_appendf(output, c!("    auto[%zu] = ("), result);
+                dump_arg(output, arg);
+                sb_appendf(output, c!(") + (") );
+                dump_arg(output, offset);
+                sb_appendf(output, c!(" * WORD_SIZE)\n"));
+            },
         }
     }
 }

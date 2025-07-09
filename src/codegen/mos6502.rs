@@ -364,7 +364,7 @@ pub unsafe fn load_arg(arg: Arg, loc: Loc, out: *mut String_Builder, asm: *mut A
         Arg::RefAutoVar(index) => load_auto_var_ref(out, index, asm),
         Arg::Literal(value) => {
             if value >= 65536 {
-                diagf!(loc, c!("WARNING: contant $%X out of range for 16 bits\n"), value);
+                diagf!(loc, c!("WARNING: contant $%llX out of range for 16 bits\n"), value);
             }
             instr8(out, LDA, IMM, value as u8);
             instr8(out, LDY, IMM, (value >> 8) as u8);
@@ -1248,6 +1248,24 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
                 instr0(out, JMP, ABS);
                 add_reloc(out, RelocationKind::Label{func_name: name, label}, asm);
+            },
+            Op::Index {result, arg, offset} => {
+                load_two_args(out, arg, offset, op, asm);
+
+                // shift offset to the left by one bit
+                instr8(out, ASL, ZP, ZP_RHS_L);
+                instr8(out, ROL, ZP, ZP_RHS_H);
+
+                // add offset and arg
+                instr(out, CLC);
+                instr8(out, ADC, ZP, ZP_RHS_L);
+                instr(out, TAX);
+                instr(out, TYA);
+                instr8(out, ADC, ZP, ZP_RHS_H);
+                instr(out, TAY);
+                instr(out, TXA);
+
+                store_auto(out, result, asm);
             },
         }
     }

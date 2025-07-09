@@ -1,4 +1,4 @@
-// flag.h -- v1.2.0 -- command-line flag parsing
+// flag.h -- v1.2.1 -- command-line flag parsing
 //
 //   Inspired by Go's flag module: https://pkg.go.dev/flag
 //
@@ -377,24 +377,32 @@ void flag_print_options(FILE *stream)
     for (size_t i = 0; i < c->flags_count; ++i) {
         Flag *flag = &c->flags[i];
 
-        fprintf(stream, "    -%s\n", flag->name);
-        fprintf(stream, "        %s\n", flag->desc);
         static_assert(COUNT_FLAG_TYPES == 5, "Exhaustive flag type defaults printing");
         switch (c->flags[i].type) {
         case FLAG_LIST:
+            fprintf(stream, "    -%s <str> ... -%s <str> ...\n", flag->name, flag->name);
+            fprintf(stream, "        %s\n", flag->desc);
             break;
         case FLAG_BOOL:
+            fprintf(stream, "    -%s\n", flag->name);
+            fprintf(stream, "        %s\n", flag->desc);
             if (flag->def.as_bool) {
                 fprintf(stream, "        Default: %s\n", flag->def.as_bool ? "true" : "false");
             }
             break;
         case FLAG_UINT64:
+            fprintf(stream, "    -%s <int>\n", flag->name);
+            fprintf(stream, "        %s\n", flag->desc);
             fprintf(stream, "        Default: %" PRIu64 "\n", flag->def.as_uint64);
             break;
         case FLAG_SIZE:
+            fprintf(stream, "    -%s <int>\n", flag->name);
+            fprintf(stream, "        %s\n", flag->desc);
             fprintf(stream, "        Default: %zu\n", flag->def.as_size);
             break;
         case FLAG_STR:
+            fprintf(stream, "    -%s <str>\n", flag->name);
+            fprintf(stream, "        %s\n", flag->desc);
             if (flag->def.as_str) {
                 fprintf(stream, "        Default: %s\n", flag->def.as_str);
             }
@@ -442,6 +450,8 @@ void flag_print_error(FILE *stream)
 /*
    Revision history:
 
+     1.2.1 (2025-07-04) flag_print_options: denote expected argument types
+                        flag_print_options: indicate flag list usage more clearly
      1.2.0 (2025-05-31) Introduce FLAG_PUSH_DASH_DASH_BACK (by @nullnominal)
      1.1.0 (2025-05-09) Introduce flag list
      1.0.0 (2025-03-03) Initial release
