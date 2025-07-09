@@ -1,6 +1,6 @@
 // -*- mode: simpc -*-
 
-// TODO: doesn't work on fasm_x86_64_windows target due to linking error when using stderr
+// TODO: doesn't work on gas-x86_64-windows target due to linking error when using stderr
 main(argc, argv) {
     extrn printf, fprintf, stderr, atoi;
 
