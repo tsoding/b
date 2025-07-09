@@ -5,7 +5,7 @@ use core::mem::zeroed;
 
 pub unsafe fn run(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
     if !cfg!(target_os = "macos") {
-        fprintf(stderr(), c!("This runner is only for macOS, but the current target is not macOS."));
+        log(Log_Level::ERROR, c!("This runner is only for macOS, but the current target is not macOS."));
         return None;
     }
 

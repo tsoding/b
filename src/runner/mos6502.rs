@@ -62,8 +62,8 @@ pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut
 
         let curr_sp = fake6502::sp & 0xFF;
         if opcode == 0x48 && curr_sp > prev_sp { // PHA instruction
-            printf(c!("[FATAL] Stack overflow detected\n[FATAL] SP changed from $%02X to $%02X after PHA instruction\n"),
-                   prev_sp as c_uint, curr_sp as c_uint);
+            log(Log_Level::ERROR, c!("Stack overflow detected"));
+            log(Log_Level::ERROR, c!("SP changed from $%02X to $%02X after PHA instruction"), prev_sp as c_uint, curr_sp as c_uint);
             return None;
         }
 
@@ -74,7 +74,7 @@ pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut
     }
     // print exit code (in Y:A)
     let code = ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint;
-    fprintf(stderr(), c!("Exited with code %hd\n"), code);
+    log(Log_Level::INFO, c!("Exited with code %hd"), code);
 
     if code != 0 {
         return None;
