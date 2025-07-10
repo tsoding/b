@@ -173,6 +173,7 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
+        Target::Bytecode            => todo!()
     });
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
@@ -195,6 +196,7 @@ pub unsafe fn execute_test(
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
+        targets::Target::Bytecode => todo!(),
     };
 
     (*sb).count = 0;
