@@ -45,7 +45,7 @@ instr_enum! {
         BCC, BCS, BEQ, BIT,
         BMI,
         BNE, BPL, BRK, BVC,
-        VBS,
+        BVS,
         CLC, CLD, CLI, CLV,
         CMP, CPX, CPY,
         DEC, DEX, DEY,
