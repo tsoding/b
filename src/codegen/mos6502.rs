@@ -1344,14 +1344,15 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
     }
 }
 
-pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c_char],
-                              funcs: *const [Func], globals: *const [Global], asm: *mut Assembler) {
+pub unsafe fn generate_extrns(_out: *mut String_Builder, extrns: *const [*const c_char],
+                              funcs: *const [Func], globals: *const [Global],
+                              asm_funcs: *const [AsmFunc], _asm: *mut Assembler) {
     'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
-            let func = (*funcs)[j];
-            if strcmp(func.name, name) == 0 {
+            let func = (*funcs)[j].name;
+            if strcmp(func, name) == 0 {
                 continue 'skip_function_or_global
             }
         }
@@ -1361,77 +1362,15 @@ pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c
                 continue 'skip_function_or_global
             }
         }
-
-        // TODO: consider implementing all these intrinsics in __asm__ if possible
-        if strcmp(name, c!("char")) == 0 {
-            // ch = char(string, i);
-            // returns the ith character in a string pointed to by string, 0 based
-
-            let fun_addr = (*out).count as u16;
-            da_append(&mut (*asm).externals, External {
-                name,
-                addr: fun_addr,
-            });
-
-            instr(out, TSX);
-            instr(out, CLC);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 1); // low
-
-            // load address to buffer in ZP to dereference, because registers
-            // only 8 bits
-            instr8(out, STA, ZP, ZP_DEREF_0);
-
-            instr(out, TYA);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 2); // high
-            instr8(out, STA, ZP, ZP_DEREF_1);
-            instr8(out, LDY, IMM, 0);
-
-            // A = ((0))
-            instr8(out, LDA, IND_Y, ZP_DEREF_0);
-
-            // TODO: maybe sign extend Y, if we expect signed chars?
-            // instr8(out, CMP, IMM, out, 0);
-            // instr8(out, BPL, REL, 1);
-            // instr(out, DEY);
-
-            instr(out, RTS);
-        } else if strcmp(name, c!("lchar")) == 0 {
-            // ch = char(string, i, ch);
-            // returns the ith character in a string pointed to by string, 0 based
-
-            let fun_addr = (*out).count as u16;
-            da_append(&mut (*asm).externals, External {
-                name,
-                addr: fun_addr,
-            });
-
-            instr(out, TSX);
-            instr(out, CLC);
-
-            // load address to buffer in ZP to dereference, because registers
-            // only 8 bits
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 1); // low
-            instr8(out, STA, ZP, ZP_DEREF_0);
-
-            instr(out, TYA);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 2); // high
-            instr8(out, STA, ZP, ZP_DEREF_1);
-
-            instr16(out, LDA, ABS_X, STACK_PAGE + 2*2 + 1); // low
-            // instr16(out, LDY, ABS_X, STACK_PAGE + 2*2 + 1); // high
-            instr8(out, LDY, IMM, 0);
-            instr8(out, STA, IND_Y, ZP_DEREF_0);
-
-            // TODO: maybe sign extend Y, if we expect signed chars?
-            // instr8(output, CMP, IMM, 0);
-            // instr8(output, BPL, REL, 1);
-            // instr(output, DEY);
-
-            instr(out, RTS);
-        } else {
-            log(Log_Level::ERROR, c!("6502: Unknown extrn: `%s`, can not link"), name);
-            abort();
+        for j in 0..asm_funcs.len() {
+            let func = (*asm_funcs)[j].name;
+            if strcmp(func, name) == 0 {
+                continue 'skip_function_or_global
+            }
         }
+
+        log(Log_Level::ERROR, c!("6502: Unknown extrn: `%s`, can not link"), name);
+        abort();
     }
 }
 
@@ -1525,7 +1464,7 @@ pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, con
 
     generate_funcs(out, da_slice((*c).funcs), &mut asm);
     generate_asm_funcs(out, da_slice((*c).asm_funcs), &mut asm);
-    generate_extrns(out, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
+    generate_extrns(out, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), da_slice((*c).asm_funcs), &mut asm);
 
     let data_start = config.load_offset + (*out).count as u16;
     generate_data_section(out, da_slice((*c).data));
