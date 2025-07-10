@@ -1,4 +1,23 @@
-// The B compiler itself
+//! # The B compiler
+//!
+//! ## Logging
+//!
+//! Right now there are 3 mechanisms to log anything in the compiler:
+//! 1. Just directly output anything to stdout/stderr with (f)printf
+//! 2. lexer::diagf()
+//! 3. nob::log()
+//!
+//! Direct printf-ing is used primarily for printing help
+//! messages. Flags like `-help`, `-t list`, etc.
+//!
+//! lexer::diagf() is used for reporting compiler diagnostics that
+//! have a specific location within the source code the compiler is
+//! analysing.
+//!
+//! nob::log() is used for reporting things that the compiler is doing
+//! outside of direct analysis of the user's source code (like
+//! creating files or calling external programs) that are potentially
+//! affected by the -q flag.
 #![no_main]
 #![no_std]
 #![allow(non_upper_case_globals)]
@@ -457,7 +476,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         }
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
         Token::ID => {
-            let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
@@ -709,7 +728,7 @@ pub unsafe fn compile_asm_stmts(l: *mut Lexer, c: *mut Compiler, stmts: *mut Arr
             get_and_expect_token(l, Token::String)?;
             match (*l).token {
                 Token::String => {
-                    let line = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    let line = arena::strdup(&mut (*c).arena, (*l).string);
                     let loc = (*l).loc;
                     da_append(stmts, AsmStmt { line, loc });
                 }
@@ -733,6 +752,9 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
     lexer::get_token(l)?;
 
     match (*l).token {
+        Token::SemiColon => {
+            Some(())
+        },
         Token::OCurly => {
             scope_push(&mut (*c).vars);
             let saved_auto_vars_count = (*c).auto_vars_ator.count;
@@ -744,20 +766,17 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Extrn => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 name_declare_if_not_exists(&mut (*c).extrns, name);
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
-            Some(())
+            compile_statement(l, c)
         }
         Token::Auto => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
-                // TODO: Automatic variable names should only need function lifetime.
-                //   Could use .arena_labels here but naming would be confusing.
-                //   Rename .arena_labels to indicate function lifetime first?
-                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                 declare_var(c, name, (*l).loc, Storage::Auto {index})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
@@ -777,7 +796,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
             }
-            Some(())
+            compile_statement(l, c)
         }
         Token::If => {
             get_and_expect_token_but_continue(l, c, Token::OParen)?;
@@ -840,7 +859,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::Goto => {
             get_and_expect_token(l, Token::ID)?;
-            let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
+            let name = arena::strdup(&mut (*c).arena, (*l).string);
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_gotos, Goto {name, loc, addr});
@@ -914,7 +933,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         _ => {
             if (*l).token == Token::ID {
-                let name = arena::strdup(&mut (*c).arena_labels, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let name_loc = (*l).loc;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
@@ -1000,8 +1019,17 @@ pub struct Compiler {
     pub variadics: Array<(*const c_char, Variadic)>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
-    pub arena_names: Arena,
-    pub arena_labels: Arena,
+    /// Arena into which the Compiler allocates all the names and
+    /// objects that need to live for the duration of the
+    /// compilation. Even if some object/names don't need to live that
+    /// long (for example, function labels need to live only for the
+    /// duration of that function compilation), just letting them live
+    /// longer makes the memory management easier.
+    ///
+    /// Basically just dump everything into this arena and if you ever
+    /// need to reset the state of the Compiler, just reset all its
+    /// Dynamic Arrays and this Arena.
+    pub arena: Arena,
     pub target: Target,
     pub error_count: usize,
     pub historical: bool
@@ -1034,7 +1062,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Token::Variadic => {
                 get_and_expect_token_but_continue(l, c, Token::OParen)?;
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
-                let func = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let func = arena::strdup(&mut (*c).arena, (*l).string);
                 let func_loc = (*l).loc;
                 if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
                     // TODO: report all the duplicate variadics maybe?
@@ -1058,7 +1086,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Token::Extrn => {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
-                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                    let name = arena::strdup(&mut (*c).arena, (*l).string);
                     name_declare_if_not_exists(&mut (*c).extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
@@ -1066,7 +1094,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             }
             _ => {
                 expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                let name = arena::strdup(&mut (*c).arena, (*l).string);
                 let name_loc = (*l).loc;
                 declare_var(c, name, name_loc, Storage::External{name})?;
 
@@ -1083,7 +1111,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             (*l).parse_point = saved_point;
                             'params: loop {
                                 get_and_expect_token(l, Token::ID)?;
-                                let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                let name = arena::strdup(&mut (*c).arena, (*l).string);
                                 let name_loc = (*l).loc;
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                                 declare_var(c, name, name_loc, Storage::Auto{index})?;
@@ -1109,7 +1137,6 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             }
                             (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
                         }
-                        arena::reset(&mut (*c).arena_labels);
 
                         da_append(&mut (*c).funcs, Func {
                             name,
@@ -1162,7 +1189,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                 Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                                 Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                                 Token::ID => {
-                                    let name = arena::strdup(&mut (*c).arena_names, (*l).string);
+                                    let name = arena::strdup(&mut (*c).arena, (*l).string);
                                     let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
                                     let var = find_var_near(scope, name);
                                     if var.is_null() {
@@ -1263,6 +1290,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
     let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
+    let quiet       = flag_bool(c!("q"), false, c!("Makes the compiler yap less about what it's doing"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1284,6 +1312,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
     }
 
+    if *quiet {
+        minimal_log_level = Log_Level::WARNING;
+    }
+
     if *help {
         usage();
         return Some(());
@@ -1291,7 +1323,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if (*target_name).is_null() {
         usage();
-        fprintf(stderr(), c!("ERROR: no value is provided for -%s flag.\n"), flag_name(target_name));
+        log(Log_Level::ERROR, c!("No value is provided for -%s flag."), flag_name(target_name));
         return None;
     }
 
@@ -1305,13 +1337,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     let Some(target) = Target::by_name(*target_name) else {
         usage();
-        fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), *target_name);
+        log(Log_Level::ERROR, c!("Unknown target `%s`"), *target_name);
         return None;
     };
 
     if input_paths.count == 0 {
         usage();
-        fprintf(stderr(), c!("ERROR: no inputs are provided\n"));
+        log(Log_Level::ERROR, c!("no inputs are provided"));
         return None;
     }
 
@@ -1331,29 +1363,21 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         //     - rexim (2025-06-12 20:56:08)
         let libb_path = c!("./libb");
         if !file_exists(libb_path)? {
-            fprintf(stderr(), c!("ERROR: No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag.\n"), libb_path, libb_path, flag_name(nostdlib));
+            log(Log_Level::ERROR, c!("No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag."), libb_path, libb_path, flag_name(nostdlib));
             return None;
         }
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/all.b"), libb_path));
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena_names, c!("%s/%s.b"), libb_path, *target_name));
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
+        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
     }
 
-    // Logging what files are actually being compiled so nothing is hidden from the user.
-    // TODO: There should be some sort of -q mode which suppress all the logging like this.
-    //   Including the logging from external tools like fasm, but this is already a bit harder.
-    //   May require some stdout redirecting capabilities of nob.h.
-    //   -q mode might be important for behavioral testing in a style of https://github.com/tsoding/rere.py.
-    //   I do not plan to actually use rere.py in this project since I don't want to depend on yet another language.
-    //   But I do plan to have similar testing tool written in Crust.
-    //
-    //     - rexim (2025-06-12 20:18:02)
-    printf(c!("INFO: Compiling files "));
+    let mut sb: String_Builder = zeroed();
     for i in 0..input_paths.count {
         let input_path = *input_paths.items.add(i);
-        if i > 0 { printf(c!(" ")); }
-        printf(c!("%s"), input_path);
+        if i > 0 { sb_appendf(&mut sb, c!(", ")); }
+        sb_appendf(&mut sb, c!("%s"), input_path);
     }
-    printf(c!("\n"));
+    da_append(&mut sb, 0);
+    log(Log_Level::INFO, c!("compiling files %s"), sb.items);
 
     let mut input: String_Builder = zeroed();
 
@@ -1417,7 +1441,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
                 (c!("as"), c!("cc"))
@@ -1476,11 +1500,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
                 // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
+                log(Log_Level::ERROR, c!("Cross-compilation of x86_64 linux is not supported for now"));
                 return None;
             }
 
@@ -1533,7 +1557,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
                 c!("cc")
@@ -1584,12 +1608,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let (gas, cc) = (c!("as"), c!("cc"));
 
             if !(cfg!(target_os = "macos")) {
-                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
                 return None;
             }
 
@@ -1636,12 +1660,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
             write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
             let (gas, cc) = (c!("as"), c!("cc"));
 
             if !(cfg!(target_os = "macos")) {
-                fprintf(stderr(), c!("ERROR: Cross-compilation of darwin is not supported\n"),);
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
                 return None;
             }
 
@@ -1672,114 +1696,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::gas_aarch64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
-        Target::Fasm_x86_64_Linux => {
-            codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                fprintf(stderr(), c!("ERROR: Cross-compilation of x86_64 linux is not supported for now\n"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("fasm"), output_asm_path, output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::fasm_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
-            }
-        }
-        Target::Fasm_x86_64_Windows => {
-            codegen::fasm_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
-
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.asm"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), output_asm_path);
-
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.obj"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("fasm"), output_asm_path, output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::fasm_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
         Target::Uxn => {
             codegen::uxn::generate_program(&mut output, &c);
 
@@ -1793,7 +1709,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            log(Log_Level::INFO, c!("generated %s\n"), effective_output_path);
             if *run {
                 runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
             }
@@ -1812,7 +1728,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            log(Log_Level::INFO, c!("generated %s"), effective_output_path);
             if *run {
                 runner::mos6502::run(&mut output, config, effective_output_path, None)?;
             }

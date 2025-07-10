@@ -14,16 +14,12 @@ enum_with_order! {
         Uxn,
         Mos6502,
         Bytecode,
-        Fasm_x86_64_Windows,
-        Fasm_x86_64_Linux,
     }
 }
 
 impl Target {
     pub unsafe fn name(self) -> *const c_char {
         match self {
-            Self::Fasm_x86_64_Windows => c!("fasm-x86_64-windows"),
-            Self::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
             Self::Gas_x86_64_Windows  => c!("gas-x86_64-windows"),
             Self::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
             Self::Gas_x86_64_Darwin   => c!("gas-x86_64-darwin"),
