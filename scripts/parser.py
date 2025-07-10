@@ -34,7 +34,7 @@ def parse_argument(f):
         case 0x01 | 0x02 | 0x04:
             argument["index"] = parse_u64(f)
         case 0x03 | 0x07:
-            argument["name"] = parse_string(f)
+            argument["name"] = parse_u64(f)
         case 0x05:
             argument["value"] = parse_u64(f)
         case 0x06:
@@ -47,8 +47,8 @@ def parse_argument(f):
 
 def parse_function(f):
     func = {}
-    func['name'] = parse_string(f)
-    func['file'] = parse_string(f)
+    func['name'] = parse_u64(f)
+    func['file'] = parse_u64(f)
     func['params_count'] = parse_u64(f)
     func['auto_vars_count'] = parse_u64(f)
     func['ops'] = []
@@ -73,7 +73,7 @@ def parse_function(f):
                 op["index"] = parse_u64(f)
                 op["operand"] = parse_argument(f)
             case 0x03:
-                op["name"] = parse_string(f)
+                op["name"] = parse_u64(f) 
                 op["operand"] = parse_argument(f)
             case 0x04:
                 op["index"] = parse_u64(f)
@@ -98,7 +98,7 @@ def parse_function(f):
                 op['index'] = parse_u64(f)
                 op['function_type'] = parse_u8(f)
                 if op['function_type'] == 0x00:
-                    op['function'] = parse_string(f)
+                    op['function'] = parse_u64(f) 
                 else:
                     op['function'] = parse_argument(f)
                 argument_count = parse_u64(f)
@@ -116,7 +116,7 @@ def parse_function(f):
 
 def parse_global(f):
     var = {}
-    var['name'] = parse_string(f)
+    var['name'] = parse_u64(f) 
     
     value_count = parse_u64(f)
     var['values'] = []
@@ -125,7 +125,7 @@ def parse_global(f):
         value["op"] = parse_u8(f)
         match value["op"]:
             case 0x00:
-                value["name"] = parse_string(f)
+                value["name"] = parse_u64(f)
             case 0x01:
                 value["value"] = parse_u64(f)
             case 0x02:
@@ -147,12 +147,12 @@ with open("./build/bytecode.ir", 'rb') as f:
     assert bcode['magic'] == 'bcde'
 
     bcode['version'] = parse_u8(f)
-    assert bcode['version'] == 0
+    assert bcode['version'] == 1
 
     extrn_size = parse_u64(f)
     bcode['extrns'] = []
     for _ in range(extrn_size):
-        bcode['extrns'].append(parse_string(f))
+        bcode['extrns'].append(parse_u64(f))
 
     data_size = parse_u64(f)
     bcode['data'] = []
@@ -171,6 +171,11 @@ with open("./build/bytecode.ir", 'rb') as f:
     for _ in range(funcs_len):
         bcode['functions'].append(parse_function(f))
 
+    strings_count = parse_u64(f)
+    bcode["string_table"] = []
+    for _ in range(strings_count):
+        bcode["string_table"].append(parse_string(f))
+
 def dump_argument(arg: dict):
     match arg["type"]:
         case 0x00:
@@ -180,7 +185,7 @@ def dump_argument(arg: dict):
         case 0x02:
             return f"*auto[{arg["index"]}]"
         case 0x03:
-            return f"&extrn[{arg["name"]}]"
+            return f"&extrn[{bcode['string_table'][arg["name"]]}]"
         case 0x04:
             return f"&auto[{arg["index"]}]"
         case 0x05:
@@ -188,7 +193,7 @@ def dump_argument(arg: dict):
         case 0x06:
             return f"data[{arg["offset"]}]"
         case 0x07:
-            return f"extrn[{arg["name"]}]"
+            return f"extrn[{bcode['string_table'][arg["name"]]}]"
 
 def p(s):
     print(s, end='')
@@ -210,7 +215,7 @@ binops = ["+",
           "<<"]
 
 for f in bcode["functions"]:
-    print(f"{f["name"]}({f["params_count"]}, {f["auto_vars_count"]}) {'{'}")
+    print(f"{bcode['string_table'][f["name"]]}({f["params_count"]}, {f["auto_vars_count"]}) {'{'}")
     for op in f['ops']:
         match op["opcode"]:
             case 0x00:
@@ -220,7 +225,7 @@ for f in bcode["functions"]:
             case 0x02:
                 print(f"\t*auto[{op["index"]}] = {dump_argument(op["operand"])}")
             case 0x03:
-                print(f"\textrn[{op['name']}] = {dump_argument(op["operand"])}")
+                print(f"\textrn[{bcode["string_table"][op['name']]}] = {dump_argument(op["operand"])}")
             case 0x04:
                 print(f"\tauto[{op["index"]}] = {dump_argument(op["operand"])}")
             case 0x05:
@@ -240,7 +245,7 @@ for f in bcode["functions"]:
             case 0x0C:
                 print(f"\tauto[{op["index"]}] = call(", end='')
                 if op["function_type"] == 0x00:
-                    print(op["function"], end='')
+                    print(bcode["string_table"][op["function"]], end='')
                 else:
                     print(dump_argument(op["function"]), end='')
 

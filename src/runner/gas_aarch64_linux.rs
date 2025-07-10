@@ -7,7 +7,7 @@ pub unsafe fn run(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [
     if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
         cmd_append! {
             cmd,
-            c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
+            c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu/sys-root/"),
         }
     }
 
