@@ -1219,12 +1219,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
             },
             Op::Label{label} => {
-                // TODO: RE: https://github.com/tsoding/b/pull/147#issue-3154667157
+                // RE: https://github.com/tsoding/b/pull/147#issue-3154667157
                 // > For this thing I introduces a new NOP instruction because it would be a bit too
                 // > risky to just blindly jump on an address that could possibly be unused.
                 //
-                // Assess the risk and potentially remove this NOP
-                instr(out, NOP);
+                // We now, this label will always be followed by an instruction: either the next
+                // generated OP, or the return code at the end of a function. No NOP needed.
                 da_append(&mut (*asm).op_labels, Label {
                     func_name: name,
                     label,
