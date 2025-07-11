@@ -179,9 +179,9 @@
             "comment": "Doesn't make sense for this target"
         },
         "gas-x86_64-darwin": {
-            "expected_stdout": "0\n",
+            "expected_stdout": "",
             "state": "Disabled",
-            "comment": ""
+            "comment": "Doesn't make sense for this target"
         },
         "ilasm-mono": {
             "expected_stdout": "",
