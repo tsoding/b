@@ -817,7 +817,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 instr8(out, LDX, IMM, 0);
 
                 instr8(out, CMP, IMM, 0);
-                instr8(out, BNE, REL, 5);
+                instr8(out, BNE, REL, 6);
 
                 instr(out, TYA);
                 instr8(out, CMP, IMM, 0);
