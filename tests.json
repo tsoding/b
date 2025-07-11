@@ -118,6 +118,11 @@
             "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "gas-x86_64-darwin": {
+            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+            "state": "Enabled",
+            "comment": ""
         }
     },
     "deref_assign": {
@@ -194,6 +199,16 @@
             "comment": "Doesn't make sense for this target"
         },
         "gas-sh4dsp-prizm": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-x86_64-darwin": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "ilasm-mono": {
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Doesn't make sense for this target"
