@@ -5,7 +5,7 @@ use core::mem::zeroed;
 
 pub unsafe fn run(cmd: *mut Cmd, output_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
     if !cfg!(target_arch = "aarch64") {
-        fprintf(stderr(), c!("This runner is only for aarch64 Darwin, but the current target is not aarch64 Darwin."));
+        log(Log_Level::ERROR, c!("This runner is only for aarch64 Darwin, but the current target is not aarch64 Darwin."));
         return None;
     }
 

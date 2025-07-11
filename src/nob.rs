@@ -112,6 +112,15 @@ pub struct Cmd_Redirect {
     pub fderr: *mut Fd,
 }
 
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub enum Log_Level {
+    INFO = 0,
+    WARNING,
+    ERROR,
+    NO_LOGS,
+}
+
 extern "C" {
     #[link_name = "nob_temp_sprintf"]
     pub fn temp_sprintf(format: *const c_char, ...) -> *mut c_char;
@@ -139,6 +148,10 @@ extern "C" {
     pub fn cmd_run_sync_redirect_and_reset(cmd: *mut Cmd, redirect: Cmd_Redirect) -> bool;
     #[link_name = "nob_fd_open_for_write"]
     pub fn fd_open_for_write(path: *const c_char) -> Fd;
+    #[link_name = "nob_log"]
+    pub fn log(level: Log_Level, fmt: *const c_char, ...);
+    #[link_name = "nob_minimal_log_level"]
+    pub static mut minimal_log_level: Log_Level;
 }
 
 pub unsafe fn write_entire_file(path: *const c_char, data: *const c_void, size: usize) -> Option<()> {

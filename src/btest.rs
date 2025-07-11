@@ -18,6 +18,7 @@ pub mod jimp;
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
+use core::ptr;
 use crust::*;
 use crust::libc::*;
 use nob::*;
@@ -173,6 +174,8 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
+        // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
+        Target::ILasm_Mono          => c!("exe"),
     });
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
@@ -198,6 +201,7 @@ pub unsafe fn execute_test(
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
+        Target::ILasm_Mono          => runner::ilasm_mono::run(cmd, program_path, &[], Some(stdout_path)),
     };
 
     (*sb).count = 0;
@@ -598,15 +602,17 @@ enum_with_order! {
         Replay,
         Record,
         Prune,
+        Disable,
     }
 }
 
 impl Action {
     unsafe fn name(self) -> *const c_char {
         match self {
-            Self::Replay => c!("replay"),
-            Self::Record => c!("record"),
-            Self::Prune  => c!("prune"),
+            Self::Replay  => c!("replay"),
+            Self::Record  => c!("record"),
+            Self::Prune   => c!("prune"),
+            Self::Disable => c!("disable"),
         }
     }
 
@@ -635,6 +641,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let action_flag          = flag_str(c!("a"), default_action.name(), c!("Action to perform. Use -alist to get the list of available actions"));
     let list_actions         = flag_bool(c!("alist"), false, c!("Print the list of all available actions."));
     let record               = flag_bool(c!("record"), false, strdup(temp_sprintf(c!("DEPRECATED! Please use `-%s %s` flag instead."), flag_name(action_flag), Action::Record.name()))); // TODO: memory leak
+    let comment              = flag_str(c!("comment"), ptr::null(), strdup(temp_sprintf(c!("Set the comment on disabled test cases when you do `-%s %s`"), flag_name(action_flag), Action::Disable.name()))); // TODO: memory leak
 
     let opt                  = flag_bool(c!("O"), false, c!("Enable compiler optimizations"));
 
@@ -669,15 +676,19 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let action = (*ACTION_ORDER)[i];
             match action {
                 Action::Replay => {
-                    printf(c!("  %*s - Replay the selected Test Matrix slice with expected outputs from %s.\n"), width, action.name(), json_path);
+                    printf(c!("  %-*s - Replay the selected Test Matrix slice with expected outputs from %s.\n"), width, action.name(), json_path);
                 }
                 Action::Record => {
-                    printf(c!("  %*s - Record the selected Test Matrix slice into %s.\n"), width, action.name(), json_path);
+                    printf(c!("  %-*s - Record the selected Test Matrix slice into %s.\n"), width, action.name(), json_path);
                 }
                 Action::Prune  => {
-                    printf(c!("  %*s - Prune all the recordings from %s that are outside of the selected Test Matrix slice.\n"), width, action.name(), json_path);
-                    printf(c!("  %*s   Useful when you delete targets or test cases. Just delete a target or a test case and\n"), width, c!(""));
-                    printf(c!("  %*s   run `%s -%s %s` without any additional flags.\n"), width, c!(""), flag_program_name(), flag_name(action_flag), Action::Prune.name());
+                    printf(c!("  %-*s - Prune all the recordings from %s that are outside of the selected Test Matrix slice.\n"), width, action.name(), json_path);
+                    printf(c!("  %-*s   Useful when you delete targets or test cases. Just delete a target or a test case and\n"), width, c!(""));
+                    printf(c!("  %-*s   run `%s -%s %s` without any additional flags.\n"), width, c!(""), flag_program_name(), flag_name(action_flag), Action::Prune.name());
+                }
+                Action::Disable => {
+                    printf(c!("  %-*s - Disable all the tests in the selected Test Matrix slice.\n"), width, action.name());
+                    printf(c!("  %-*s   You can optionally set the comment with the -%s flag.\n"), width, c!(""), flag_name(comment));
                 }
             };
         }
@@ -826,6 +837,53 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         }
         Action::Prune => {
             let bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            save_bat_to_json_file(json_path, bat, &mut jim)?;
+        }
+        Action::Disable => {
+            let mut case_width = 0;
+            for i in 0..cases.count {
+                let case_name = *cases.items.add(i);
+                case_width = cmp::max(case_width, strlen(case_name));
+            }
+
+            let mut target_width = 0;
+            for j in 0..targets.count {
+                let target = *targets.items.add(j);
+                target_width = cmp::max(target_width, strlen(target.name()));
+            }
+
+            let mut bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            for i in 0..cases.count {
+                let case_name = *cases.items.add(i);
+                let target_test_config_table =
+                    if let Some(target_test_config_table) = assoc_lookup_cstr_mut(da_slice(bat), case_name) {
+                        target_test_config_table
+                    } else {
+                        let target_test_config_table: Array<(Target, TestConfig)> = zeroed();
+                        da_append(&mut bat, (case_name, target_test_config_table));
+                        &mut (*da_last_mut(&mut bat).unwrap()).1
+                    };
+                for j in 0..targets.count {
+                    let target = *targets.items.add(j);
+                    printf(c!("INFO: disabling %-*s for %-*s\n"), case_width, case_name, target_width, target.name());
+                    if let Some(test_config) = assoc_lookup_mut(da_slice(*target_test_config_table), &target) {
+                        (*test_config).state = TestState::Disabled;
+                        if !(*comment).is_null() {
+                            (*test_config).comment = *comment;
+                        }
+                    } else {
+                        da_append(target_test_config_table, (target, TestConfig {
+                            expected_stdout: c!(""),
+                            state: TestState::Disabled,
+                            comment: if (*comment).is_null() {
+                                c!("")
+                            } else {
+                                *comment
+                            },
+                        }));
+                    }
+                }
+            }
             save_bat_to_json_file(json_path, bat, &mut jim)?;
         }
     }

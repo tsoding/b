@@ -10,6 +10,35 @@ putchar(c) {
     0xFFEF(c);
 }
 
+char __asm__(
+    "TSX",
+    "CLC",
+    "ADC $0103,X", // i&0xFF
+    "STA $00", // we can safely use zero-page, as our assembler
+               // doesn't expect it to be preserved across op-boundaries
+    "TYA",
+    "ADC $0104,X", // i&0xFF00 >> 8
+    "STA $01",
+    "LDY #0",
+    "LDA ($00),Y",
+    "RTS"
+);
+
+lchar __asm__(
+    "TSX",
+    "CLC",
+    "ADC $0103,X", // i&0xFF
+    "STA $00", // we can safely use zero-page, as our assembler
+               // doesn't expect it to be preserved across op-boundaries
+    "TYA",
+    "ADC $0104,X", // i&0xFF00 >> 8
+    "STA $01",
+    "LDA $0105,X",
+    "LDY #0",
+    "STA ($00),Y",
+    "RTS"
+);
+
 /* TODO: fd not supported */
 fputc(c, fd) {
     putchar(c);
@@ -40,8 +69,27 @@ realloc(ptr, size) {
    with the `divmod` test
 */
 _div(a, b) {
-    auto d;
+    auto d, sign;
+    sign = 0;
+    if (a < 0) {
+        sign = !sign;
+        a = -a;
+    }
+    if (b < 0) {
+        sign = !sign;
+        b = -a;
+    }
+
     d = 0; while(a >= b) {
+        a = a - b;
+        d++;
+    }
+    if (sign) d = -d;
+    return (d);
+}
+_udiv(a, b) {
+    auto d;
+    d = 0; while(a >= b | a < 0) {
         a = a - b;
         d++;
     }
@@ -58,24 +106,34 @@ _rem (a, b) {
     }
     return (a);
 }
+_urem(a, b) {
+    auto d;
+    while(a >= b | a < 0) {
+        a = a - b;
+    }
+    return (a);
+}
 
 printn(n, b, sign) {
-    auto a, c, d;
+    auto a, c, d, __div, __rem;
+
+    /* use correct div/rem based on sign */
+    __div = sign ? &_div : &_udiv;
+    __rem = sign ? &_rem : &_urem;
 
     if (sign & n < 0) {
         putchar('-');
         n = -n;
     }
 
-    if(a=_div(n, b)) /* assignment, not test for equality */
+    if(a=__div(n, b)) /* assignment, not test for equality */
         printn(a, b, 0); /* recursive */
-    c = _rem(n,b) + '0';
+    c = __rem(n,b) + '0';
     if (c > '9') c += 7;
     putchar(c);
 }
 
 printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
-    extrn char;
     auto i, j, arg, c;
     i = 0;
     j = 0;
@@ -106,7 +164,7 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
                 while (c = char(*arg, j++)) {
                     putchar(c);
                 }
-            } else if (c == 'z') { /* hack for %zu */
+            } else if (c == 'z' | c == 'l') { /* hack for %zu %lu, % */
                 c = '%';
                 goto while_end;
             } else {
@@ -119,12 +177,11 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
         }
         i++;
         c = char(str, i);
-        while_end:
+        while_end:;
     }
 }
 
 strlen(s) {
-    extrn char;
     auto n;
     n = 0;
     while (char(s, n)) n++;

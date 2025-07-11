@@ -179,9 +179,14 @@
             "comment": "Doesn't make sense for this target"
         },
         "gas-x86_64-darwin": {
-            "expected_stdout": "0\n",
+            "expected_stdout": "",
             "state": "Disabled",
-            "comment": ""
+            "comment": "Doesn't make sense for this target"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "return": {
@@ -256,6 +261,11 @@
             "expected_stdout": "69\n",
             "state": "Disabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "asm_func_6502": {
@@ -293,6 +303,11 @@
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Failed to build on record"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "call_stack_args": {
@@ -515,6 +530,11 @@
             "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+            "state": "Enabled",
+            "comment": ""
         }
     },
     "compare": {
@@ -576,14 +596,14 @@
             "comment": ""
         },
         "uxn": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
+            "expected_stdout": "69\n16960\n64177\n",
             "state": "Enabled",
-            "comment": ""
+            "comment": "Since uxn word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
         },
         "6502": {
-            "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
+            "expected_stdout": "69\r\n16960\r\n64177\r\n",
             "state": "Enabled",
-            "comment": ""
+            "comment": "Since 6502 word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "69\n1000000\n123456789987654321\n",
@@ -885,6 +905,11 @@
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Failed to build on record"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "ref": {
@@ -1181,6 +1206,11 @@
             "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+            "state": "Enabled",
+            "comment": ""
         }
     },
     "inc_dec": {
@@ -1329,6 +1359,11 @@
             "expected_stdout": "OK\n",
             "state": "Enabled",
             "comment": "TODO: fix on this target"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "out_of_order_funcalls": {
@@ -1363,6 +1398,11 @@
             "comment": ""
         },
         "gas-x86_64-darwin": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "ilasm-mono": {
             "expected_stdout": "No forward declaration is required\n",
             "state": "Enabled",
             "comment": ""
@@ -1401,6 +1441,11 @@
         },
         "6502": {
             "expected_stdout": "HELO\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "HELO\n",
             "state": "Enabled",
             "comment": ""
         }
