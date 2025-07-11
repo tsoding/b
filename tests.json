@@ -182,6 +182,11 @@
             "expected_stdout": "0\n",
             "state": "Disabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "return": {
@@ -256,6 +261,11 @@
             "expected_stdout": "69\n",
             "state": "Disabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "asm_func_6502": {
@@ -293,6 +303,11 @@
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Failed to build on record"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "call_stack_args": {
@@ -890,6 +905,11 @@
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Failed to build on record"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "ref": {
@@ -1339,6 +1359,11 @@
             "expected_stdout": "OK\n",
             "state": "Enabled",
             "comment": "TODO: fix on this target"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         }
     },
     "out_of_order_funcalls": {
