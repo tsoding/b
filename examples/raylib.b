@@ -78,7 +78,7 @@ main() {
     InitWindow(800, 600, "Hello, from B");
     SetTargetFPS(60);
     while (!(WindowShouldClose() & 1)) {
-        if (IsKeyPressed(32)) {
+        if (IsKeyPressed(32) & 1) {
             paused = !paused;
         }
 
