@@ -93,6 +93,10 @@ pub enum Token {
     Return,
     Asm,
     Variadic,
+    Iota,
+    IotaReset,
+    IotaSkip,
+    IotaSet,
 }
 
 pub unsafe fn display_token(token: Token) -> *const c_char {
@@ -160,6 +164,10 @@ pub unsafe fn display_token(token: Token) -> *const c_char {
         // TODO: document all this magical extension keywords somewhere
         Token::Asm        => c!("keyword `__asm__`"),
         Token::Variadic   => c!("keyword `__variadic__`"),
+        Token::Iota       => c!("keyword `iota`"),
+        Token::IotaReset  => c!("keyword `iota_reset`"),
+        Token::IotaSkip   => c!("keyword `iota_skip`"),
+        Token::IotaSet    => c!("keyword `iota_set`"),
     }
 }
 
@@ -264,6 +272,10 @@ const KEYWORDS: *const [(*const c_char, Token)] = &[
     (c!("return"), Token::Return),
     (c!("__asm__"), Token::Asm),
     (c!("__variadic__"), Token::Variadic),
+    (c!("iota"), Token::Iota),
+    (c!("iota_reset"), Token::IotaReset),
+    (c!("iota_skip"), Token::IotaSkip),
+    (c!("iota_set"), Token::IotaSet),
 ];
 
 #[derive(Clone, Copy)]
