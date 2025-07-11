@@ -1,6 +1,4 @@
 /*
-Implies -nostdlib.
-
 In B there's this strange syntax to initialize a global variable,
 and a few unnamed words after that global variable, to specific values.
 

@@ -115,6 +115,18 @@ exit(code) {
     uxn_deo(0x0f, code | 0x80); /* System/state */
 }
 
+_exit_after_main 1;
+
+uxn_disable_exit_after_main() {
+    _exit_after_main = 0;
+}
+
+_exit_main(code) {
+    if (_exit_after_main) {
+        exit(code);
+    }
+}
+
 abort() {
     extrn printf;
     printf("Aborted\n");
@@ -260,7 +272,7 @@ _start_with_arguments() {
     } else if (type == 4) { /* arguments end */
         lchar(__alloc_ptr++, 0, 0);
         uxn_deo2(0x10, 0);
-        exit(main(_args_count, _args_items));
+        _exit_main(main(_args_count, _args_items));
     }
 }
 
@@ -277,7 +289,7 @@ _start() {
         *(_args_items + (_args_count++)*2) = __alloc_ptr;
         uxn_deo2(0x10, &_start_with_arguments);
     } else {
-        exit(main(_args_count, _args_items));
+        _exit_main(main(_args_count, _args_items));
     }
 }
 
