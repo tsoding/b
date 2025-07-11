@@ -99,6 +99,7 @@ pub mod libc {
         pub fn strlen(s: *const c_char) -> usize;
         pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
         pub fn fwrite(ptr: *const c_void, size: usize, nmemb: usize, stream: *mut FILE) -> usize;
+        pub fn getchar() -> c_int;
 
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;
