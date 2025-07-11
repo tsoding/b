@@ -53,6 +53,9 @@ start() {
     txt_x = 1;
     txt_y = 1;
 
+    putchar('E');
+    putchar(10);
+
     extrn exit;
     exit(main(0,0));
 }

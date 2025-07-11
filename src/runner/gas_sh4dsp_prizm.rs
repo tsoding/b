@@ -121,7 +121,7 @@ pub mod sh4 {
             ret = RAM[address as usize - 0x08100000];
         }
 
-        // Uninitialised memory on the fx-CG50 tends tà be 0x55
+        // Uninitialised memory on the fx-CG50 tends to be 0x55
         ret
     }
     pub unsafe fn read16(address: u32) -> u16 {

@@ -564,7 +564,14 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 next_symbol(&mut assembler, label);
                 next_jmppoint(&mut assembler);
             }
-            Op::Index {..} => missingf!(op.loc, c!("Op::Index\n")),
+            Op::Index {result, arg, offset} => {
+                sb_appendf(output, c!("    ! get idx lol\n"));
+                load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
+                load_arg_to_reg(offset, c!("r1"), output, op.loc, &mut assembler, false);
+                sb_appendf(output, c!("    shll2 r1\n"));
+                sb_appendf(output, c!("    add r1, r0\n"));
+                write_r0(&mut assembler, output, result);
+            }
         }
     }
 
