@@ -1471,6 +1471,18 @@ pub unsafe fn generate_data_section(out: *mut String_Builder, data: *const [u8])
 }
 
 pub unsafe fn generate_entry(out: *mut String_Builder, asm: *mut Assembler) {
+    instr0(out, LDA, ABS);
+    add_reloc(out, RelocationKind::External{name: c!("$argv_descriptor"), offset: 3, byte: Byte::Both}, asm);
+    instr(out, PHA);
+    instr0(out, LDA, ABS);
+    add_reloc(out, RelocationKind::External{name: c!("$argv_descriptor"), offset: 2, byte: Byte::Both}, asm);
+    instr(out, PHA);
+
+    instr0(out, LDY, ABS);
+    add_reloc(out, RelocationKind::External{name: c!("$argv_descriptor"), offset: 1, byte: Byte::Both}, asm);
+    instr0(out, LDA, ABS);
+    add_reloc(out, RelocationKind::External{name: c!("$argv_descriptor"), offset: 0, byte: Byte::Both}, asm);
+    
     instr0(out, JSR, ABS);
     add_reloc(out, RelocationKind::External{name: c!("main"), offset: 0, byte: Byte::Both}, asm);
 
@@ -1518,7 +1530,35 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
-pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, config: Config) -> Option<()> {
+pub unsafe fn generate_argv(out: *mut String_Builder, arg0: *const c_char, run_args: *const [*const c_char], asm: *mut Assembler) {
+    let mut arr: Array<u16> = zeroed();
+    da_append(&mut arr, (*asm).code_start + (*out).count as u16);
+    sb_appendf(out, c!("%s"), arg0);
+    write_byte(out, 0);
+
+    for i in 0..run_args.len() {
+        da_append(&mut arr, (*asm).code_start + (*out).count as u16);
+        sb_appendf(out, c!("%s"), (*run_args)[i]);
+        write_byte(out, 0);
+    }
+
+    da_append(&mut arr, 0);
+    let ptr = (*asm).code_start + (*out).count as u16;
+    for i in 0..arr.count {
+        write_word(out, *arr.items.add(i));
+    }
+
+    let fun_addr = (*out).count as u16;
+    da_append(&mut (*asm).externals, External {
+        name: c!("$argv_descriptor"),
+        addr: fun_addr,
+    });
+
+    write_word(out, 1 + run_args.len() as u16);
+    write_word(out, ptr);
+}
+
+pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, arg0: *const c_char, run_args: *const [*const c_char], config: Config) -> Option<()> {
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
     asm.code_start = config.load_offset;
@@ -1529,10 +1569,21 @@ pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, con
 
     let data_start = config.load_offset + (*out).count as u16;
     generate_data_section(out, da_slice((*c).data));
+    generate_argv(out, arg0, run_args, &mut asm);
+
     generate_globals(out, da_slice((*c).globals), &mut asm);
 
     log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
     apply_relocations(out, data_start, &mut asm);
+
+    // TODO: move this behind a flag, useful for debugging
+    let print_addresses = false;
+    if print_addresses {
+        for i in 0..asm.externals.count {
+            let ex = *asm.externals.items.add(i);
+            printf(c!("%s => $%04X\n"), ex.name, ex.addr as c_uint);
+        }
+    }
 
     Some(())
 }

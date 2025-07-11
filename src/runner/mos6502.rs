@@ -74,7 +74,7 @@ pub mod fake6502 {
 
 }
 
-pub unsafe fn run_impl(output: *mut String_Builder, config: Config, argv_addr: u16, stdout: *mut FILE) -> Option<()> {
+pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut FILE) -> Option<()> {
     fake6502::load_rom_at(*output, config.load_offset);
     fake6502::reset();
     fake6502::pc = config.load_offset;
@@ -108,7 +108,7 @@ pub unsafe fn run_impl(output: *mut String_Builder, config: Config, argv_addr: u
     Some(())
 }
 
-pub unsafe fn run(output: *mut String_Builder, config: Config, program_path: *const c_char, argv_addr: Option<u16>, stdout_path: Option<*const c_char>) -> Option<()> {
+pub unsafe fn run(output: *mut String_Builder, config: Config, program_path: *const c_char, stdout_path: Option<*const c_char>) -> Option<()> {
     (*output).count = 0;
     read_entire_file(program_path, output)?;
 
@@ -121,7 +121,7 @@ pub unsafe fn run(output: *mut String_Builder, config: Config, program_path: *co
     } else {
         stdout()
     };
-    let result = run_impl(output, config, argv_addr, stdout);
+    let result = run_impl(output, config, stdout);
     if stdout_path.is_some() {
         fclose(stdout);
     }

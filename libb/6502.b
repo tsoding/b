@@ -134,6 +134,13 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
 }
 
 /* Math functions */
+_rand_seed 123456789;
+rand() {
+  _rand_seed = 20077 * _rand_seed + 12345;
+  return (_rand_seed);
+}
+
+
 atoi(str) {
     extrn char;
 
