@@ -1733,6 +1733,40 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 runner::mos6502::run(&mut output, config, effective_output_path, None)?;
             }
         }
+        Target::ILasm_Mono => {
+            codegen::ilasm_mono::generate_program(&mut output, &mut c);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+            cmd_append!{
+                &mut cmd,
+                c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
+            }
+
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::ilasm_mono::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+            }
+        }
     }
     Some(())
 }

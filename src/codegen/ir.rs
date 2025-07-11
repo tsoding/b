@@ -28,104 +28,107 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
     };
 }
 
+pub unsafe fn dump_op(op: OpWithLocation, output: *mut String_Builder) {
+    match op.opcode {
+        Op::Bogus => unreachable!("bogus-amogus"),
+        Op::Return {arg} => {
+            sb_appendf(output, c!("    return "));
+            if let Some(arg) = arg {
+                dump_arg(output, arg);
+            }
+            sb_appendf(output, c!("\n"));
+        },
+        Op::Store{index, arg} => {
+            sb_appendf(output, c!("    store deref[%zu], "), index);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::ExternalAssign{name, arg} => {
+            sb_appendf(output, c!("    %s = "), name);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::AutoAssign{index, arg} => {
+            sb_appendf(output, c!("    auto[%zu] = "), index);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::Negate{result, arg} => {
+            sb_appendf(output, c!("    auto[%zu] = -"), result);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::UnaryNot{result, arg} => {
+            sb_appendf(output, c!("    auto[%zu] = !"), result);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::Binop {binop, index, lhs, rhs} => {
+            sb_appendf(output, c!("    auto[%zu] = "), index);
+            dump_arg(output, lhs);
+            match binop {
+                Binop::BitOr        => sb_appendf(output, c!(" | ")),
+                Binop::BitAnd       => sb_appendf(output, c!(" & ")),
+                Binop::BitShl       => sb_appendf(output, c!(" << ")),
+                Binop::BitShr       => sb_appendf(output, c!(" >> ")),
+                Binop::Plus         => sb_appendf(output, c!(" + ")),
+                Binop::Minus        => sb_appendf(output, c!(" - ")),
+                Binop::Mod          => sb_appendf(output, c!(" %% ")),
+                Binop::Div          => sb_appendf(output, c!(" / ")),
+                Binop::Mult         => sb_appendf(output, c!(" * ")),
+                Binop::Less         => sb_appendf(output, c!(" < ")),
+                Binop::Greater      => sb_appendf(output, c!(" > ")),
+                Binop::Equal        => sb_appendf(output, c!(" == ")),
+                Binop::NotEqual     => sb_appendf(output, c!(" != ")),
+                Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
+                Binop::LessEqual    => sb_appendf(output, c!(" <= ")),
+            };
+            dump_arg(output, rhs);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::Funcall{result, fun, args} => {
+            sb_appendf(output, c!("    auto[%zu] = "), result);
+            dump_arg_call(fun, output);
+            for i in 0..args.count {
+                sb_appendf(output, c!(", "));
+                dump_arg(output, *args.items.add(i));
+            }
+            sb_appendf(output, c!(")\n"));
+        }
+        Op::Asm {stmts} => {
+            sb_appendf(output, c!("   __asm__(\n"));
+            for i in 0..stmts.count {
+                let stmt = *stmts.items.add(i);
+                sb_appendf(output, c!("    %s\n"), stmt.line);
+            }
+            sb_appendf(output, c!(")\n"));
+        }
+
+        Op::Label {label} => {
+            sb_appendf(output, c!("  label[%zu]\n"), label);
+        }
+        Op::JmpLabel {label} => {
+            sb_appendf(output, c!("    jmp label[%zu]\n"), label);
+        }
+        Op::JmpIfNotLabel {label, arg} => {
+            sb_appendf(output, c!("    jmp_if_not label[%zu], "), label);
+            dump_arg(output, arg);
+            sb_appendf(output, c!("\n"));
+        }
+        Op::Index {result, arg, offset} => {
+            sb_appendf(output, c!("    auto[%zu] = ("), result);
+            dump_arg(output, arg);
+            sb_appendf(output, c!(") + (") );
+            dump_arg(output, offset);
+            sb_appendf(output, c!(" * WORD_SIZE)\n"));
+        },
+    }
+}
+
 pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
-        let op = (*body)[i];
-        match op.opcode {
-            Op::Bogus => unreachable!("bogus-amogus"),
-            Op::Return {arg} => {
-                sb_appendf(output, c!("    return "));
-                if let Some(arg) = arg {
-                    dump_arg(output, arg);
-                }
-                sb_appendf(output, c!("\n"));
-            },
-            Op::Store{index, arg} => {
-                sb_appendf(output, c!("    store deref[%zu], "), index);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::ExternalAssign{name, arg} => {
-                sb_appendf(output, c!("    %s = "), name);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::AutoAssign{index, arg} => {
-                sb_appendf(output, c!("    auto[%zu] = "), index);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::Negate{result, arg} => {
-                sb_appendf(output, c!("    auto[%zu] = -"), result);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::UnaryNot{result, arg} => {
-                sb_appendf(output, c!("    auto[%zu] = !"), result);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::Binop {binop, index, lhs, rhs} => {
-                sb_appendf(output, c!("    auto[%zu] = "), index);
-                dump_arg(output, lhs);
-                match binop {
-                    Binop::BitOr        => sb_appendf(output, c!(" | ")),
-                    Binop::BitAnd       => sb_appendf(output, c!(" & ")),
-                    Binop::BitShl       => sb_appendf(output, c!(" << ")),
-                    Binop::BitShr       => sb_appendf(output, c!(" >> ")),
-                    Binop::Plus         => sb_appendf(output, c!(" + ")),
-                    Binop::Minus        => sb_appendf(output, c!(" - ")),
-                    Binop::Mod          => sb_appendf(output, c!(" %% ")),
-                    Binop::Div          => sb_appendf(output, c!(" / ")),
-                    Binop::Mult         => sb_appendf(output, c!(" * ")),
-                    Binop::Less         => sb_appendf(output, c!(" < ")),
-                    Binop::Greater      => sb_appendf(output, c!(" > ")),
-                    Binop::Equal        => sb_appendf(output, c!(" == ")),
-                    Binop::NotEqual     => sb_appendf(output, c!(" != ")),
-                    Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
-                    Binop::LessEqual    => sb_appendf(output, c!(" <= ")),
-                };
-                dump_arg(output, rhs);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::Funcall{result, fun, args} => {
-                sb_appendf(output, c!("    auto[%zu] = "), result);
-                dump_arg_call(fun, output);
-                for i in 0..args.count {
-                    sb_appendf(output, c!(", "));
-                    dump_arg(output, *args.items.add(i));
-                }
-                sb_appendf(output, c!(")\n"));
-            }
-            Op::Asm {stmts} => {
-                sb_appendf(output, c!("   __asm__(\n"));
-                for i in 0..stmts.count {
-                    let stmt = *stmts.items.add(i);
-                    sb_appendf(output, c!("    %s\n"), stmt.line);
-                }
-                sb_appendf(output, c!(")\n"));
-            }
-
-            Op::Label {label} => {
-                sb_appendf(output, c!("  label[%zu]\n"), label);
-            }
-            Op::JmpLabel {label} => {
-                sb_appendf(output, c!("    jmp label[%zu]\n"), label);
-            }
-            Op::JmpIfNotLabel {label, arg} => {
-                sb_appendf(output, c!("    jmp_if_not label[%zu], "), label);
-                dump_arg(output, arg);
-                sb_appendf(output, c!("\n"));
-            }
-            Op::Index {result, arg, offset} => {
-                sb_appendf(output, c!("    auto[%zu] = ("), result);
-                dump_arg(output, arg);
-                sb_appendf(output, c!(") + (") );
-                dump_arg(output, offset);
-                sb_appendf(output, c!(" * WORD_SIZE)\n"));
-            },
-        }
+        dump_op((*body)[i], output)
     }
 }
 
