@@ -1,5 +1,105 @@
 /* Standard Library for the Uxn target */
 
+/*
+ch = char(string, i);
+returns the ith character in a string pointed to by string, 0 based
+*/
+
+char __asm__(
+    "lit 4", "ldz2", /* first arg, string */
+    "lit 6", "ldz2", /* second arg, i */
+    "add2",
+    "lda",
+    "lit 0",
+    "swp",
+    "lit 4", "stz2", /* return value (same spot as the first arg) */
+    "jmp2r"
+);
+
+/*
+ch = lchar(string, i, char);
+replaces the ith character in the string pointed to by string with the character char.
+The value LCHAR returns is the character char that was placed in the string.
+*/
+
+lchar __asm__(
+    "lit 9", "ldz", /* low byte of the arg 2, char */
+    "lit 4", "ldz2",
+    "lit 6", "ldz2",
+    "add2",
+    "stak",
+    "pop2",
+    "lit 0",
+    "swp",
+    "lit 4", "stz2",
+    "jmp2r"
+);
+
+/*
+value = uxn_dei(device);
+reads 8 bit value off a device
+*/
+
+uxn_dei __asm__(
+    "lit 0", "lit 4", "stz", /* zero the high byte of arg0/return */
+    "lit 5", "ldzk", /* low byte of arg0 */
+    "dei",
+    "swp",
+    "stz",
+    "jmp2r"
+);
+
+/*
+value = uxn_dei2(device);
+reads 16 bit value off a device
+*/
+
+uxn_dei2 __asm__(
+    "lit 5", "ldz", /* low byte of arg0 */
+    "dei2",
+    "lit 4", "stz2",
+    "jmp2r"
+);
+
+/*
+uxn_deo(device, value);
+outputs 8 bit value to a device
+*/
+
+uxn_deo __asm__(
+    "lit 7", "ldz", /* low byte of arg1 */
+    "lit 5", "ldz", /* low byte of arg0 */
+    "deo",
+    "lit2 0", "lit 4", "stz2", /* return 0 */
+    "jmp2r"
+);
+
+/*
+uxn_deo2(device, value);
+outputs 16 bit value to a device
+*/
+
+uxn_deo2 __asm__(
+    "lit 6", "ldz2", /* arg1 */
+    "lit 5", "ldz", /* low byte of arg0 */
+    "deo2",
+    "lit2 0", "lit 4", "stz2", /* return 0 */
+    "jmp2r"
+);
+
+/*
+uxn_udiv(a, b)
+outputs 16 bit unsigned division of a / b.
+*/
+
+uxn_div2 __asm__(
+    "lit 4", "ldz2", /* arg0 */
+    "lit 6", "ldz2", /* arg1 */
+    "div2",
+    "lit 4", "stz2",
+    "jmp2r"
+);
+
 fputc(c, fd) {
     extrn uxn_deo;
     uxn_deo(fd + 0x18, c); /* 0x18 - Console/write,

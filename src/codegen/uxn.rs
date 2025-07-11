@@ -241,7 +241,7 @@ pub unsafe fn generate_program(
 
     generate_funcs(output, da_slice((*program).funcs), &mut assembler)?;
     generate_asm_funcs(output, da_slice((*program).asm_funcs), &mut assembler)?;
-    generate_extrns(output, da_slice((*program).extrns), da_slice((*program).funcs), da_slice((*program).globals), &mut assembler)?;
+    generate_extrns(da_slice((*program).extrns), da_slice((*program).funcs), da_slice((*program).asm_funcs), da_slice((*program).globals))?;
     generate_data_section(output, da_slice((*program).data), &mut assembler);
     generate_globals(output, da_slice((*program).globals), &mut assembler);
 
@@ -808,12 +808,18 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
     write_op(output, UxnOp::STA2);
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global], assembler: *mut Assembler) -> Option<()> {
+pub unsafe fn generate_extrns(extrns: *const [*const c_char], funcs: *const [Func], asm_funcs: *const[AsmFunc], globals: *const [Global]) -> Option<()> {
     'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
             let func = (*funcs)[j];
+            if strcmp(func.name, name) == 0 {
+                continue 'skip_function_or_global
+            }
+        }
+        for j in 0..asm_funcs.len() {
+            let func = (*asm_funcs)[j];
             if strcmp(func.name, name) == 0 {
                 continue 'skip_function_or_global
             }
@@ -824,93 +830,8 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
                 continue 'skip_function_or_global
             }
         }
-        // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it
-        if strcmp(name, c!("char")) == 0 {
-            // ch = char(string, i);
-            // returns the ith character in a string pointed to by string, 0 based
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("char")), (*output).count);
-            write_lit_ldz2(output, FIRST_ARG + 0);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_op(output, UxnOp::ADD2);
-            write_op(output, UxnOp::LDA);
-            write_lit(output, 0);
-            write_op(output, UxnOp::SWP);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("lchar")) == 0 {
-            // ch = lchar(string, i, char);
-            // replaces the ith character in the string pointed to by string with the character char.
-            // The value LCHAR returns is the character char that was placed in the string.
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("lchar")), (*output).count);
-            write_lit(output, FIRST_ARG + 5); // lower byte of the arg 2 (char)
-            write_op(output, UxnOp::LDZ);
-            write_lit_ldz2(output, FIRST_ARG + 0);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_op(output, UxnOp::ADD2);
-            write_op(output, UxnOp::STAk);
-            write_op(output, UxnOp::POP2);
-            write_lit(output, 0);
-            write_op(output, UxnOp::SWP);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_dei")) == 0 {
-            // value = uxn_dei(device);
-            // reads 8 bit value off a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_dei")), (*output).count);
-            write_lit(output, 0);
-            write_lit(output, FIRST_ARG + 0); // the high byte of the first arg/return value, will be zeroed
-            write_op(output, UxnOp::STZ);
-            write_lit(output, FIRST_ARG + 1); // low byte of arg 0
-            write_op(output, UxnOp::LDZk);
-            write_op(output, UxnOp::DEI);
-            write_op(output, UxnOp::SWP);
-            write_op(output, UxnOp::STZ);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_dei2")) == 0 {
-            // value = uxn_dei2(device);
-            // reads 16 bit value off a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_dei2")), (*output).count);
-            write_lit(output, FIRST_ARG + 1); // low byte of arg 0
-            write_op(output, UxnOp::LDZ);
-            write_op(output, UxnOp::DEI2);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_deo")) == 0 {
-            // uxn_deo(device, value);
-            // outputs 8 bit value to a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_deo")), (*output).count);
-            write_lit(output, FIRST_ARG + 3); // low byte of arg 1
-            write_op(output, UxnOp::LDZ);
-            write_lit(output, FIRST_ARG + 1); // low byte of arg 0
-            write_op(output, UxnOp::LDZ);
-            write_op(output, UxnOp::DEO);
-            write_lit2(output, 0);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_deo2")) == 0 {
-            // uxn_deo2(device, value);
-            // outputs 16 bit value to a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_deo2")), (*output).count);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_lit(output, FIRST_ARG + 1);
-            write_op(output, UxnOp::LDZ);
-            write_op(output, UxnOp::DEO2);
-            write_lit2(output, 0);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_div2")) == 0 {
-            // uxn_udiv(a, b)
-            // outputs 16 bit unsigned division of a / b.
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_div2")), (*output).count);
-            write_lit_ldz2(output, FIRST_ARG);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_op(output, UxnOp::DIV2);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else {
-            log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
-            return None;
-        }
+        log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
+        return None;
     }
     Some(())
 }
