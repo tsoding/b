@@ -197,7 +197,7 @@ pub unsafe fn execute_test(
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
-        Target::ILasm_Mono          => todo!("run"),
+        Target::ILasm_Mono          => runner::ilasm_mono::run(cmd, program_path, &[], Some(stdout_path)),
     };
 
     (*sb).count = 0;

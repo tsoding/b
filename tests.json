@@ -515,6 +515,11 @@
             "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+            "state": "Enabled",
+            "comment": ""
         }
     },
     "compare": {
@@ -1181,6 +1186,11 @@
             "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+            "state": "Enabled",
+            "comment": ""
         }
     },
     "inc_dec": {
@@ -1366,6 +1376,11 @@
             "expected_stdout": "No forward declaration is required\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "No forward declaration is required\n",
+            "state": "Enabled",
+            "comment": ""
         }
     },
     "statements": {
@@ -1401,6 +1416,11 @@
         },
         "6502": {
             "expected_stdout": "HELO\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "ilasm-mono": {
+            "expected_stdout": "HELO\n",
             "state": "Enabled",
             "comment": ""
         }

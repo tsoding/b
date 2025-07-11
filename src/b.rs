@@ -1764,11 +1764,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                cmd_append!{
-                    &mut cmd,
-                    c!("mono"), effective_output_path,
-                }
-                if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+                runner::ilasm_mono::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
     }

@@ -37,7 +37,7 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *c
     }
 }
 
-pub unsafe fn call_arg(loc: Loc, fun: Arg, output: *mut String_Builder) {
+pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usize) {
     match fun {
         Arg::Bogus           => unreachable!("bogus-amogus"),
         Arg::AutoVar(..)     => missingf!(loc, c!("AutoVar\n")),
@@ -45,18 +45,19 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, output: *mut String_Builder) {
         Arg::RefAutoVar(..)  => missingf!(loc, c!("RefAutoVar\n")),
         Arg::RefExternal(..) => missingf!(loc, c!("RefExternal\n")),
         Arg::External(name)  => {
-            // TODO: unhardcode all these externs
-            //   We could probably use things like __asm__ to implement them
+            // TODO: unhardcode the printf
+            //   The main difficulty here will be passing the string, since B ilasm-mono runtime only operates on int64
+            //   as of right now. Some hack is required in here. Look into the direction of boxing the values.
             if strcmp(name, c!("printf")) == 0 {
-                sb_appendf(output, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
-                sb_appendf(output, c!("        ldc.i8 0\n"));
-            } else if strcmp(name, c!("printn")) == 0 {
-                // TODO: printn is also suppose to get the base of the number
-                sb_appendf(output, c!("        call void class [mscorlib]System.Console::Write(int64)\n"));
-                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
+                sb_appendf(out, c!("        ldc.i8 0\n"));
             } else {
-                log(Log_Level::ERROR, c!("Unknown external function %s"), name);
-                abort();
+                sb_appendf(out, c!("        call int64 class Program::%s("), name);
+                for i in 0..arity {
+                    if i > 0 { sb_appendf(out, c!(", ")); }
+                    sb_appendf(out, c!("int64"));
+                }
+                sb_appendf(out, c!(")\n"));
             }
         },
         Arg::Literal(..)     => missingf!(loc, c!("Literal\n")),
@@ -65,7 +66,12 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, output: *mut String_Builder) {
 }
 
 pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *const [u8]) {
-    sb_appendf(output, c!("    .method static int64 '%s' () {\n"), func.name);
+    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name);
+    for i in 0..func.params_count {
+        if i > 0 { sb_appendf(output, c!(", ")); }
+        sb_appendf(output, c!("int64"));
+    }
+    sb_appendf(output, c!(") {\n"), func.name);
 
     if func.auto_vars_count > 0 {
         sb_appendf(output, c!("        .locals init ("));
@@ -82,7 +88,12 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
             Op::Bogus               => unreachable!("bogus-amogus"),
             Op::UnaryNot {..}       => missingf!(op.loc, c!("Op::UnaryNot\n")),
             Op::Negate {..}         => missingf!(op.loc, c!("Op::Negate\n")),
-            Op::Asm {..}            => missingf!(op.loc, c!("Op::Asm\n")),
+            Op::Asm {stmts} => {
+                for i in 0..stmts.count {
+                    let stmt = *stmts.items.add(i);
+                    sb_appendf(output, c!("        %s\n"), stmt.line);
+                }
+            }
             Op::Binop {binop, index, lhs, rhs} => {
                 load_arg(op.loc, lhs, output, data);
                 load_arg(op.loc, rhs, output, data);
@@ -133,7 +144,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 for i in 0..args.count {
                     load_arg(op.loc, *args.items.add(i), output, data);
                 }
-                call_arg(op.loc, fun, output);
+                call_arg(op.loc, fun, output, args.count);
                 sb_appendf(output, c!("        stloc V_%zu\n"), result);
 
             }
