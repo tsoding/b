@@ -756,15 +756,17 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
-            Op::Return {arg} => {
-                if let Some(arg) = arg {
-                    load_arg(arg, op.loc, out, asm);
+            Op::SetRetReg { arg } => {
+                load_arg(arg, op.loc, out, asm);
+            }
+            Op::Return => {
+                if stack_size > 0 {
+                    // seriously... we don't have enough registers to save A to...
+                    instr8(out, STA, ZP, ZP_TMP_0);
+                    add_sp(out, stack_size, asm);
+                    instr8(out, LDA, ZP, ZP_TMP_0);
                 }
-
-                // jump to ret statement
-                instr0(out, JMP, ABS);
-                add_reloc(out, RelocationKind::AddressAbs
-                          {idx: *op_addresses.items.add(body.len())}, asm);
+                instr(out, RTS);
             },
             Op::Store {index, arg} => {
                 load_auto_var(out, index, asm);
@@ -1268,20 +1270,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
         }
     }
-
-    instr8(out, LDA, IMM, 0);
-    instr(out, TAY);
-
-    let addr_idx = *op_addresses.items.add(body.len());
-    *(*asm).addresses.items.add(addr_idx) = (*out).count as u16;
-
-    if stack_size > 0 {
-        // seriously... we don't have enough registers to save A to...
-        instr8(out, STA, ZP, ZP_TMP_0);
-        add_sp(out, stack_size, asm);
-        instr8(out, LDA, ZP, ZP_TMP_0);
-    }
-    instr(out, RTS);
 }
 
 pub unsafe fn generate_funcs(out: *mut String_Builder, funcs: *const [Func], asm: *mut Assembler) {

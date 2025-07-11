@@ -31,12 +31,13 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
 pub unsafe fn dump_op(op: OpWithLocation, output: *mut String_Builder) {
     match op.opcode {
         Op::Bogus => unreachable!("bogus-amogus"),
-        Op::Return {arg} => {
-            sb_appendf(output, c!("    return "));
-            if let Some(arg) = arg {
-                dump_arg(output, arg);
-            }
+        Op::SetRetReg { arg } => {
+            sb_appendf(output, c!("    ret_reg = "));
+            dump_arg(output, arg);
             sb_appendf(output, c!("\n"));
+        }
+        Op::Return => {
+            sb_appendf(output, c!("    return\n"));
         },
         Op::Store{index, arg} => {
             sb_appendf(output, c!("    store deref[%zu], "), index);

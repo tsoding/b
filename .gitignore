@@ -1,1 +1,4 @@
 build/
+
+# used for rust-analyzer
+rust-project.json

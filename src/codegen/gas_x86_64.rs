@@ -84,10 +84,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
         let op = (*body)[i];
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
-            Op::Return { arg } => {
-                if let Some(arg) = arg {
-                    load_arg_to_reg(arg, c!("rax"), output, os);
-                }
+            Op::SetRetReg { arg } => {
+                load_arg_to_reg(arg, c!("rax"), output, os);
+            }
+            Op::Return => {
                 sb_appendf(output, c!("    movq %%rbp, %%rsp\n"));
                 sb_appendf(output, c!("    popq %%rbp\n"));
                 sb_appendf(output, c!("    ret\n"));
@@ -241,10 +241,6 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             },
         }
     }
-    sb_appendf(output, c!("    movq $0, %%rax\n"));
-    sb_appendf(output, c!("    movq %%rbp, %%rsp\n"));
-    sb_appendf(output, c!("    popq %%rbp\n"));
-    sb_appendf(output, c!("    ret\n"));
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {

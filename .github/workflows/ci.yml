@@ -26,6 +26,9 @@ jobs:
       - name: Run Tests
         run: |
           PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin
+      - name: Run Tests With Opts
+        run: |
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin -O
   macos-aarch64:
     runs-on: macos-latest
     steps:
@@ -37,6 +40,8 @@ jobs:
         run: make -B
       - name: Run Tests
         run: ./build/btest -t gas-aarch64-darwin
+      - name: Run Tests With Opts
+        run: ./build/btest -t gas-aarch64-darwin -O
   macos-x86_64:
     runs-on: macos-13
     steps:
@@ -48,3 +53,5 @@ jobs:
         run: make -B
       - name: Run Tests
         run: ./build/btest -t gas-x86_64-darwin
+      - name: Run Tests With Opts
+        run: ./build/btest -t gas-x86_64-darwin -O

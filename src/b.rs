@@ -35,6 +35,7 @@ pub mod codegen;
 pub mod runner;
 pub mod lexer;
 pub mod targets;
+pub mod opt;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -214,7 +215,7 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
     Some(())
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Arg {
     /// Bogus value of an Arg.
     ///
@@ -322,13 +323,13 @@ impl Binop {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub struct AsmStmt {
     line: *const c_char,
     loc: Loc,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum Op {
     Bogus,
     UnaryNot       {result: usize, arg: Arg},
@@ -343,7 +344,8 @@ pub enum Op {
     Label          {label: usize},
     JmpLabel       {label: usize},
     JmpIfNotLabel  {label: usize, arg: Arg},
-    Return         {arg: Option<Arg>},
+    SetRetReg      {arg: Arg},
+    Return,
 }
 
 #[derive(Clone, Copy)]
@@ -846,12 +848,13 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Return => {
             get_and_expect_tokens(l, &[Token::SemiColon, Token::OParen])?;
             if (*l).token == Token::SemiColon {
-                push_opcode(Op::Return {arg: None}, (*l).loc, c);
+                push_opcode(Op::Return, (*l).loc, c);
             } else if (*l).token == Token::OParen {
                 let (arg, _) = compile_expression(l, c)?;
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
-                push_opcode(Op::Return {arg: Some(arg)}, (*l).loc, c);
+                push_opcode(Op::SetRetReg { arg }, (*l).loc, c);
+                push_opcode(Op::Return, (*l).loc, c);
             } else {
                 unreachable!();
             }
@@ -973,6 +976,7 @@ pub struct Func {
     body: Array<OpWithLocation>,
     params_count: usize,
     auto_vars_count: usize,
+    label_count: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -1125,6 +1129,16 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             }
                         }
                         compile_statement(l, c)?;
+                        // setup function epilogue
+                        if let Some(last_op) = da_last_mut(&mut (*c).func_body) {
+                            if (*last_op).opcode != Op::Return { 
+                                push_opcode(Op::SetRetReg { arg: Arg::Literal(0) }, (*l).loc, c);
+                                push_opcode(Op::Return, (*l).loc, c);
+                            }
+                        } else {
+                            push_opcode(Op::SetRetReg { arg: Arg::Literal(0) }, (*l).loc, c);
+                            push_opcode(Op::Return, (*l).loc, c);
+                        }
                         scope_pop(&mut (*c).vars); // end function scope
 
                         for i in 0..(*c).func_gotos.count {
@@ -1144,6 +1158,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             body: (*c).func_body,
                             params_count,
                             auto_vars_count: (*c).auto_vars_ator.max,
+                            label_count: (*c).op_label_count,
                         });
                         (*c).func_body = zeroed();
                         (*c).func_goto_labels.count = 0;
@@ -1286,6 +1301,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
+    let opt         = flag_bool(c!("O"), false, c!("Enable optimizations"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
@@ -1407,6 +1423,10 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if c.error_count > 0 {
         return None
+    }
+
+    if *opt {
+        opt::optimize(&mut c);
     }
 
     let garbage_base = if (*output_path).is_null() {

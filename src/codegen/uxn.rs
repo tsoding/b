@@ -482,15 +482,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::JCI);
                 write_label_rel(output, *labels.items.add(label), assembler, 0);
             }
-            Op::Return {arg} => {
+            Op::SetRetReg { arg } => {
                 // Put return value in the FIRST_ARG
-                if let Some(arg) = arg {
-                    load_arg(arg, op.loc,  output, assembler);
-                } else {
-                    write_lit2(output, 0);
-                }
+                load_arg(arg, op.loc,  output, assembler);
                 write_lit_stz2(output, FIRST_ARG);
-
+            }
+            Op::Return => {
                 // restore SP from BP
                 write_lit_ldz2(output, BP);
                 write_lit_stz2(output, SP);
@@ -519,26 +516,6 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
     }
 
     free(labels.items);
-
-    // return value is 0
-    write_lit2(output, 0);
-    write_lit_stz2(output, FIRST_ARG);
-
-    // restore SP from BP
-    write_lit_ldz2(output, BP);
-    write_lit_stz2(output, SP);
-
-    // pop BP from stack
-    write_lit_ldz2(output, SP);
-    write_op(output, UxnOp::LDA2);
-    write_lit_stz2(output, BP);
-    write_lit_ldz2(output, SP);
-    write_lit2(output, 2);
-    write_op(output, UxnOp::ADD2);
-    write_lit_stz2(output, SP);
-
-    // return
-    write_op(output, UxnOp::JMP2r);
 }
 
 pub unsafe fn write_op(output: *mut String_Builder, op: UxnOp) {
@@ -552,14 +529,14 @@ pub unsafe fn write_byte(output: *mut String_Builder, byte: u8) {
 pub unsafe fn write_label_rel(output: *mut String_Builder, label: usize, a: *mut Assembler, offset: usize) {
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::UpperRelative,
-        label: label,
+        label,
         addr: (*output).count as u16,
         offset: offset as u16,
     });
     write_byte(output, 0xff);
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::LowerRelative,
-        label: label,
+        label,
         addr: (*output).count as u16,
         offset: offset as u16,
     });
@@ -569,14 +546,14 @@ pub unsafe fn write_label_rel(output: *mut String_Builder, label: usize, a: *mut
 pub unsafe fn write_label_abs(output: *mut String_Builder, label: usize, a: *mut Assembler, offset: usize) {
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::UpperAbsolute,
-        label: label,
+        label,
         addr: (*output).count as u16,
         offset: offset as u16,
     });
     write_byte(output, 0xff);
     da_append(&mut (*a).patches, Patch{
         kind: PatchKind::LowerAbsolute,
-        label: label,
+        label,
         addr: (*output).count as u16,
         offset: offset as u16,
     });
