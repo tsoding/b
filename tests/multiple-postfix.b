@@ -1,3 +1,4 @@
+// TODO: PCrel errors on SH4
 main() {
     extrn printf, malloc;
     auto arr, W;

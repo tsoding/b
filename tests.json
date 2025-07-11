@@ -30,6 +30,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Foo\nBar\nBaz\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "Foo\nBar\nBaz\n",
             "state": "Enabled",
@@ -64,6 +69,11 @@
         },
         "6502": {
             "expected_stdout": "34  35\r\n70 419\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "34  35\n70 419\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -104,6 +114,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
             "state": "Enabled",
@@ -141,6 +156,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
             "state": "Enabled",
@@ -174,6 +194,11 @@
             "comment": "Doesn't make sense for this target"
         },
         "6502": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-sh4dsp-prizm": {
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Doesn't make sense for this target"
@@ -220,6 +245,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "69\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "69\n",
             "state": "Enabled",
@@ -253,6 +283,11 @@
             "comment": "Doesn't make sense for this target"
         },
         "6502": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-sh4dsp-prizm": {
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "Doesn't make sense for this target"
@@ -299,6 +334,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
             "state": "Disabled",
@@ -341,6 +381,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
             "state": "Enabled",
@@ -375,6 +420,11 @@
         },
         "6502": {
             "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "foo == 0x0102030405060708: OK\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -415,6 +465,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
             "state": "Enabled",
@@ -449,6 +504,11 @@
         },
         "6502": {
             "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -489,6 +549,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Foo\nBar\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "Foo\nBar\n",
             "state": "Enabled",
@@ -523,6 +588,11 @@
         },
         "6502": {
             "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -568,6 +638,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
             "state": "Enabled",
@@ -609,6 +684,11 @@
             "expected_stdout": "69\n1000000\n123456789987654321\n",
             "state": "Enabled",
             "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "69\n1000000\n123456789987654321\n",
+            "state": "Enabled",
+            "comment": "TODO: libb does not currently support %lu for this platform, and the last litteral is too large to fit within a longword anyways >_>"
         }
     },
     "minus_2": {
@@ -639,6 +719,11 @@
         },
         "6502": {
             "expected_stdout": "-4\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "-4\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -675,6 +760,11 @@
             "comment": ""
         },
         "6502": {
+            "expected_stdout": "EEEEEEE\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
             "expected_stdout": "EEEEEEE\n",
             "state": "Enabled",
             "comment": ""
@@ -716,6 +806,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
             "state": "Enabled",
@@ -750,6 +845,11 @@
         },
         "6502": {
             "expected_stdout": "(69,69)    => 690: OK\r\n(420,420)  => 42: OK\r\n(420,1337) => 7331: OK\r\n(420,69)   => -2: OK\r\n(34,35)    => -1: OK\r\n------------------------------\r\n0\r\n1\r\n2\r\n3\r\n4\r\n------------------------------\r\n3\r\n4\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -790,6 +890,11 @@
             "state": "Enabled",
             "comment": "TODO: Stack overflow"
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
             "state": "Enabled",
@@ -824,6 +929,11 @@
         },
         "6502": {
             "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -864,6 +974,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
             "state": "Enabled",
@@ -900,6 +1015,11 @@
             "expected_stdout": "",
             "state": "Enabled",
             "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
         },
         "gas-x86_64-darwin": {
             "expected_stdout": "",
@@ -943,6 +1063,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
             "state": "Enabled",
@@ -977,6 +1102,11 @@
         },
         "6502": {
             "expected_stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -1017,6 +1147,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
             "state": "Enabled",
@@ -1051,6 +1186,11 @@
         },
         "6502": {
             "expected_stdout": "0\r\n1\r\n2\r\n3\r\n4\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "0\n1\n2\n3\n4\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -1091,6 +1231,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "69\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "69\n",
             "state": "Enabled",
@@ -1125,6 +1270,11 @@
         },
         "6502": {
             "expected_stdout": "Testing how well passing 6 arguments works.\r\nExpected output is `1 2 3 4 5`\r\n1 2 3 4 5\r\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
             "state": "Enabled",
             "comment": ""
         },
@@ -1165,6 +1315,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
             "state": "Enabled",
@@ -1198,6 +1353,11 @@
             "comment": ""
         },
         "6502": {
+            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "gas-sh4dsp-prizm": {
             "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
             "state": "Enabled",
             "comment": ""
@@ -1244,6 +1404,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
             "state": "Enabled",
@@ -1281,6 +1446,11 @@
             "state": "Enabled",
             "comment": ""
         },
+        "gas-sh4dsp-prizm": {
+            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
+            "state": "Enabled",
+            "comment": ""
+        },
         "gas-x86_64-darwin": {
             "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
             "state": "Enabled",
@@ -1314,6 +1484,11 @@
             "comment": "The word size of this platform is too small."
         },
         "6502": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "The word size of this platform is too small."
+        },
+        "gas-sh4dsp-prizm": {
             "expected_stdout": "",
             "state": "Disabled",
             "comment": "The word size of this platform is too small."

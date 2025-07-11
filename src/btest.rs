@@ -172,6 +172,7 @@ pub unsafe fn execute_test(
         Target::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
         Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
         Target::Gas_x86_64_Windows  => c!("exe"),
+        Target::Gas_SH4_Prizm       => c!("g3a"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
@@ -191,15 +192,19 @@ pub unsafe fn execute_test(
     let run_result = match target {
         Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_SH4_Prizm       => runner::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path)),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
         Target::ILasm_Mono          => runner::ilasm_mono::run(cmd, program_path, &[], Some(stdout_path)),
     };
+    if let None = run_result {
+        return Some(Outcome::RunFail);
+    }
 
     (*sb).count = 0;
     read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.

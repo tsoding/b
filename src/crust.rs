@@ -100,6 +100,10 @@ pub mod libc {
         pub fn strtoull(nptr: *const c_char, endptr: *mut*mut c_char, base: c_int) -> c_ulonglong;
         pub fn fwrite(ptr: *const c_void, size: usize, nmemb: usize, stream: *mut FILE) -> usize;
 
+        pub fn getenv(s: *const c_char) -> *const c_char;
+        pub fn getc(file: *mut FILE) -> c_int;
+        pub fn getchar() -> c_int;
+
         pub fn abort() -> !;
         pub fn strdup(s: *const c_char) -> *mut c_char;
         pub fn strncpy(dst: *mut c_char, src: *const c_char, dsize: usize) -> *mut c_char;
