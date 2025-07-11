@@ -1514,21 +1514,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
 
-            cmd_append! {
-                &mut cmd,
-                c!("fxgxa"), c!("--g3a"),
-                c!("-n"), c!("B addin"),
-                output_bin_path, output_g3a_path,
-            }
-            if !*nostdlib {
-                // Also add the default icon
-                cmd_append! {
-                    &mut cmd,
-                    c!("--icon-uns=./libb/gas-sh4dsp-prizm-uns.png"),
-                    c!("--icon-sel=./libb/gas-sh4dsp-prizm-sel.png"),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            codegen::gas_sh4dsp_prizm::generate_g3a(output_bin_path, c!("B add-in"), output_g3a_path)?;
+
             if *run {
                 runner::gas_sh4dsp_prizm::run(&mut output, output_g3a_path, None)?;
             }

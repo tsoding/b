@@ -2,6 +2,7 @@ use core::ffi::*;
 use core::cmp;
 use crate::nob::*;
 use crate::crust::libc::*;
+use core::mem::zeroed;
 use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, missingf};
 use crate::{Loc};
 
@@ -674,4 +675,239 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     generate_asm_funcs(output, da_slice((*c).asm_funcs));
     generate_globals(output, da_slice((*c). globals));
     generate_data_section(output, da_slice((*c).data));
+}
+
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct G3A {
+    // All *useful* information about a G3A
+    // Note that the header is inverted when writing, and values are big-endian
+
+    // The addins' codesize (ignoring headers+checksums)
+    pub inner_size: u32,
+    pub name: *const c_char,
+    pub filename: *const c_char,
+
+    pub selected_bitmap: Array<u16>,
+    pub unselected_bitmap: Array<u16>,
+
+    pub addin: *mut String_Builder
+}
+
+
+pub unsafe fn write_u8(output: *mut String_Builder, mut byte: u8, is_header: bool) {
+    if is_header { byte = 0xFF ^ byte; }
+    da_append(output, byte as c_char);
+}
+pub unsafe fn rewrite_u8(output: *mut String_Builder, addr: usize, mut byte: u8, is_header: bool) {
+    if is_header { byte = 0xFF ^ byte; }
+    *((*output).items.add(addr)) = byte as c_char;
+}
+pub unsafe fn rewrite_u32(output: *mut String_Builder, addr: usize, val: u32, is_header: bool) {
+    for i in 0..4 {
+        let byte: u8 = ((val >> (8 * (3 - i))) & 0xFF) as u8;
+        rewrite_u8(output, addr + i, byte, is_header);
+    }
+}
+pub unsafe fn write_u16(output: *mut String_Builder, val: u16, is_header: bool) {
+    for i in 0..2 {
+        let byte: u8 = ((val >> (8 * (1 - i))) & 0xFF) as u8;
+        write_u8(output, byte, is_header);
+    }
+}
+pub unsafe fn write_u32(output: *mut String_Builder, val: u32, is_header: bool) {
+    for i in 0..4 {
+        let byte: u8 = ((val >> (8 * (3 - i))) & 0xFF) as u8;
+        write_u8(output, byte, is_header);
+    }
+}
+pub unsafe fn write_string(output: *mut String_Builder, val: *const c_char, is_header: bool) {
+    let len = strlen(val);
+    for i in 0..len {
+        let byte: u8 = *(val.add(i)) as u8;
+        write_u8(output, byte, is_header);
+    }
+}
+
+pub unsafe fn read_16(addin: *const G3A, address: usize) -> u16 {
+    let mut ret: u16 = 0x0000;
+    let up: u8 = *((*((*addin).addin)).items.add(address + 0)) as u8;
+    let down: u8 = *((*((*addin).addin)).items.add(address + 1)) as u8;
+    ret |= (up as u16) << 8;
+    ret |= (down as u16) << 0;
+
+    ret
+}
+
+pub unsafe fn write_g3a(output: *mut String_Builder, addin: *const G3A) {
+    // Writing out the header
+
+    // The full header is 0x7000 bytes, with a 4 byte ending checksum.
+    let complete_size = ((*((*addin).addin)).count + 0x7000 + 0x4) as u32;
+    write_string(output, c!("USBPower"), true);
+
+    // 8-byte block
+    write_u8(output, 0x2C, true);
+    // Control bytes
+    write_u8(output, 0x00, true);
+    write_u8(output, 0x01, true);
+    write_u8(output, 0x00, true);
+    write_u8(output, 0x01, true);
+    write_u8(output, 0x00, true);
+    // LSB of size + 0x41
+    write_u8(output, ((complete_size & 0xFF) as u8).wrapping_add(0x41), true);
+    write_u8(output, 0x01, true);
+
+    // Actual filesize
+    write_u32(output, complete_size, true);
+
+    // Another LSB + 0xB8
+    write_u8(output, ((complete_size & 0xFF) as u8).wrapping_add(0xB8), true);
+    write_u8(output, 0x00, true);
+    // Checksum of 8 16-bit words from 0x7100
+    // 0x7100 -> 0x100 (add-in space)
+    let mut sumw: u16 = 0x0000;
+    for i in 0..8 { 
+        let word = read_16(addin, 0x100 + i * 2);
+        sumw = sumw.wrapping_add(word); 
+    }
+    write_u16(output, sumw, true);
+    for _i in 0..8 { write_u8(output, 0x69, false); }
+
+    // ----------- Here, we leave the inverted section. -------------------
+
+    let checksum_addr = (*output).count;
+    write_u32(output, 0xBE00DEAD, false);
+
+    // Control bytes
+    write_u16(output, 0x0101, false);
+
+    // Padding?
+    write_u32(output, 0xBE00DEAD, false);
+    write_u32(output, 0xBE00DEAD, false);
+
+    // Actual add-in size
+    write_u32(output, (*((*addin).addin)).count as u32, false);
+    // More padding
+    for _i in 0..14 { write_u8(output, 0x69, false); }
+
+    let name_len = strlen((*addin).name);
+    for i in 0..16 { 
+        if i < name_len && i != 15 {
+            write_u8(output, *((*addin).name.add(i)) as u8, false);
+        } else {
+            write_u8(output, 0x00, false);
+        }
+    }
+
+    // More padding
+    for _i in 0..12 { write_u8(output, 0x69, false); }
+
+    // Actual filesize
+    write_u32(output, complete_size, false);
+
+    // Internal ID (I'll just use a placeholder)
+    write_string(output, c!("@BG3AKOGASA"), false);
+    for _lang in 0..8 {
+        for i in 0..24 { 
+            if i < name_len && i != 23 {
+                write_u8(output, *((*addin).name.add(i)) as u8, false);
+            } else {
+                write_u8(output, 0x00, false);
+            }
+        }
+    }
+
+    // who up makin their b addins e-act strips
+    write_u8(output, 0x00, false);
+
+    // More padding!
+    write_u32(output, 0x00000000, false);
+
+    // Version
+    write_string(output, c!("01.00.0000"), false);
+    write_u16(output, 0x00, false);
+
+    // Date (TODO: use system date instead of UFO) (YYYY-MMDD-HHMM)
+    write_string(output, c!("2009.0815.1200"), false);
+
+    for _i in 0..38 { write_u8(output, 0x00, false); }
+
+    // More eAct nonsense
+    for _lang in 0..8 {
+        for i in 0..36 { 
+            if i < name_len && i != 35 {
+                write_u8(output, *((*addin).name.add(i)) as u8, false);
+            } else {
+                write_u8(output, 0x00, false);
+            }
+        }
+    }
+
+    // This is intended to be the strip logo
+    for _i in 0..768 { write_u8(output, 0x44, false); }
+    for _i in 0..0x92C { write_u8(output, 0x55, false); }
+
+    let filename_len = strlen((*addin).filename);
+    for i in 0..0x144 { 
+        if i < filename_len && i != 0x144 {
+            write_u8(output, *((*addin).filename.add(i)) as u8, false);
+        } else {
+            write_u8(output, 0x00, false);
+        }
+    }
+
+    // 16-bit flat icons
+    for i in 0..5888 {
+        if i < (*addin).selected_bitmap.count {
+            write_u16(output, *((*addin).selected_bitmap.items.add(i)), false);
+        } else {
+            write_u16(output, 0xFFFF, false);
+        }
+    }
+    for _i in 0..0x200 { write_u8(output, 0x00, false); }
+
+    for i in 0..5888 {
+         if i < (*addin).unselected_bitmap.count {
+            write_u16(output, *((*addin).unselected_bitmap.items.add(i)), false);
+         } else {
+            write_u16(output, 0x0000, false);
+         }
+    }
+    for _i in 0..0x200 { write_u8(output, 0x00, false); }
+
+    // Here, we assume the add-in is aligned to 4.
+    for i in 0..(*(*addin).addin).count {
+        write_u8(output, *((*(*addin).addin).items.add(i)) as u8, false);
+    }
+
+    // Now, compute the checksum
+    let mut checksum: u32 = 0x00000000;
+    for i in 0x00..0x20             { checksum += (*((*output).items.add(i)) as u8) as u32; }
+    for i in 0x24..(*output).count  { checksum += (*((*output).items.add(i)) as u8) as u32; }
+    write_u32(output, checksum, false);
+
+    // Overwrite the old checksum
+    rewrite_u32(output, checksum_addr, checksum, false);
+}
+pub unsafe fn generate_g3a(binary: *const c_char, name: *const c_char, output_file: *const c_char) -> Option<()> {
+    let mut g3a: G3A = zeroed();    
+    let mut g3a_out: String_Builder = zeroed();
+    let mut bin_in: String_Builder = zeroed();
+
+    read_entire_file(binary, &mut bin_in)?;
+    g3a.name = name;
+    g3a.filename = output_file;
+
+    // TODO: read from a raw rgb16 image
+    g3a.selected_bitmap = zeroed();
+    g3a.unselected_bitmap = zeroed();
+
+    g3a.addin = &mut bin_in;
+
+    write_g3a(&mut g3a_out, &g3a);
+    write_entire_file(output_file, g3a_out.items as *const c_void, g3a_out.count)?;
+
+    Some(())
 }
