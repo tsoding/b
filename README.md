@@ -1,7 +1,7 @@
 # B Programming Language
 
 > [!WARNING]
-> Compiler is not fully implemented yet.
+> The Compiler is not fully implemented yet. Plus on its own it's probably not useful for any serious Software Development. It is fun for Recreational Programming though.
 
 <p align=center>
   <img src="./logo/logo_strawberry.png" width=400>
@@ -11,14 +11,14 @@
   <sub>Logo by Strawberry 🍓</sub>
 </p>
 
-Compiler for the B Programming Language implemented in [Crust](https://github.com/tsoding/crust)
+Compiler for the [B Programming Language](https://en.wikipedia.org/wiki/B_(programming_language)) implemented in [Crust](https://github.com/tsoding/crust).
 
 ## Dependencies
 
 - [Rust](https://www.rust-lang.org/) - the compiler is written in it;
-- [fasm](https://flatassembler.net/) - used as the compiler backend;
+- [GCC](https://gcc.gnu.org/) or [Clang](https://clang.llvm.org/) (whatever surves as the `cc` on your POSIX platform) - the `x86_64` and `aarch64` targets generate assembly and pass it to `cc` to assemble and link.
 
-<!-- TODO: document specific dependencies for the rest of the targets. Like mingw32-w64 and wine on Linux for Fasm_x86_64_Windows, etc. -->
+<!-- TODO: document specific dependencies for the rest of the targets. Like mingw32-w64 and wine on Linux for gas-x86_64-Windows, etc. -->
 
 ## Quick Start
 
@@ -28,56 +28,11 @@ $ ./build/b -run ./examples/hello_world.b
 ```
 
 Also check out more examples at [./examples/](./examples/).
-
-## Testing
-
-The project comes with [btest](./src/btest.rs) utility which tests the B compiler. It is built automatically along with the B compiler when you do `make`.
-
-When you run it, it just builds and runs all the tests from the [./tests/](./tests/) folder on all the supported targets and generates a matrix report. Give it a try to see it for yourself:
-
-```
-$ make
-$ ./build/btest
-```
-
-It doesn't crash when it encounters errors, it just collects the statuses of the tests on all the platforms to give an overview of the current state of the compiler.
-
-### Slicing the Test Matrix
-
-If you want to test only on a specific platform you can supply the flag `-t`
-
-```console
-$ ./build/btest -t fasm-x86_64-linux
-```
-
-You can supply several platforms
-
-```console
-$ ./build/btest -t fasm-x86_64-linux -t uxn
-```
-
-If you want to run a specific test case you can supply flag `-c`
-
-```console
-$ ./build/btest -c upper
-```
-
-You can do several tests
-
-```console
-$ ./build/btest -c upper -c vector
-```
-
-And of course you can combine both `-c` and `-t` flags to slice the Test Matrix however you want
-
-```console
-$ ./build/btest -c upper -c vector -t fasm-x86_64-linux -t uxn
-```
+Find the project documentation at [./docs/](./docs/).
 
 ## References
 
 - https://en.wikipedia.org/wiki/B_(programming_language)
 - https://www.nokia.com/bell-labs/about/dennis-m-ritchie/kbman.html
-- https://github.com/tsoding/good_training_language
-- https://www.felixcloutier.com/x86/
-- https://www.scs.stanford.edu/~zyedidia/arm64/
+- https://www.nokia.com/bell-labs/about/dennis-m-ritchie/bref.html
+- https://www.nokia.com/bell-labs/about/dennis-m-ritchie/btut.html

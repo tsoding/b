@@ -403,6 +403,6 @@ main() {
   disable_raw_mode();
 }
 
-// TODO: does not work on fasm_x86_64_windows due to using POSIX stuff
+// TODO: does not work on gas-x86_64-windows due to using POSIX stuff
 //   Would be nice to research how hard/easy it is to add the Window support.
 //   But this is not critical.

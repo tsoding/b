@@ -2,7 +2,7 @@ use core::ffi::*;
 use core::cmp;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc};
+use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, missingf};
 use crate::{Loc};
 
 #[repr(C)]
@@ -82,7 +82,7 @@ pub unsafe fn next_symbol(assembler: *mut Assembler, sym: *const c_char) -> usiz
 
 pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assembler: *mut Assembler) {
     // The extra flag is because arg doesnt use references to a symbol but the symbol itself,
-    // which then causes some fun issues, as load_arg_to_reg will try to dereference a value that 
+    // which then causes some fun issues, as load_arg_to_reg will try to dereference a value that
     // should NOT be dereferenced... this should be fixed in another PR >_>
     //                  - LDA: June 25th, 2025
     load_arg_to_reg(arg, c!("r0"), output, loc, assembler, true);
@@ -93,7 +93,7 @@ pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, assemble
 pub unsafe fn load_literal_to_reg(output: *mut String_Builder, reg: *const c_char, literal: u32, assembler: *mut Assembler) {
     let sliteral = literal as i64;
 
-    // Literals that can fit in a byte are well-supported on SH-4    
+    // Literals that can fit in a byte are well-supported on SH-4
     if (sliteral >= -128) & (sliteral <= 127) {
         sb_appendf(output, c!("    mov #%d, %s\n"), literal, reg);
         return;
@@ -187,7 +187,7 @@ pub unsafe fn write_r0(assembler: *mut Assembler, output: *mut String_Builder, a
     sb_appendf(output, c!("    \n"));
 }
 pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, _c: *const Compiler) {
-    let mut assembler: Assembler = Assembler { 
+    let mut assembler: Assembler = Assembler {
         funcname: name,
         output: output,
         next_trampoline: 0, next_litteral: 0,
@@ -228,11 +228,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
         let reg = if i < REGISTERS.len() { (*REGISTERS)[i] } else { c!("r7") };
 
         if i >= REGISTERS.len() {
-            // TODO: We should probably get a register ready for those occasions 
+            // TODO: We should probably get a register ready for those occasions
             // (reading from another zone of the stack)
             sb_appendf(output, c!("    mov.l @r13+, %s\n"), reg);
         }
-        
+
         // Push that argument (from a register) onto the stack
         sb_appendf(output, c!("    mov.l %s, @-r15\n"), reg);
     }
@@ -277,8 +277,8 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 write_r0(&mut assembler, output, result);
             }
             Op::UnaryNot {result, arg} => {
-                // This is probably not the most efficient way to do things, and it 
-                // also thrashes T, so yeah. but then again the B compiler doesn't seem 
+                // This is probably not the most efficient way to do things, and it
+                // also thrashes T, so yeah. but then again the B compiler doesn't seem
                 // to be something that cares about processor flags all that much.
                 load_arg_to_reg(arg, c!("r0"), output, op.loc, &mut assembler, false);
                 sb_appendf(output, c!("    cmp/eq #0, r0\n"));
@@ -409,7 +409,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                         call_arg(Arg::External(c!("intrisic_div")), op.loc, output, &mut assembler);
                         write_r0(&mut assembler, output, index);
                     }
-                    
+
                     // This sounds more reasonable to implement
                     Binop::Mult => {
                         load_arg_to_reg(lhs, c!("r0"), output, op.loc, &mut assembler, false);
@@ -528,8 +528,8 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
             }
             Op::JmpLabel {label} => {
                 // TODO: Deal with __more__ PCrel nonsense
-                // (well, to be frank, GNU as, by default, does some "trampoline" magic 
-                // to ensure those jumps are always addressible (but I still think they should 
+                // (well, to be frank, GNU as, by default, does some "trampoline" magic
+                // to ensure those jumps are always addressible (but I still think they should
                 // be managed properly :3)
                 let label = temp_sprintf(c!("%s.label_%zu"), name, label);
                 sb_appendf(output, c!("    mov.l "));
@@ -560,10 +560,11 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 // Otherwise, jump straight to r1
                 sb_appendf(output, c!("    jmp @r1\n"));
                 sb_appendf(output, c!("    nop\n"));
-                
+
                 next_symbol(&mut assembler, label);
                 next_jmppoint(&mut assembler);
             }
+            Op::Index {..} => missingf!(op.loc, c!("Op::Index\n")),
         }
     }
 

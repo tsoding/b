@@ -1,5 +1,4 @@
 hello() {
-    extrn putchar;
     putchar(72);
     putchar(69);
     auto a;
@@ -15,7 +14,6 @@ hello() {
 }
 
 main() {
-    extrn putchar;
     hello();
     hello();
     hello();

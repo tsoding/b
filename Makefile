@@ -17,19 +17,22 @@ RSS=\
 	$(SRC)/b.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
+	$(SRC)/glob.rs \
 	$(SRC)/lexer.rs \
 	$(SRC)/nob.rs \
 	$(SRC)/targets.rs \
-	$(SRC)/codegen/fasm_x86_64.rs \
+	$(SRC)/jim.rs \
+	$(SRC)/jimp.rs \
 	$(SRC)/codegen/gas_sh4dsp_prizm.rs \
 	$(SRC)/codegen/gas_aarch64.rs \
+	$(SRC)/codegen/gas_x86_64.rs \
+	$(SRC)/codegen/mos6502.rs \
 	$(SRC)/codegen/uxn.rs \
 	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs \
-	$(SRC)/runner/fasm_x86_64_linux.rs \
-	$(SRC)/runner/fasm_x86_64_windows.rs \
 	$(SRC)/runner/gas_x86_64_linux.rs \
 	$(SRC)/runner/gas_x86_64_windows.rs \
+	$(SRC)/runner/gas_x86_64_darwin.rs \
 	$(SRC)/runner/gas_aarch64_linux.rs \
 	$(SRC)/runner/gas_sh4dsp_prizm.rs \
 	$(SRC)/runner/gas_aarch64_darwin.rs \
@@ -40,6 +43,7 @@ RSS=\
 POSIX_OBJS=\
 	$(BUILD)/nob.posix.o \
 	$(BUILD)/flag.posix.o \
+	$(BUILD)/glob.posix.o \
 	$(BUILD)/libc.posix.o \
 	$(BUILD)/arena.posix.o \
 	$(BUILD)/fake6502.posix.o \
@@ -49,6 +53,7 @@ POSIX_OBJS=\
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
 	$(BUILD)/flag.mingw32.o \
+	$(BUILD)/glob.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
 	$(BUILD)/fake6502.mingw32.o \

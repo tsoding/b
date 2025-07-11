@@ -11,18 +11,21 @@ pub mod nob;
 pub mod targets;
 pub mod runner;
 pub mod flag;
+pub mod glob;
 pub mod jim;
 pub mod jimp;
 
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
+use core::ptr;
 use crust::*;
 use crust::libc::*;
 use nob::*;
 use targets::*;
 use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
+use glob::*;
 use jim::*;
 use jimp::*;
 
@@ -164,8 +167,7 @@ pub unsafe fn execute_test(
     // TODO: add timeouts for running and building in case they go into infinite loop or something
     let input_path = temp_sprintf(c!("%s/%s.b"), test_folder, name);
     let program_path = temp_sprintf(c!("%s/%s.%s"), GARBAGE_FOLDER, name, match target {
-        Target::Fasm_x86_64_Windows => c!("exe"),
-        Target::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
+        Target::Gas_x86_64_Darwin   => c!("gas-x86_64-darwin"),
         Target::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
         Target::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
         Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
@@ -173,6 +175,8 @@ pub unsafe fn execute_test(
         Target::Gas_SH4_Prizm       => c!("g3a"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
+        // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
+        Target::ILasm_Mono          => c!("exe"),
     });
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
@@ -186,17 +190,17 @@ pub unsafe fn execute_test(
         return Some(Outcome::BuildFail);
     }
     let run_result = match target {
-        Target::Fasm_x86_64_Linux   => runner::fasm_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Fasm_x86_64_Windows => runner::fasm_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_SH4_Prizm       => runner::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path)),
         Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
         Target::Mos6502             => runner::mos6502::run(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
+        Target::ILasm_Mono          => runner::ilasm_mono::run(cmd, program_path, &[], Some(stdout_path)),
     };
     if let None = run_result {
         return Some(Outcome::RunFail);
@@ -207,7 +211,7 @@ pub unsafe fn execute_test(
     da_append(sb, 0);                   // NULL-terminating the stdout
     printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
 
-    if let None = run_result {
+    if run_result.is_none() {
         Some(Outcome::RunFail)
     } else {
         Some(Outcome::RunSuccess{stdout: strdup((*sb).items)}) // TODO: memory leak
@@ -277,6 +281,25 @@ pub unsafe fn print_bottom_labels(targets: *const [Target], stats_by_target: *co
         }
         printf(c!("└─%-*s"), col_width - 2*j, target.name());
         print_report_stats(stats)
+    }
+}
+
+pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Option<bool> {
+    let mark = temp_save();
+    let result = match glob_utf8(pattern, text) {
+        Glob_Result::MATCHED        => Ok(true),
+        Glob_Result::UNMATCHED      => Ok(false),
+        Glob_Result::OOM_ERROR      => Err(c!("out of memory")),
+        Glob_Result::ENCODING_ERROR => Err(c!("encoding error")),
+        Glob_Result::SYNTAX_ERROR   => Err(c!("syntax error")),
+    };
+    temp_rewind(mark);
+    match result {
+        Ok(result) => Some(result),
+        Err(error) => {
+            fprintf(stderr(), c!("ERROR: while matching pattern `%s`: %s\n"), pattern, error);
+            None
+        }
     }
 }
 
@@ -418,11 +441,12 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
 type Bat = Array<(*const c_char, Array<(Target, TestConfig)>)>; // (Big Ass Table)
 
 pub unsafe fn load_bat_from_json_file_if_exists(
-    json_path: *const c_char,
+    json_path: *const c_char, test_folder: *const c_char,
     sb: *mut String_Builder, jimp: *mut Jimp
 ) -> Option<Bat> {
     let mut bat: Bat = zeroed();
     if file_exists(json_path)? {
+        printf(c!("INFO: loading file %s...\n"), json_path);
         // TODO: file may stop existing between file_exists() and read_entire_file() cools
         // It would be much better if read_entire_file() returned the reason of failure so
         // it's easy to check if it failed due to ENOENT, but that requires significant
@@ -435,21 +459,36 @@ pub unsafe fn load_bat_from_json_file_if_exists(
         jimp_object_begin(jimp)?;
         while let Some(()) = jimp_object_member(jimp) {
             let case_name = strdup((*jimp).string); // TODO: memory leak
+            let case_start = (*jimp).token_start;
             let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
             jimp_object_begin(jimp)?;
             while let Some(()) = jimp_object_member(jimp) {
-                if let Some(target) = Target::by_name((*jimp).string) {
-                    let test_config: TestConfig = test_config_deserialize(jimp)?;
+                let target_name = strdup((*jimp).string); // TODO: memory leak
+                let target = Target::by_name(target_name);
+                let target_start = (*jimp).token_start;
+                let test_config: TestConfig = test_config_deserialize(jimp)?;
+                if let Some(target) = target {
                     da_append(&mut target_test_config_table, (target, test_config));
                 } else {
-                    jimp_unknown_member(jimp);
-                    return None;
+                    (*jimp).token_start = target_start;
+                    // TODO: memory leak, we are dropping the whole test_config here
+                    jimp_diagf(jimp, c!("WARNING: Unknown target: %s. Ignoring it...\n"), target_name);
                 }
             }
             jimp_object_end(jimp)?;
-            da_append(&mut bat, (case_name, target_test_config_table));
+
+            let case_path = temp_sprintf(c!("%s/%s.b"), test_folder, case_name);
+            if file_exists(case_path)? {
+                da_append(&mut bat, (case_name, target_test_config_table));
+            } else {
+                (*jimp).token_start = case_start;
+                // TODO: memory leak, we are dropping the whole target_test_config_table here
+                jimp_diagf(jimp, c!("WARNING: %s does not exist. Ignoring %s test case...\n"), case_path, case_name);
+            }
         }
         jimp_object_end(jimp)?;
+    } else {
+        printf(c!("INFO: %s doesn't exist. Nothing to load.\n"), json_path);
     }
     Some(bat)
 }
@@ -458,6 +497,7 @@ pub unsafe fn save_bat_to_json_file(
     json_path: *const c_char, bat: Bat,
     jim: *mut Jim,
 ) -> Option<()> {
+    printf(c!("INFO: saving file %s...\n"), json_path);
     jim_begin(jim);
     jim_object_begin(jim);
     for i in 0..bat.count {
@@ -558,18 +598,55 @@ pub unsafe fn replay_tests(
     Some(())
 }
 
+enum_with_order! {
+    #[derive(Copy, Clone)]
+    enum Action in ACTION_ORDER {
+        Replay,
+        Record,
+        Prune,
+        Disable,
+    }
+}
+
+impl Action {
+    unsafe fn name(self) -> *const c_char {
+        match self {
+            Self::Replay  => c!("replay"),
+            Self::Record  => c!("record"),
+            Self::Prune   => c!("prune"),
+            Self::Disable => c!("disable"),
+        }
+    }
+
+    unsafe fn from_name(name: *const c_char) -> Option<Self> {
+        for i in 0..ACTION_ORDER.len() {
+            let action = (*ACTION_ORDER)[i];
+            if strcmp(name, action.name()) == 0 {
+                return Some(action)
+            }
+        }
+        None
+    }
+}
+
 pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
-    let target_flags         = flag_list(c!("t"), c!("Compilation targets to test on"));
-    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from testing"));
-    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of compilation targets"));
-    let cases_flags          = flag_list(c!("c"), c!("Test cases"));
-    let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of test cases"));
+    let default_action = Action::Replay;
+
+    let target_flags         = flag_list(c!("t"), c!("Compilation targets to select for testing. Can be a glob pattern."));
+    let exclude_target_flags = flag_list(c!("xt"), c!("Compilation targets to exclude from selected ones. Can be a glob pattern"));
+    let list_targets         = flag_bool(c!("tlist"), false, c!("Print the list of selected compilation targets."));
+
+    let cases_flags          = flag_list(c!("c"), c!("Test cases to select for testing. Can be a glob pattern."));
+    let exclude_cases_flags  = flag_list(c!("xc"), c!("Test cases to exclude from selected ones. Can be a glob pattern"));
+    let list_cases           = flag_bool(c!("clist"), false, c!("Print the list of selected test cases"));
+
+    let action_flag          = flag_str(c!("a"), default_action.name(), c!("Action to perform. Use -alist to get the list of available actions"));
+    let list_actions         = flag_bool(c!("alist"), false, c!("Print the list of all available actions."));
+    let record               = flag_bool(c!("record"), false, strdup(temp_sprintf(c!("DEPRECATED! Please use `-%s %s` flag instead."), flag_name(action_flag), Action::Record.name()))); // TODO: memory leak
+    let comment              = flag_str(c!("comment"), ptr::null(), strdup(temp_sprintf(c!("Set the comment on disabled test cases when you do `-%s %s`"), flag_name(action_flag), Action::Disable.name()))); // TODO: memory leak
+
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
     let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
-    let record               = flag_bool(c!("record"), false, c!("Record test cases instead of replaying them"));
-    // TODO: introduce -xc flag
-    // TODO: select test cases and targets by a glob pattern
-    // See if https://github.com/tsoding/glob.h can be used here
 
     if !flag_parse(argc, argv) {
         usage();
@@ -582,6 +659,42 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
         return Some(());
     }
 
+    let Some(action) = Action::from_name(*action_flag) else {
+        fprintf(stderr(), c!("ERROR: unknown action `%s`\n"), *action_flag);
+        return None;
+    };
+
+    let json_path = c!("tests.json");
+
+    if *list_actions {
+        fprintf(stderr(), c!("Available actions:\n"));
+        let mut width = 0;
+        for i in 0..ACTION_ORDER.len() {
+            width = cmp::max(width, strlen((*ACTION_ORDER)[i].name()));
+        }
+        for i in 0..ACTION_ORDER.len() {
+            let action = (*ACTION_ORDER)[i];
+            match action {
+                Action::Replay => {
+                    printf(c!("  %-*s - Replay the selected Test Matrix slice with expected outputs from %s.\n"), width, action.name(), json_path);
+                }
+                Action::Record => {
+                    printf(c!("  %-*s - Record the selected Test Matrix slice into %s.\n"), width, action.name(), json_path);
+                }
+                Action::Prune  => {
+                    printf(c!("  %-*s - Prune all the recordings from %s that are outside of the selected Test Matrix slice.\n"), width, action.name(), json_path);
+                    printf(c!("  %-*s   Useful when you delete targets or test cases. Just delete a target or a test case and\n"), width, c!(""));
+                    printf(c!("  %-*s   run `%s -%s %s` without any additional flags.\n"), width, c!(""), flag_program_name(), flag_name(action_flag), Action::Prune.name());
+                }
+                Action::Disable => {
+                    printf(c!("  %-*s - Disable all the tests in the selected Test Matrix slice.\n"), width, action.name());
+                    printf(c!("  %-*s   You can optionally set the comment with the -%s flag.\n"), width, c!(""), flag_name(comment));
+                }
+            };
+        }
+        return Some(());
+    }
+
     let mut sb: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
     let mut jim: Jim = zeroed();
@@ -590,54 +703,88 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let mut reports: Array<Report> = zeroed();
     let mut stats_by_target: Array<ReportStats> = zeroed();
 
-    let mut exclude_targets: Array<Target> = zeroed();
-    for j in 0..(*exclude_target_flags).count {
-        let target_name = *(*exclude_target_flags).items.add(j);
-        if let Some(target) = Target::by_name(target_name) {
-            da_append(&mut exclude_targets, target)
-        } else {
-            fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
-            return None;
-        }
-    }
-    let mut targets: Array<Target> = zeroed();
+    let mut selected_targets: Array<Target> = zeroed();
     if (*target_flags).count == 0 {
-        for j in 0..TARGET_ORDER.len() {
-            let target = (*TARGET_ORDER)[j];
-            if !slice_contains(da_slice(exclude_targets), &target) {
-                da_append(&mut targets, target)
-            }
-        }
+        da_append_many(&mut selected_targets, TARGET_ORDER);
     } else {
         for j in 0..(*target_flags).count {
-            let target_name = *(*target_flags).items.add(j);
-            if let Some(target) = Target::by_name(target_name) {
-                if !slice_contains(da_slice(exclude_targets), &target) {
-                    da_append(&mut targets, target)
+            let mut added_anything = false;
+            let pattern = *(*target_flags).items.add(j);
+            for j in 0..TARGET_ORDER.len() {
+                let target = (*TARGET_ORDER)[j];
+                let name = target.name();
+                if matches_glob(pattern, name)? {
+                    da_append(&mut selected_targets, target);
+                    added_anything = true;
                 }
-            } else {
-                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), target_name);
+            }
+            if !added_anything {
+                fprintf(stderr(), c!("ERROR: unknown target `%s`\n"), pattern);
                 return None;
             }
         }
     }
-
-    let mut cases: Array<*const c_char> = zeroed();
-    if (*cases_flags).count == 0 {
-        let mut case_files: File_Paths = zeroed();
-        if !read_entire_dir(*test_folder, &mut case_files) { return None; } // TODO: memory leak. The file names are strduped to temp, but the File_Paths dynamic array itself is still allocated on the heap
-        qsort(case_files.items as *mut c_void, case_files.count, size_of::<*const c_char>(), compar_cstr);
-
-        for i in 0..case_files.count {
-            let case_file = *case_files.items.add(i);
-            if *case_file == '.' as c_char { continue; }
-            let Some(case_name) = temp_strip_suffix(case_file, c!(".b")) else { continue; };
-            da_append(&mut cases, case_name);
+    let mut targets: Array<Target> = zeroed();
+    for i in 0..selected_targets.count {
+        let target = *selected_targets.items.add(i);
+        let mut matches_any = false;
+        'exclude: for j in 0..(*exclude_target_flags).count {
+            let pattern = *(*exclude_target_flags).items.add(j);
+            if matches_glob(pattern, target.name())? {
+                matches_any = true;
+                break 'exclude;
+            }
         }
+        if !matches_any {
+            da_append(&mut targets, target);
+        }
+    }
+
+    let mut all_cases: Array<*const c_char> = zeroed();
+
+    let mut test_files: File_Paths = zeroed();
+    if !read_entire_dir(*test_folder, &mut test_files) { return None; }
+    qsort(test_files.items as *mut c_void, test_files.count, size_of::<*const c_char>(), compar_cstr);
+
+    for i in 0..test_files.count {
+        let test_file = *test_files.items.add(i);
+        if *test_file == '.' as c_char { continue; }
+        let Some(case_name) = temp_strip_suffix(test_file, c!(".b")) else { continue; };
+        da_append(&mut all_cases, case_name);
+    }
+
+    let mut selected_cases: Array<*const c_char> = zeroed();
+    if (*cases_flags).count == 0 {
+        selected_cases = all_cases;
     } else {
         for i in 0..(*cases_flags).count {
-            let case_name = *(*cases_flags).items.add(i);
-            da_append(&mut cases, case_name);
+            let saved_count = selected_cases.count;
+            let pattern = *(*cases_flags).items.add(i);
+            for i in 0..all_cases.count {
+                let case_name = *all_cases.items.add(i);
+                if matches_glob(pattern, case_name)? {
+                    da_append(&mut selected_cases, case_name);
+                }
+            }
+            if selected_cases.count == saved_count {
+                fprintf(stderr(), c!("ERROR: unknown test case `%s`\n"), pattern);
+                return None;
+            }
+        }
+    }
+    let mut cases: Array<*const c_char> = zeroed();
+    for i in 0..selected_cases.count {
+        let case = *selected_cases.items.add(i);
+        let mut matches_any = false;
+        'exclude: for j in 0..(*exclude_cases_flags).count {
+            let pattern = *(*exclude_cases_flags).items.add(j);
+            if matches_glob(pattern, case)? {
+                matches_any = true;
+                break 'exclude;
+            }
+        }
+        if !matches_any {
+            da_append(&mut cases, case);
         }
     }
 
@@ -663,24 +810,82 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     if !mkdir_if_not_exists(GARBAGE_FOLDER) { return None; }
 
-    let json_path = c!("tests.json");
     if *record {
-        let mut bat = load_bat_from_json_file_if_exists(json_path, &mut sb, &mut jimp)?;
-        record_tests(
-            // Inputs
-            *test_folder, da_slice(cases), da_slice(targets), &mut bat,
-            // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
-        )?;
-        save_bat_to_json_file(json_path, bat, &mut jim)?;
-    } else {
-        let bat = load_bat_from_json_file_if_exists(json_path, &mut sb, &mut jimp)?;
-        replay_tests(
-            // Inputs
-            *test_folder, da_slice(cases), da_slice(targets), bat,
-            // Outputs
-            &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
-        );
+        fprintf(stderr(), c!("ERROR: Flag `-%s` is DEPRECATED! Please use `-%s %s` instead.\n"), flag_name(record), flag_name(action_flag), Action::Record.name());
+        return None
+    }
+
+    match action {
+        Action::Record => {
+            let mut bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            record_tests(
+                // Inputs
+                *test_folder, da_slice(cases), da_slice(targets), &mut bat,
+                // Outputs
+                &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
+            )?;
+            save_bat_to_json_file(json_path, bat, &mut jim)?;
+        }
+        Action::Replay => {
+            let bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            replay_tests(
+                // Inputs
+                *test_folder, da_slice(cases), da_slice(targets), bat,
+                // Outputs
+                &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
+            );
+        }
+        Action::Prune => {
+            let bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            save_bat_to_json_file(json_path, bat, &mut jim)?;
+        }
+        Action::Disable => {
+            let mut case_width = 0;
+            for i in 0..cases.count {
+                let case_name = *cases.items.add(i);
+                case_width = cmp::max(case_width, strlen(case_name));
+            }
+
+            let mut target_width = 0;
+            for j in 0..targets.count {
+                let target = *targets.items.add(j);
+                target_width = cmp::max(target_width, strlen(target.name()));
+            }
+
+            let mut bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            for i in 0..cases.count {
+                let case_name = *cases.items.add(i);
+                let target_test_config_table =
+                    if let Some(target_test_config_table) = assoc_lookup_cstr_mut(da_slice(bat), case_name) {
+                        target_test_config_table
+                    } else {
+                        let target_test_config_table: Array<(Target, TestConfig)> = zeroed();
+                        da_append(&mut bat, (case_name, target_test_config_table));
+                        &mut (*da_last_mut(&mut bat).unwrap()).1
+                    };
+                for j in 0..targets.count {
+                    let target = *targets.items.add(j);
+                    printf(c!("INFO: disabling %-*s for %-*s\n"), case_width, case_name, target_width, target.name());
+                    if let Some(test_config) = assoc_lookup_mut(da_slice(*target_test_config_table), &target) {
+                        (*test_config).state = TestState::Disabled;
+                        if !(*comment).is_null() {
+                            (*test_config).comment = *comment;
+                        }
+                    } else {
+                        da_append(target_test_config_table, (target, TestConfig {
+                            expected_stdout: c!(""),
+                            state: TestState::Disabled,
+                            comment: if (*comment).is_null() {
+                                c!("")
+                            } else {
+                                *comment
+                            },
+                        }));
+                    }
+                }
+            }
+            save_bat_to_json_file(json_path, bat, &mut jim)?;
+        }
     }
 
     Some(())

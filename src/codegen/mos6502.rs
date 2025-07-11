@@ -262,8 +262,7 @@ pub unsafe fn write_word_at(out: *mut String_Builder, word: u16, addr: u16) {
 pub unsafe fn instr0(out: *mut String_Builder, inst: Instr, mode: AddrMode) {
     let opcode = OPCODES[inst as usize][mode as usize];
     if opcode == INVL {
-        printf(c!("Invalid combination of opcode and operand %u and %u\n"),
-               inst as usize, mode as usize);
+        log(Log_Level::ERROR, c!("6502: Invalid combination of opcode and operand %u and %u"), inst as usize, mode as usize);
         abort();
     }
     write_byte(out, opcode);
@@ -1249,6 +1248,24 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 instr0(out, JMP, ABS);
                 add_reloc(out, RelocationKind::Label{func_name: name, label}, asm);
             },
+            Op::Index {result, arg, offset} => {
+                load_two_args(out, arg, offset, op, asm);
+
+                // shift offset to the left by one bit
+                instr8(out, ASL, ZP, ZP_RHS_L);
+                instr8(out, ROL, ZP, ZP_RHS_H);
+
+                // add offset and arg
+                instr(out, CLC);
+                instr8(out, ADC, ZP, ZP_RHS_L);
+                instr(out, TAX);
+                instr(out, TYA);
+                instr8(out, ADC, ZP, ZP_RHS_H);
+                instr(out, TAY);
+                instr(out, TXA);
+
+                store_auto(out, result, asm);
+            },
         }
     }
 
@@ -1294,7 +1311,7 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
                         continue 'reloc_loop;
                     }
                 }
-                printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
+                log(Log_Level::ERROR, c!("6502: Linking failed. Could not find label `%s.%u'"), name, label);
                 unreachable!();
             },
             RelocationKind::External{name, offset, byte} => {
@@ -1310,7 +1327,7 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
                         continue 'reloc_loop;
                     }
                 }
-                printf(c!("linking failed. could not find extern `%s'\n"), name);
+                log(Log_Level::ERROR, c!("6502: Linking failed. Could not find extrn `%s'"), name);
                 unreachable!();
             },
             RelocationKind::AddressRel{idx} => {
@@ -1412,7 +1429,7 @@ pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c
 
             instr(out, RTS);
         } else {
-            fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
+            log(Log_Level::ERROR, c!("6502: Unknown extrn: `%s`, can not link"), name);
             abort();
         }
     }
@@ -1475,7 +1492,7 @@ pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) ->
             flag_sv.count += load_offset_prefix.count;
             config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
         } else {
-            fprintf(stderr(), c!("Unknown linker flag: %s\n"), flag);
+            log(Log_Level::ERROR, c!("6502: Unknown linker flag: %s"), flag);
             return None
         }
     }
@@ -1514,7 +1531,7 @@ pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, con
     generate_data_section(out, da_slice((*c).data));
     generate_globals(out, da_slice((*c).globals), &mut asm);
 
-    printf(c!("INFO: Generated size: 0x%x\n"), (*out).count as c_uint);
+    log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
     apply_relocations(out, data_start, &mut asm);
 
     Some(())

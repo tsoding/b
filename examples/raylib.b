@@ -7,7 +7,7 @@
 // $ b raylib.b -L -L/path/to/raylib-version_linux_amd64/lib/ -L -l:libraylib.a -L -lm -run
 //
 // # Windows mingw32-w64
-// > b -t fasm-x86_64-windows raylib.b -L -L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -L -l:libraylib.a -L -lwinmm -L -lgdi32 -run
+// > b -t gas-x86_64-windows raylib.b -L -L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -L -l:libraylib.a -L -lwinmm -L -lgdi32 -run
 
 W;
 
@@ -28,8 +28,6 @@ COLORS [6]
 update_obj(obj) {
     auto nx, ny;
 
-    extrn GetScreenWidth, GetScreenHeight;
-
     nx = obj[OBJ_X] + obj[OBJ_DX];
     if (nx < 0 | nx + 100 >= GetScreenWidth()) {
         obj[OBJ_DX] = -obj[OBJ_DX];
@@ -49,22 +47,9 @@ update_obj(obj) {
     }
 }
 
-draw_obj(obj) {
-    extrn DrawRectangle;
-    DrawRectangle(obj[OBJ_X], obj[OBJ_Y], 100, 100, COLORS[obj[OBJ_C]]);
-}
+draw_obj(obj) DrawRectangle(obj[OBJ_X], obj[OBJ_Y], 100, 100, COLORS[obj[OBJ_C]]);
 
-// TODO: Crashing during runtime when compiled with -t fasm-x86_64-windows and running via wine
 main() {
-    // libc
-    extrn malloc, rand;
-
-    // Raylib
-    extrn InitWindow, BeginDrawing, EndDrawing,
-          WindowShouldClose, ClearBackground,
-          SetTargetFPS,
-          IsKeyPressed;
-
     W = &0[1];
 
     auto i;
@@ -111,3 +96,12 @@ main() {
         EndDrawing();
     }
 }
+
+// libc
+extrn malloc, rand;
+
+// Raylib
+extrn InitWindow, BeginDrawing, EndDrawing,
+      WindowShouldClose, ClearBackground,
+      SetTargetFPS, GetScreenWidth, GetScreenHeight,
+      DrawRectangle, IsKeyPressed;
