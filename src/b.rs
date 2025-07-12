@@ -1716,7 +1716,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
         Target::Mos6502 => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-            codegen::mos6502::generate_program(&mut output, &c, config);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1726,6 +1725,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             } else {
                 effective_output_path = *output_path;
             }
+
+            codegen::mos6502::generate_program(&mut output, &c, effective_output_path, da_slice(run_args), config);
 
             write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
             log(Log_Level::INFO, c!("generated %s"), effective_output_path);
