@@ -1,5 +1,4 @@
 /*
-Implies -nostdlib.
 Shows how to communicate with a varvara device
 */
 

@@ -1449,5 +1449,89 @@
             "state": "Enabled",
             "comment": ""
         }
+    },
+    "asm_uxn": {
+        "gas-x86_64-windows": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-x86_64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-x86_64-darwin": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-aarch64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-aarch64-darwin": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "uxn": {
+            "expected_stdout": "BBB\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "6502": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        }
+    },
+    "asm_func_uxn": {
+        "gas-x86_64-windows": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-x86_64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-x86_64-darwin": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-aarch64-linux": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "gas-aarch64-darwin": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "uxn": {
+            "expected_stdout": "69\n",
+            "state": "Enabled",
+            "comment": ""
+        },
+        "6502": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        },
+        "ilasm-mono": {
+            "expected_stdout": "",
+            "state": "Disabled",
+            "comment": "Doesn't make sense for this target"
+        }
     }
 }
