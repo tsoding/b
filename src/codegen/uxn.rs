@@ -416,6 +416,18 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::AND2);
                 store_auto(output, index);
             }
+            Op::Binop {binop: Binop::LogicalOr, index, lhs, rhs} => {
+                load_arg(lhs, op.loc, output, assembler);
+                load_arg(rhs, op.loc, output, assembler);
+                write_op(output, UxnOp::ORA2);
+                store_auto(output, index);
+            }
+            Op::Binop {binop: Binop::LogicalAnd, index, lhs, rhs} => {
+                load_arg(lhs, op.loc, output, assembler);
+                load_arg(rhs, op.loc, output, assembler);
+                write_op(output, UxnOp::AND2);
+                store_auto(output, index);
+            }
             Op::Binop {binop: Binop::BitShl, index, lhs, rhs} => {
                 load_arg(lhs, op.loc, output, assembler);
                 load_arg(rhs, op.loc, output, assembler);
@@ -481,6 +493,46 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::EQU2);
                 write_op(output, UxnOp::JCI);
                 write_label_rel(output, *labels.items.add(label), assembler, 0);
+            }
+            Op::LogicalAnd { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's zero
+                load_arg(lhs, op.loc, output, assembler);
+                write_lit2(output, 0);
+                write_op(output, UxnOp::EQU2);
+                write_op(output, UxnOp::JCI);
+                write_label_rel(output, *labels.items.add(short_circuit_label), assembler, 0);
+                // If lhs is non-zero, load rhs
+                load_arg(rhs, op.loc, output, assembler);
+                store_auto(output, result);
+                // Jump to end
+                write_op(output, UxnOp::JMI);
+                write_label_rel(output, *labels.items.add(short_circuit_label + 1), assembler, 0);
+                // Short-circuit label: result is 0
+                link_label(assembler, *labels.items.add(short_circuit_label), (*output).count);
+                write_lit2(output, 0);
+                store_auto(output, result);
+                // End label
+                link_label(assembler, *labels.items.add(short_circuit_label + 1), (*output).count);
+            }
+            Op::LogicalOr { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's non-zero
+                load_arg(lhs, op.loc, output, assembler);
+                write_lit2(output, 0);
+                write_op(output, UxnOp::NEQ2);
+                write_op(output, UxnOp::JCI);
+                write_label_rel(output, *labels.items.add(short_circuit_label), assembler, 0);
+                // If lhs is zero, load rhs
+                load_arg(rhs, op.loc, output, assembler);
+                store_auto(output, result);
+                // Jump to end
+                write_op(output, UxnOp::JMI);
+                write_label_rel(output, *labels.items.add(short_circuit_label + 1), assembler, 0);
+                // Short-circuit label: result is 1
+                link_label(assembler, *labels.items.add(short_circuit_label), (*output).count);
+                write_lit2(output, 1);
+                store_auto(output, result);
+                // End label
+                link_label(assembler, *labels.items.add(short_circuit_label + 1), (*output).count);
             }
             Op::Return {arg} => {
                 // Put return value in the FIRST_ARG

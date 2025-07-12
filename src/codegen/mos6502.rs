@@ -852,6 +852,26 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         instr(out, TAY);
                         instr(out, TXA);
                     },
+                    Binop::LogicalOr => {
+                        load_two_args(out, lhs, rhs, op, asm);
+
+                        instr8(out, ORA, ZP, ZP_RHS_L);
+                        instr(out, TAX);
+                        instr(out, TYA);
+                        instr8(out, ORA, ZP, ZP_RHS_H);
+                        instr(out, TAY);
+                        instr(out, TXA);
+                    },
+                    Binop::LogicalAnd => {
+                        load_two_args(out, lhs, rhs, op, asm);
+
+                        instr8(out, AND, ZP, ZP_RHS_L);
+                        instr(out, TAX);
+                        instr(out, TYA);
+                        instr8(out, AND, ZP, ZP_RHS_H);
+                        instr(out, TAY);
+                        instr(out, TXA);
+                    },
                     Binop::BitShl => {
                         load_two_args(out, lhs, rhs, op, asm);
 
@@ -1247,6 +1267,70 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
                 instr0(out, JMP, ABS);
                 add_reloc(out, RelocationKind::Label{func_name: name, label}, asm);
+            },
+            Op::LogicalAnd { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's zero
+                load_arg(lhs, op.loc, out, asm);
+                instr8(out, CMP, IMM, 0);
+                instr8(out, BNE, REL, 7); // skip next 4 instructions
+                instr8(out, CPY, IMM, 0);
+                instr8(out, BNE, REL, 3);
+                // If lhs is zero, short-circuit to result = 0
+                instr0(out, JMP, ABS);
+                add_reloc(out, RelocationKind::Label{func_name: name, label: short_circuit_label}, asm);
+                // If lhs is non-zero, load rhs
+                load_arg(rhs, op.loc, out, asm);
+                store_auto(out, result, asm);
+                // Jump to end
+                instr0(out, JMP, ABS);
+                add_reloc(out, RelocationKind::Label{func_name: name, label: short_circuit_label + 1}, asm);
+                // Short-circuit label: result is 0
+                da_append(&mut (*asm).op_labels, Label {
+                    func_name: name,
+                    label: short_circuit_label,
+                    addr: (*out).count as u16,
+                });
+                instr8(out, LDA, IMM, 0);
+                instr(out, TAY);
+                store_auto(out, result, asm);
+                // End label
+                da_append(&mut (*asm).op_labels, Label {
+                    func_name: name,
+                    label: short_circuit_label + 1,
+                    addr: (*out).count as u16,
+                });
+            },
+            Op::LogicalOr { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's non-zero
+                load_arg(lhs, op.loc, out, asm);
+                instr8(out, CMP, IMM, 0);
+                instr8(out, BNE, REL, 7); // skip next 4 instructions
+                instr8(out, CPY, IMM, 0);
+                instr8(out, BNE, REL, 3);
+                // If lhs is non-zero, short-circuit to result = 1
+                instr0(out, JMP, ABS);
+                add_reloc(out, RelocationKind::Label{func_name: name, label: short_circuit_label}, asm);
+                // If lhs is zero, load rhs
+                load_arg(rhs, op.loc, out, asm);
+                store_auto(out, result, asm);
+                // Jump to end
+                instr0(out, JMP, ABS);
+                add_reloc(out, RelocationKind::Label{func_name: name, label: short_circuit_label + 1}, asm);
+                // Short-circuit label: result is 1
+                da_append(&mut (*asm).op_labels, Label {
+                    func_name: name,
+                    label: short_circuit_label,
+                    addr: (*out).count as u16,
+                });
+                instr8(out, LDA, IMM, 1);
+                instr8(out, LDY, IMM, 0);
+                store_auto(out, result, asm);
+                // End label
+                da_append(&mut (*asm).op_labels, Label {
+                    func_name: name,
+                    label: short_circuit_label + 1,
+                    addr: (*out).count as u16,
+                });
             },
             Op::Index {result, arg, offset} => {
                 load_two_args(out, arg, offset, op, asm);
