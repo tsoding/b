@@ -126,6 +126,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 match binop {
                     Binop::BitOr => { sb_appendf(output, c!("    orq %%rcx, %%rax\n")); }
                     Binop::BitAnd => { sb_appendf(output, c!("    andq %%rcx, %%rax\n")); }
+                    Binop::LogicalOr => { sb_appendf(output, c!("    orq %%rcx, %%rax\n")); }
+                    Binop::LogicalAnd => { sb_appendf(output, c!("    andq %%rcx, %%rax\n")); }
                     Binop::BitShl => {
                         load_arg_to_reg(rhs, c!("rcx"), output, os);
                         sb_appendf(output, c!("    shlq %%cl, %%rax\n"));
@@ -166,6 +168,62 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                     }
                 }
                 sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), index * 8);
+            }
+            Op::LogicalAnd { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's zero
+                load_arg_to_reg(lhs, c!("rax"), output, os);
+                sb_appendf(output, c!("    testq %%rax, %%rax\n"));
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!("    jz .L%s_label_%zu\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("    jz L%s_label_%zu\n"), name, short_circuit_label),
+                };
+                // If lhs is non-zero, load rhs
+                load_arg_to_reg(rhs, c!("rax"), output, os);
+                sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), result * 8);
+                // Jump to end
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!("    jmp .L%s_label_%zu_end\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("    jmp L%s_label_%zu_end\n"), name, short_circuit_label),
+                };
+                // Short-circuit label: result is 0
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_label_%zu:\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("L%s_label_%zu:\n"), name, short_circuit_label),
+                };
+                sb_appendf(output, c!("    movq $0, -%zu(%%rbp)\n"), result * 8);
+                // End label
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_label_%zu_end:\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("L%s_label_%zu_end:\n"), name, short_circuit_label),
+                };
+            }
+            Op::LogicalOr { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's non-zero
+                load_arg_to_reg(lhs, c!("rax"), output, os);
+                sb_appendf(output, c!("    testq %%rax, %%rax\n"));
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!("    jnz .L%s_label_%zu\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("    jnz L%s_label_%zu\n"), name, short_circuit_label),
+                };
+                // If lhs is zero, load rhs
+                load_arg_to_reg(rhs, c!("rax"), output, os);
+                sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), result * 8);
+                // Jump to end
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!("    jmp .L%s_label_%zu_end\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("    jmp L%s_label_%zu_end\n"), name, short_circuit_label),
+                };
+                // Short-circuit label: result is 1
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_label_%zu:\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("L%s_label_%zu:\n"), name, short_circuit_label),
+                };
+                sb_appendf(output, c!("    movq $1, -%zu(%%rbp)\n"), result * 8);
+                // End label
+                match os {
+                    Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_label_%zu_end:\n"), name, short_circuit_label),
+                    Os::Darwin              => sb_appendf(output, c!("L%s_label_%zu_end:\n"), name, short_circuit_label),
+                };
             }
             Op::Funcall { result, fun, args } => {
                 let reg_args_count = cmp::min(args.count, registers.len());
