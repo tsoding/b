@@ -253,12 +253,16 @@ pub enum Binop {
     GreaterEqual,
     BitOr,
     BitAnd,
+    LogicalOr,
+    LogicalAnd,
     BitShl,
     BitShr,
 }
 
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
+    &[Binop::LogicalOr],
+    &[Binop::LogicalAnd],
     &[Binop::BitOr],
     &[Binop::BitAnd],
     &[Binop::BitShl, Binop::BitShr],
@@ -302,7 +306,9 @@ impl Binop {
             Token::Greater   => Some(Binop::Greater),
             Token::GreaterEq => Some(Binop::GreaterEqual),
             Token::Or        => Some(Binop::BitOr),
+            Token::OrOr      => Some(Binop::LogicalOr),
             Token::And       => Some(Binop::BitAnd),
+            Token::AndAnd    => Some(Binop::LogicalAnd),
             Token::Shl       => Some(Binop::BitShl),
             Token::Shr       => Some(Binop::BitShr),
             _ => None,
@@ -335,6 +341,8 @@ pub enum Op {
     Negate         {result: usize, arg: Arg},
     Asm            {stmts: Array<AsmStmt>},
     Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
+    LogicalAnd     {result: usize, lhs: Arg, rhs: Arg, short_circuit_label: usize},
+    LogicalOr      {result: usize, lhs: Arg, rhs: Arg, short_circuit_label: usize},
     Index          {result: usize, arg: Arg, offset: Arg},
     AutoAssign     {index: usize, arg: Arg},
     ExternalAssign {name: *const c_char, arg: Arg},
@@ -591,9 +599,23 @@ pub unsafe fn compile_binop_expression(l: *mut Lexer, c: *mut Compiler, preceden
                 let (rhs, _) = compile_binop_expression(l, c, precedence + 1)?;
 
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
-                push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
+                
+                // Handle logical operators with short-circuit evaluation
+                match binop {
+                    Binop::LogicalAnd => {
+                        let short_circuit_label = allocate_label_index(c);
+                        push_opcode(Op::LogicalAnd {result: index, lhs, rhs, short_circuit_label}, (*l).loc, c);
+                    }
+                    Binop::LogicalOr => {
+                        let short_circuit_label = allocate_label_index(c);
+                        push_opcode(Op::LogicalOr {result: index, lhs, rhs, short_circuit_label}, (*l).loc, c);
+                    }
+                    _ => {
+                        push_opcode(Op::Binop {binop, index, lhs, rhs}, (*l).loc, c);
+                    }
+                }
+                
                 lhs = Arg::AutoVar(index);
-
                 lvalue = false;
 
                 saved_point = (*l).parse_point;
