@@ -362,7 +362,7 @@ pub mod sh4 {
             true
         } else if (instr & 0xF0FF) == 0x4022 {
             let rn = ((instr & 0x0F00) >> (4 * 2)) as usize;
-            CPU.r[rn] -= 4;
+            CPU.r[rn] = CPU.r[rn].wrapping_sub(4);
             write32(CPU.r[rn], CPU.pr);
             CPU.pc += 2;
             true
@@ -509,6 +509,7 @@ pub mod sh4 {
             true
         } else if (instr & 0xF0FF) == 0x4026 {
             let rn = ((instr & 0x0F00) >> (4 * 2)) as usize;
+
             CPU.pr = read32(CPU.r[rn]);
             CPU.r[rn] += 4;
             CPU.pc += 2;
@@ -587,6 +588,7 @@ pub mod sh4 {
             CPU.pc = npc;
             true
         } else if (instr & 0xF0FF) == 0x400B {
+            // JSR @Rn
             let rm = (((instr & 0x0F00) >> (4 * 2)) & 0xF) as usize;
             let npc = CPU.r[rm];
             if delay_slot {
