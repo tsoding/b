@@ -127,11 +127,47 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                     Binop::BitOr        => {
                         sb_appendf(output, c!("        or\n"))
                     }
+                    Binop::LogicalOr    => {
+                        sb_appendf(output, c!("        or\n"))
+                    }
                     Binop::BitAnd       => missingf!(op.loc, c!("Binop::BitAnd\n")),
+                    Binop::LogicalAnd   => missingf!(op.loc, c!("Binop::LogicalAnd\n")),
                     Binop::BitShl       => missingf!(op.loc, c!("Binop::BitShl\n")),
                     Binop::BitShr       => missingf!(op.loc, c!("Binop::BitShr\n")),
                 };
                 sb_appendf(output, c!("        stloc V_%zu\n"), index);
+            }
+            Op::LogicalAnd { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's zero
+                load_arg(op.loc, lhs, output, data);
+                sb_appendf(output, c!("        brfalse L%zu\n"), short_circuit_label);
+                // If lhs is non-zero, load rhs
+                load_arg(op.loc, rhs, output, data);
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+                // Jump to end
+                sb_appendf(output, c!("        br L%zu_end\n"), short_circuit_label);
+                // Short-circuit label: result is 0
+                sb_appendf(output, c!("    L%zu:\n"), short_circuit_label);
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+                // End label
+                sb_appendf(output, c!("    L%zu_end:\n"), short_circuit_label);
+            }
+            Op::LogicalOr { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's non-zero
+                load_arg(op.loc, lhs, output, data);
+                sb_appendf(output, c!("        brtrue L%zu\n"), short_circuit_label);
+                // If lhs is zero, load rhs
+                load_arg(op.loc, rhs, output, data);
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+                // Jump to end
+                sb_appendf(output, c!("        br L%zu_end\n"), short_circuit_label);
+                // Short-circuit label: result is 1
+                sb_appendf(output, c!("    L%zu:\n"), short_circuit_label);
+                sb_appendf(output, c!("        ldc.i8 1\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+                // End label
+                sb_appendf(output, c!("    L%zu_end:\n"), short_circuit_label);
             }
             Op::Index {..}          => missingf!(op.loc, c!("Op::Index\n")),
             Op::AutoAssign {index, arg}     => {
