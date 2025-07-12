@@ -33,6 +33,6 @@ main() {
     z = x || y;  // Should not short-circuit, z = 1
     putchar(z + '0');  // Should print '1'
     
-    putchar('\n');
+    putchar(10);
     return 0;
 } 
