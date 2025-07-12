@@ -770,6 +770,15 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_lit2(output, 0);
             write_lit_stz2(output, FIRST_ARG);
             write_op(output, UxnOp::JMP2r);
+        } else if strcmp(name, c!("uxn_div2")) == 0 {
+            // uxn_udiv(a, b)
+            // outputs 16 bit unsigned division of a / b.
+            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_div2")), (*output).count);
+            write_lit_ldz2(output, FIRST_ARG);
+            write_lit_ldz2(output, FIRST_ARG + 2);
+            write_op(output, UxnOp::DIV2);
+            write_lit_stz2(output, FIRST_ARG);
+            write_op(output, UxnOp::JMP2r);
         } else {
             log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
             abort();

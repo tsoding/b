@@ -21,14 +21,24 @@ abort() {
     exit(1);
 }
 
+_udiv(a, b) {
+    extrn uxn_div2;
+    return (uxn_div2(a, b));
+}
+
+// TODO: `b` has to be <32768, because of `*`
+_urem(a, b) {
+    return (a - _udiv(a, b) * b);
+}
+
 /* loosely based on the original code by Ken Thompson */
 
 _fprintn(n, b, fd) {
     auto a, c;
 
-    if(a=n/b) /* assignment, not test for equality */
+    if(a=_udiv(n,b)) /* assignment, not test for equality */
         _fprintn(a, b, fd); /* recursive */
-    c = n%b + '0';
+    c = _urem(n,b) + '0';
     if (c > '9') c += 7;
     fputc(c, fd);
 }
@@ -70,6 +80,9 @@ fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) {
                 while (c = char(*arg, j++)) {
                     fputc(c, fd);
                 }
+            } else if (c == 'l' | c == 'z') {
+                c = '%';
+                goto continue;
             } else {
                 fputc('%', fd);
                 arg += 2; /* word size */
@@ -80,6 +93,7 @@ fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) {
         }
         i += 1;
         c = char(string, i);
+        continue:;
     }
 }
 

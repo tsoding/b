@@ -15,7 +15,7 @@ assert(cond, msg) {
 usleep(n) {
     auto i, j;
     if (n < 0) n = 32767;
-    i = 0; while (i < n) {
+    i = 0; while (i < n>>2) {
         __asm__("nop");
         i++;
     }
@@ -49,6 +49,35 @@ read(fd, buf, n) {
 
     return (n);
 }
+
+char __asm__(
+    "TSX",
+    "CLC",
+    "ADC $0103,X", // i&0xFF
+    "STA $00", // we can safely use zero-page, as our assembler
+               // doesn't expect it to be preserved across op-boundaries
+    "TYA",
+    "ADC $0104,X", // i&0xFF00 >> 8
+    "STA $01",
+    "LDY #0",
+    "LDA ($00),Y",
+    "RTS"
+);
+
+lchar __asm__(
+    "TSX",
+    "CLC",
+    "ADC $0103,X", // i&0xFF
+    "STA $00", // we can safely use zero-page, as our assembler
+               // doesn't expect it to be preserved across op-boundaries
+    "TYA",
+    "ADC $0104,X", // i&0xFF00 >> 8
+    "STA $01",
+    "LDA $0105,X",
+    "LDY #0",
+    "STA ($00),Y",
+    "RTS"
+);
 
 /* TODO: fd not supported */
 fputc(c, fd) {
@@ -118,7 +147,7 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
                 }
             } else if ((c == 'z') | (c == 'l')) { /* hack for %zu %lu, % */
                 c = '%';
-                goto while_end;
+                goto continue;
             } else {
                 putchar('%');
                 arg += 2; /* word size */
@@ -129,17 +158,16 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
         }
         i++;
         c = char(str, i);
-        while_end:
+        continue:;
     }
 }
 
 /* Math functions */
 _rand_seed 123456789;
 rand() {
-  _rand_seed = 20077 * _rand_seed + 12345;
-  return (_rand_seed);
+    _rand_seed = 20077 * _rand_seed + 12345;
+    return (_rand_seed);
 }
-
 
 atoi(str) {
     extrn char;
@@ -204,11 +232,7 @@ _udiv(a, b) {
    Problem with this implementation is that it is not
    mapped to the operator */
 _rem (a, b) {
-    auto d;
-    while(a >= b) {
-        a = a - b;
-    }
-    return (a);
+    return (a - a / b * b);
 }
 _urem(a, b) {
     auto d;
@@ -218,10 +242,8 @@ _urem(a, b) {
     return (a);
 }
 
-
 /* memory related functions */
 strlen(s) {
-    extrn char;
     auto n;
     n = 0;
     while (char(s, n)) n++;

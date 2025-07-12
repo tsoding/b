@@ -47,9 +47,9 @@ pub mod fake6502 {
     pub unsafe extern "C" fn write6502(address: u16, mut value: u8) {
         // https://www.sbprojects.net/projects/apple1/wozmon.php
         if address == 0xD012 { // DSP
+            fprintf(stdout, c!("%c"), value as c_int);
             // accept immediatetely => clear bit 7
             value &= 0b0111_1111;
-            fprintf(stdout, c!("%c"), value as c_int);
         }
 
         if address == 0x0206 {

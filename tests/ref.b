@@ -1,3 +1,5 @@
+// we cannot call these variables `read`, as some target may have
+// a read() function in libb
 rwrite(ref, val) *ref = val;
 rread(ref) return (*ref);
 
