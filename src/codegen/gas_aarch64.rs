@@ -187,6 +187,18 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                         sb_appendf(output, c!("    and x0, x0, x1\n"));
                         sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
+                    Binop::LogicalOr => {
+                        load_arg_to_reg(lhs, c!("x0"), output, op.loc, os);
+                        load_arg_to_reg(rhs, c!("x1"), output, op.loc, os);
+                        sb_appendf(output, c!("    orr x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
+                    },
+                    Binop::LogicalAnd => {
+                        load_arg_to_reg(lhs, c!("x0"), output, op.loc, os);
+                        load_arg_to_reg(rhs, c!("x1"), output, op.loc, os);
+                        sb_appendf(output, c!("    and x0, x0, x1\n"));
+                        sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
+                    },
                     Binop::BitShl => {
                         load_arg_to_reg(lhs, c!("x0"), output, op.loc, os);
                         load_arg_to_reg(rhs, c!("x1"), output, op.loc, os);
@@ -274,6 +286,72 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                         sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), index*8);
                     },
                 }
+            }
+            Op::LogicalAnd { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's zero
+                load_arg_to_reg(lhs, c!("x0"), output, op.loc, os);
+                sb_appendf(output, c!("    cmp x0, 0\n"));
+                match os {
+                    Os::Linux => sb_appendf(output, c!("    beq .L%s.label_%zu\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("    beq L%s.label_%zu\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+                // If lhs is non-zero, load rhs
+                load_arg_to_reg(rhs, c!("x0"), output, op.loc, os);
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
+                // Jump to end
+                match os {
+                    Os::Linux => sb_appendf(output, c!("    b .L%s.label_%zu_end\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("    b L%s.label_%zu_end\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+                // Short-circuit label: result is 0
+                match os {
+                    Os::Linux => sb_appendf(output, c!(".L%s.label_%zu:\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("L%s.label_%zu:\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+                sb_appendf(output, c!("    mov x0, 0\n"));
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
+                // End label
+                match os {
+                    Os::Linux => sb_appendf(output, c!(".L%s.label_%zu_end:\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("L%s.label_%zu_end:\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+            }
+            Op::LogicalOr { result, lhs, rhs, short_circuit_label } => {
+                // Load lhs and test if it's non-zero
+                load_arg_to_reg(lhs, c!("x0"), output, op.loc, os);
+                sb_appendf(output, c!("    cmp x0, 0\n"));
+                match os {
+                    Os::Linux => sb_appendf(output, c!("    bne .L%s.label_%zu\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("    bne L%s.label_%zu\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+                // If lhs is zero, load rhs
+                load_arg_to_reg(rhs, c!("x0"), output, op.loc, os);
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
+                // Jump to end
+                match os {
+                    Os::Linux => sb_appendf(output, c!("    b .L%s.label_%zu_end\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("    b L%s.label_%zu_end\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+                // Short-circuit label: result is 1
+                match os {
+                    Os::Linux => sb_appendf(output, c!(".L%s.label_%zu:\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("L%s.label_%zu:\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
+                sb_appendf(output, c!("    mov x0, 1\n"));
+                sb_appendf(output, c!("    str x0, [x29, -%zu]\n"), result*8);
+                // End label
+                match os {
+                    Os::Linux => sb_appendf(output, c!(".L%s.label_%zu_end:\n"), name, short_circuit_label),
+                    Os::Darwin => sb_appendf(output, c!("L%s.label_%zu_end:\n"), name, short_circuit_label),
+                    Os::Windows => missingf!(op.loc, c!("AArch64 is not supported on windows\n")),
+                };
             }
             Op::ExternalAssign{name, arg} => {
                 load_arg_to_reg(arg, c!("x0"), output, op.loc, os);
