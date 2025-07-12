@@ -82,9 +82,25 @@ pub unsafe fn dump_op(op: OpWithLocation, output: *mut String_Builder) {
                 Binop::NotEqual     => sb_appendf(output, c!(" != ")),
                 Binop::GreaterEqual => sb_appendf(output, c!(" >= ")),
                 Binop::LessEqual    => sb_appendf(output, c!(" <= ")),
+                Binop::LogicalOr    => sb_appendf(output, c!(" || ")),
+                Binop::LogicalAnd   => sb_appendf(output, c!(" && ")),
             };
             dump_arg(output, rhs);
             sb_appendf(output, c!("\n"));
+        }
+        Op::LogicalAnd { result, lhs, rhs, short_circuit_label } => {
+            sb_appendf(output, c!("    auto[%zu] = logical_and("), result);
+            dump_arg(output, lhs);
+            sb_appendf(output, c!(", "));
+            dump_arg(output, rhs);
+            sb_appendf(output, c!(", label[%zu])\n"), short_circuit_label);
+        }
+        Op::LogicalOr { result, lhs, rhs, short_circuit_label } => {
+            sb_appendf(output, c!("    auto[%zu] = logical_or("), result);
+            dump_arg(output, lhs);
+            sb_appendf(output, c!(", "));
+            dump_arg(output, rhs);
+            sb_appendf(output, c!(", label[%zu])\n"), short_circuit_label);
         }
         Op::Funcall{result, fun, args} => {
             sb_appendf(output, c!("    auto[%zu] = "), result);
