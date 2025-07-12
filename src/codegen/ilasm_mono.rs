@@ -52,7 +52,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                 sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
                 sb_appendf(out, c!("        ldc.i8 0\n"));
             } else {
-                sb_appendf(out, c!("        call int64 class Program::%s("), name);
+                sb_appendf(out, c!("        call int64 class Program::'%s'("), name); // If the function we want to call collides with a instruction
+                                                                                      // we will get a syntax error so '' are necessary.
                 for i in 0..arity {
                     if i > 0 { sb_appendf(out, c!(", ")); }
                     sb_appendf(out, c!("int64"));
@@ -66,13 +67,16 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
 }
 
 pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *const [u8]) {
-    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name);
+    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name);    // If the function we want to define collides with a instruction
+                                                                            // we will get a syntax error so '' are necessary.
     for i in 0..func.params_count {
         if i > 0 { sb_appendf(output, c!(", ")); }
         sb_appendf(output, c!("int64"));
     }
     sb_appendf(output, c!(") {\n"), func.name);
-
+    sb_appendf(output, c!("        .maxstack %zu\n"), 16); // By default max execution stack size is 8, which isn't enough
+                                                           // in cases where we need to pass more than 8 args to a function call.
+                                                           // TODO: Find a way to unhardcode this?
     if func.auto_vars_count > 0 {
         sb_appendf(output, c!("        .locals init ("));
         for i in 0..func.auto_vars_count {
@@ -82,12 +86,27 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
         sb_appendf(output, c!(")\n"));
     }
 
+    for i in 0..func.params_count {
+        sb_appendf(output, c!("        ldarg %d\n"), i);
+        sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
+    }
+
     for i in 0..func.body.count {
         let op = *func.body.items.add(i);
         match op.opcode {
             Op::Bogus               => unreachable!("bogus-amogus"),
-            Op::UnaryNot {..}       => missingf!(op.loc, c!("Op::UnaryNot\n")),
-            Op::Negate {..}         => missingf!(op.loc, c!("Op::Negate\n")),
+            Op::UnaryNot {result, arg} => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        ceq\n"));
+                sb_appendf(output, c!("        conv.i8\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
+            Op::Negate {result, arg} => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        neg\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
             Op::Asm {stmts} => {
                 for i in 0..stmts.count {
                     let stmt = *stmts.items.add(i);
@@ -171,7 +190,12 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 load_arg(op.loc, arg, output, data);
                 sb_appendf(output, c!("        brfalse L%zu\n"), label);
             }
-            Op::Return {..}         => missingf!(op.loc, c!("Op::Return\n")),
+            Op::Return {arg}         => {
+                if let Some(arg) = arg {
+                    load_arg(op.loc, arg, output, data);
+                }
+                sb_appendf(output, c!("        ret\n"));
+            }
         }
     }
     sb_appendf(output, c!("        ldc.i8 0\n"));
