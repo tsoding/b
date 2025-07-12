@@ -36,5 +36,5 @@ main() {
     auto nl;
     nl = 10;
     putchar(nl);
-    return 0;
+    return;
 } 
