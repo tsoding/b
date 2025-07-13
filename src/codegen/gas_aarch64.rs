@@ -1,9 +1,10 @@
 use core::ffi::*;
 use core::mem::zeroed;
+use crate::align_bytes;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::crust::assoc_lookup_cstr;
-use crate::{Compiler, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes, AsmFunc, Variadic};
+use crate::ir::*;
 use crate::{missingf, Loc};
 use crate::targets::Os;
 
@@ -479,9 +480,9 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, os: Os) {
-    generate_funcs(output, da_slice((*c).funcs), da_slice((*c).variadics), os);
-    generate_asm_funcs(output, da_slice((*c).asm_funcs), os);
-    generate_globals(output, da_slice((*c). globals), os);
-    generate_data_section(output, da_slice((*c).data));
+pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, os: Os) {
+    generate_funcs(output, da_slice((*p).funcs), da_slice((*p).variadics), os);
+    generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
+    generate_globals(output, da_slice((*p). globals), os);
+    generate_data_section(output, da_slice((*p).data));
 }
