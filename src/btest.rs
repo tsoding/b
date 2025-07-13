@@ -177,6 +177,7 @@ pub unsafe fn execute_test(
 }
 
 pub unsafe fn usage() {
+    fprintf(stderr(), c!("B Compiler Testing Tool\n"));
     fprintf(stderr(), c!("Usage: %s [OPTIONS]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
     flag_print_options(stderr());
