@@ -1,6 +1,7 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Program, Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, align_bytes};
+use crate::align_bytes;
+use crate::ir::*;
 use crate::nob::*;
 use crate::targets::Os;
 

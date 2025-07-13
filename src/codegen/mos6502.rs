@@ -8,7 +8,8 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Program, Func, OpWithLocation, Global, Op, Binop, ImmediateValue, Arg, AsmFunc, Loc};
+use crate::lexer::*;
+use crate::ir::*;
 use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;

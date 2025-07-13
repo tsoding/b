@@ -15,6 +15,7 @@ CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 RSS=\
 	$(SRC)/arena.rs \
 	$(SRC)/b.rs \
+	$(SRC)/ir.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
 	$(SRC)/glob.rs \
@@ -27,7 +28,6 @@ RSS=\
 	$(SRC)/codegen/gas_x86_64.rs \
 	$(SRC)/codegen/mos6502.rs \
 	$(SRC)/codegen/uxn.rs \
-	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs \
 	$(SRC)/runner/gas_x86_64_linux.rs \
 	$(SRC)/runner/gas_x86_64_windows.rs \

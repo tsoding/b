@@ -1,9 +1,10 @@
 use core::ffi::*;
 use core::mem::zeroed;
+use crate::align_bytes;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::crust::assoc_lookup_cstr;
-use crate::{Program, Binop, Op, OpWithLocation, Arg, Func, Global, ImmediateValue, align_bytes, AsmFunc, Variadic};
+use crate::ir::*;
 use crate::{missingf, Loc};
 use crate::targets::Os;
 

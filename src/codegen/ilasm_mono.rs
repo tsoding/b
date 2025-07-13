@@ -2,7 +2,8 @@ use core::ffi::*;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::lexer::*;
-use crate::{Program, Func, Op, Arg, Binop, missingf};
+use crate::missingf;
+use crate::ir::*;
 
 pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *const [u8]) {
     match arg {

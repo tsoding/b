@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Program, Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc};
+use crate::ir::*;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::{missingf, Loc};

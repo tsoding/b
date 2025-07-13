@@ -35,6 +35,7 @@ pub mod codegen;
 pub mod runner;
 pub mod lexer;
 pub mod targets;
+pub mod ir;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -48,6 +49,7 @@ use crust::assoc_lookup_cstr;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
+use ir::*;
 
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
@@ -214,49 +216,6 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
     Some(())
 }
 
-#[derive(Clone, Copy)]
-pub enum Arg {
-    /// Bogus value of an Arg.
-    ///
-    /// You should always call unreachable!() if you encounterd it in
-    /// the codegens. This value indicates a compilation error and
-    /// encountering it means that the compiler didn't fail the
-    /// compilation before passing the Compiler struct to the
-    /// codegens.
-    Bogus,
-    AutoVar(usize),
-    Deref(usize),
-    /// Reference to the autovar with the specified index
-    ///
-    /// The autovars are currently expected to be layed out in memory from right to left,
-    /// which is not particularly historically accurate.
-    /// See TODO(2025-06-05 17:45:36)
-    RefAutoVar(usize),
-    RefExternal(*const c_char),
-    External(*const c_char),
-    Literal(u64),
-    DataOffset(usize),
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum Binop {
-    Plus,
-    Minus,
-    Mult,
-    Div,
-    Mod,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    BitOr,
-    BitAnd,
-    BitShl,
-    BitShr,
-}
-
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitOr],
@@ -320,36 +279,6 @@ impl Binop {
         }
         unreachable!()
     }
-}
-
-#[derive(Clone, Copy)]
-pub struct AsmStmt {
-    line: *const c_char,
-    loc: Loc,
-}
-
-#[derive(Clone, Copy)]
-pub enum Op {
-    Bogus,
-    UnaryNot       {result: usize, arg: Arg},
-    Negate         {result: usize, arg: Arg},
-    Asm            {stmts: Array<AsmStmt>},
-    Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
-    Index          {result: usize, arg: Arg, offset: Arg},
-    AutoAssign     {index: usize, arg: Arg},
-    ExternalAssign {name: *const c_char, arg: Arg},
-    Store          {index: usize, arg: Arg},
-    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
-    Label          {label: usize},
-    JmpLabel       {label: usize},
-    JmpIfNotLabel  {label: usize, arg: Arg},
-    Return         {arg: Option<Arg>},
-}
-
-#[derive(Clone, Copy)]
-pub struct OpWithLocation {
-    pub opcode: Op,
-    pub loc: Loc,
 }
 
 pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
@@ -960,57 +889,10 @@ pub unsafe fn usage() {
 }
 
 #[derive(Clone, Copy)]
-pub struct AsmFunc {
-    name: *const c_char,
-    name_loc: Loc,
-    body: Array<AsmStmt>,
-}
-
-#[derive(Clone, Copy)]
-pub struct Func {
-    name: *const c_char,
-    name_loc: Loc,
-    body: Array<OpWithLocation>,
-    params_count: usize,
-    auto_vars_count: usize,
-}
-
-#[derive(Clone, Copy)]
-pub struct Global {
-    name: *const c_char,
-    values: Array<ImmediateValue>,
-    is_vec: bool,
-    minimum_size: usize,
-}
-
-#[derive(Clone, Copy)]
-pub enum ImmediateValue {
-    Name(*const c_char),
-    Literal(u64),
-    DataOffset(usize),
-}
-
-#[derive(Clone, Copy)]
 pub struct Switch {
     pub label: usize,
     pub value: Arg,
     pub cond: usize,
-}
-
-#[derive(Clone, Copy)]
-pub struct Variadic {
-    pub loc: Loc,
-    pub fixed_args: usize,
-}
-
-#[derive(Clone, Copy)]
-pub struct Program {
-    pub funcs: Array<Func>,
-    pub data: Array<u8>,
-    pub extrns: Array<*const c_char>,
-    pub variadics: Array<(*const c_char, Variadic)>,
-    pub globals: Array<Global>,
-    pub asm_funcs: Array<AsmFunc>,
 }
 
 #[derive(Clone, Copy)]
@@ -1423,7 +1305,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut cmd: Cmd = zeroed();
 
     if *ir {
-        codegen::ir::generate_program(&mut output, &c.program);
+        dump_program(&mut output, &c.program);
         da_append(&mut output, 0);
         printf(c!("%s"), output.items);
         return Some(())
