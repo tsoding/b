@@ -11,7 +11,7 @@ pub unsafe fn run(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [
         }
     }
 
-    cmd_append! {cmd, program_path,}
+    cmd_append! {cmd, program_path}
     da_append_many(cmd, run_args);
 
     if let Some(stdout_path) = stdout_path {
