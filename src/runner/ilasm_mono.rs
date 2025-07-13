@@ -3,10 +3,14 @@ use core::mem::zeroed;
 use crate::nob::*;
 
 pub unsafe fn run(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
-    cmd_append!{
-        cmd,
-        c!("mono"), program_path,
+    if !cfg!(target_os = "windows") {
+        cmd_append! {
+            cmd,
+            c!("mono"),
+        }
     }
+
+    cmd_append!{ cmd, program_path, }
 
     da_append_many(cmd, run_args);
 
