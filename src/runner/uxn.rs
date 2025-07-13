@@ -3,7 +3,7 @@ use core::ffi::*;
 use core::mem::zeroed;
 
 pub unsafe fn run(cmd: *mut Cmd, emu: *const c_char, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
-    cmd_append! {cmd, emu, program_path,}
+    cmd_append! {cmd, emu, program_path}
     da_append_many(cmd, run_args);
     if let Some(stdout_path) = stdout_path {
         let mut fdout = fd_open_for_write(stdout_path);
