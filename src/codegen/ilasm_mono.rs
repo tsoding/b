@@ -2,7 +2,8 @@ use core::ffi::*;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::lexer::*;
-use crate::{Compiler, Func, Op, Arg, Binop, missingf};
+use crate::missingf;
+use crate::ir::*;
 
 pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *const [u8]) {
     match arg {
@@ -173,11 +174,11 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
+pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".module Main.exe\n"));
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
-    generate_funcs(da_slice((*c).funcs), output, da_slice((*c).data));
+    generate_funcs(da_slice((*p).funcs), output, da_slice((*p).data));
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
     sb_appendf(output, c!("        .entrypoint\n"));
     sb_appendf(output, c!("        call int64 class Program::main()\n"));
