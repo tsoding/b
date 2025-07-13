@@ -13,16 +13,13 @@ enum_with_order! {
         Gas_AArch64_Darwin,
         Uxn,
         Mos6502,
-        Fasm_x86_64_Windows,
-        Fasm_x86_64_Linux,
+        ILasm_Mono,
     }
 }
 
 impl Target {
     pub unsafe fn name(self) -> *const c_char {
         match self {
-            Self::Fasm_x86_64_Windows => c!("fasm-x86_64-windows"),
-            Self::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
             Self::Gas_x86_64_Windows  => c!("gas-x86_64-windows"),
             Self::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
             Self::Gas_x86_64_Darwin   => c!("gas-x86_64-darwin"),
@@ -30,6 +27,7 @@ impl Target {
             Self::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502             => c!("6502"),
+            Self::ILasm_Mono          => c!("ilasm-mono"),
         }
     }
 
@@ -41,20 +39,6 @@ impl Target {
             }
         }
         None
-    }
-
-    pub unsafe fn word_size(self) -> u64 {
-        match self {
-            Self::Fasm_x86_64_Windows => 8,
-            Self::Fasm_x86_64_Linux   => 8,
-            Self::Gas_x86_64_Windows  => 8,
-            Self::Gas_x86_64_Linux    => 8,
-            Self::Gas_x86_64_Darwin   => 8,
-            Self::Gas_AArch64_Linux   => 8,
-            Self::Gas_AArch64_Darwin  => 8,
-            Self::Uxn                 => 2,
-            Self::Mos6502             => 2,
-        }
     }
 }
 

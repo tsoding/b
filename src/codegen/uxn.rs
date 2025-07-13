@@ -80,11 +80,11 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
             for j in 0..(*a).named_labels.count {
                 let named_label = *(*a).named_labels.items.add(j);
                 if named_label.label == patch.label {
-                    fprintf(stderr(), c!("Label '%s' was never linked\n"), named_label.name);
+                    log(Log_Level::ERROR, c!("uxn: Label '%s' was never linked"), named_label.name);
                     abort();
                 }
             }
-            fprintf(stderr(), c!("Label #%ld was never linked (error in the uxn codegen)\n"), patch.label);
+            log(Log_Level::ERROR, c!("uxn: Label #%ld was never linked"), patch.label);
             abort();
         }
         let offset = patch.offset;
@@ -507,6 +507,14 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 // return
                 write_op(output, UxnOp::JMP2r);
             }
+            Op::Index {result, arg, offset} => {
+                load_arg(arg, op.loc, output, assembler);
+                load_arg(offset, op.loc, output, assembler);
+                write_lit(output, 0x10);
+                write_op(output, UxnOp::SFT2);
+                write_op(output, UxnOp::ADD2);
+                store_auto(output, result);
+            },
         }
     }
 
@@ -762,8 +770,17 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_lit2(output, 0);
             write_lit_stz2(output, FIRST_ARG);
             write_op(output, UxnOp::JMP2r);
+        } else if strcmp(name, c!("uxn_div2")) == 0 {
+            // uxn_udiv(a, b)
+            // outputs 16 bit unsigned division of a / b.
+            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_div2")), (*output).count);
+            write_lit_ldz2(output, FIRST_ARG);
+            write_lit_ldz2(output, FIRST_ARG + 2);
+            write_op(output, UxnOp::DIV2);
+            write_lit_stz2(output, FIRST_ARG);
+            write_op(output, UxnOp::JMP2r);
         } else {
-            fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
+            log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
             abort();
         }
     }
