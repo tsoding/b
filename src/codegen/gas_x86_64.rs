@@ -1,6 +1,6 @@
 use core::ffi::*;
 use core::cmp;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, Compiler, align_bytes};
+use crate::{Program, Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc, align_bytes};
 use crate::nob::*;
 use crate::targets::Os;
 
@@ -334,17 +334,17 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler, os: Os) {
+pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, os: Os) {
     match os {
         Os::Darwin => sb_appendf(output, c!(".text\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
     };
-    generate_funcs(output, da_slice((*c).funcs), os);
-    generate_asm_funcs(output, da_slice((*c).asm_funcs), os);
+    generate_funcs(output, da_slice((*p).funcs), os);
+    generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
     match os {
         Os::Darwin => sb_appendf(output, c!(".data\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .data\n")),
     };
-    generate_data_section(output, da_slice((*c).data));
-    generate_globals(output, da_slice((*c).globals), os);
+    generate_data_section(output, da_slice((*p).data));
+    generate_globals(output, da_slice((*p).globals), os);
 }

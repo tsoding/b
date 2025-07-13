@@ -1,6 +1,6 @@
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
+use crate::{Program, Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, AsmFunc};
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -222,10 +222,10 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    generate_funcs(output, da_slice((*c).funcs));
-    generate_asm_funcs(output, da_slice((*c).asm_funcs));
-    generate_extrns(output, da_slice((*c).extrns));
-    generate_globals(output, da_slice((*c).globals));
-    generate_data_section(output, da_slice((*c).data));
+pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
+    generate_funcs(output, da_slice((*p).funcs));
+    generate_asm_funcs(output, da_slice((*p).asm_funcs));
+    generate_extrns(output, da_slice((*p).extrns));
+    generate_globals(output, da_slice((*p).globals));
+    generate_data_section(output, da_slice((*p).data));
 }

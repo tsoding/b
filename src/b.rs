@@ -390,16 +390,16 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 
 
 pub unsafe fn compile_string(string: *const c_char, c: *mut Compiler) -> usize {
-    let offset = (*c).data.count;
+    let offset = (*c).program.data.count;
     let string_len = strlen(string);
-    da_append_many(&mut (*c).data, slice::from_raw_parts(string as *const u8, string_len));
+    da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
     // TODO: Strings in B are not NULL-terminated.
     // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
     // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
     // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
     // libc. While the language is still in development we gonna terminate it with 0. We will make it
     // "spec complaint" later.
-    da_append(&mut (*c).data, 0); // NULL-terminator
+    da_append(&mut (*c).program.data, 0); // NULL-terminator
     offset
 }
 
@@ -767,7 +767,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena, (*l).string);
-                name_declare_if_not_exists(&mut (*c).extrns, name);
+                name_declare_if_not_exists(&mut (*c).program.extrns, name);
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
@@ -1004,21 +1004,26 @@ pub struct Variadic {
 }
 
 #[derive(Clone, Copy)]
+pub struct Program {
+    pub funcs: Array<Func>,
+    pub data: Array<u8>,
+    pub extrns: Array<*const c_char>,
+    pub variadics: Array<(*const c_char, Variadic)>,
+    pub globals: Array<Global>,
+    pub asm_funcs: Array<AsmFunc>,
+}
+
+#[derive(Clone, Copy)]
 pub struct Compiler {
+    pub program: Program,
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
-    pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
     pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
-    pub data: Array<u8>,
-    pub extrns: Array<*const c_char>,
-    pub variadics: Array<(*const c_char, Variadic)>,
-    pub globals: Array<Global>,
-    pub asm_funcs: Array<AsmFunc>,
     /// Arena into which the Compiler allocates all the names and
     /// objects that need to live for the duration of the
     /// compilation. Even if some object/names don't need to live that
@@ -1032,7 +1037,7 @@ pub struct Compiler {
     pub arena: Arena,
     pub target: Target,
     pub error_count: usize,
-    pub historical: bool
+    pub historical: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -1064,7 +1069,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
                 let func = arena::strdup(&mut (*c).arena, (*l).string);
                 let func_loc = (*l).loc;
-                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).program.variadics), func) {
                     // TODO: report all the duplicate variadics maybe?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
@@ -1076,7 +1081,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
                     bump_error_count(c)?;
                 }
-                da_append(&mut (*c).variadics, (func, Variadic {
+                da_append(&mut (*c).program.variadics, (func, Variadic {
                     loc: func_loc,
                     fixed_args: (*l).int_number as usize,
                 }));
@@ -1087,7 +1092,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
                     let name = arena::strdup(&mut (*c).arena, (*l).string);
-                    name_declare_if_not_exists(&mut (*c).extrns, name);
+                    name_declare_if_not_exists(&mut (*c).program.extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
@@ -1138,7 +1143,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
                         }
 
-                        da_append(&mut (*c).funcs, Func {
+                        da_append(&mut (*c).program.funcs, Func {
                             name,
                             name_loc,
                             body: (*c).func_body,
@@ -1154,7 +1159,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     Token::Asm => { // Assembly function definition
                         let mut body: Array<AsmStmt> = zeroed();
                         compile_asm_stmts(l, c, &mut body)?;
-                        da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
+                        da_append(&mut (*c).program.asm_funcs, AsmFunc {name, name_loc, body});
                     }
                     _ => { // Variable definition
                         (*l).parse_point = saved_point;
@@ -1213,7 +1218,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         if !global.is_vec && global.values.count == 0 {
                             da_append(&mut global.values, ImmediateValue::Literal(0));
                         }
-                        da_append(&mut (*c).globals, global)
+                        da_append(&mut (*c).program.globals, global)
                     }
                 }
             }
@@ -1418,7 +1423,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut cmd: Cmd = zeroed();
 
     if *ir {
-        codegen::ir::generate_program(&mut output, &c);
+        codegen::ir::generate_program(&mut output, &c.program);
         da_append(&mut output, 0);
         printf(c!("%s"), output.items);
         return Some(())
@@ -1426,7 +1431,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     match target {
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
+            codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1485,7 +1490,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
+            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1536,7 +1541,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Gas_x86_64_Windows => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
+            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Windows);
 
             let base_path;
             if (*output_path).is_null() {
@@ -1593,7 +1598,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Gas_x86_64_Darwin => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Darwin);
+            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Darwin);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1645,7 +1650,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Gas_AArch64_Darwin => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
+            codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Darwin);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1697,7 +1702,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(&mut output, &c);
+            codegen::uxn::generate_program(&mut output, &c.program);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1716,7 +1721,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
         Target::Mos6502 => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-            codegen::mos6502::generate_program(&mut output, &c, config);
+            codegen::mos6502::generate_program(&mut output, &c.program, config);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1734,7 +1739,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(&mut output, &mut c);
+            codegen::ilasm_mono::generate_program(&mut output, &c.program);
 
             let base_path;
             if (*output_path).is_null() {

@@ -8,7 +8,7 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, ImmediateValue, Arg, AsmFunc, Loc};
+use crate::{Program, Func, OpWithLocation, Global, Op, Binop, ImmediateValue, Arg, AsmFunc, Loc};
 use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;
@@ -1457,18 +1457,18 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
-pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, config: Config) -> Option<()> {
+pub unsafe fn generate_program(out: *mut String_Builder, p: *const Program, config: Config) -> Option<()> {
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
     asm.code_start = config.load_offset;
 
-    generate_funcs(out, da_slice((*c).funcs), &mut asm);
-    generate_asm_funcs(out, da_slice((*c).asm_funcs), &mut asm);
-    generate_extrns(out, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), da_slice((*c).asm_funcs), &mut asm);
+    generate_funcs(out, da_slice((*p).funcs), &mut asm);
+    generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
+    generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
 
     let data_start = config.load_offset + (*out).count as u16;
-    generate_data_section(out, da_slice((*c).data));
-    generate_globals(out, da_slice((*c).globals), &mut asm);
+    generate_data_section(out, da_slice((*p).data));
+    generate_globals(out, da_slice((*p).globals), &mut asm);
 
     log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
     apply_relocations(out, data_start, &mut asm);
