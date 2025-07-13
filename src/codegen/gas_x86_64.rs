@@ -127,6 +127,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 match binop {
                     Binop::BitOr => { sb_appendf(output, c!("    orq %%rcx, %%rax\n")); }
                     Binop::BitAnd => { sb_appendf(output, c!("    andq %%rcx, %%rax\n")); }
+                    Binop::BitXor => { sb_appendf(output, c!("    xorq %%rcx, %%rax\n")); }
                     Binop::BitShl => {
                         load_arg_to_reg(rhs, c!("rcx"), output, os);
                         sb_appendf(output, c!("    shlq %%cl, %%rax\n"));

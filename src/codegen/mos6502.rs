@@ -853,6 +853,16 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                         instr(out, TAY);
                         instr(out, TXA);
                     },
+                    Binop::BitXor => {
+                        load_two_args(out, lhs, rhs, op, asm);
+
+                        instr8(out, EOR, ZP, ZP_RHS_L);
+                        instr(out, TAX);
+                        instr(out, TYA);
+                        instr8(out, EOR, ZP, ZP_RHS_H);
+                        instr(out, TAY);
+                        instr(out, TXA);
+                    },
                     Binop::BitShl => {
                         load_two_args(out, lhs, rhs, op, asm);
 

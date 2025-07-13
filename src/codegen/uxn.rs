@@ -416,6 +416,12 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_op(output, UxnOp::AND2);
                 store_auto(output, index);
             }
+            Op::Binop {binop: Binop::BitXor, index, lhs, rhs} => {
+                load_arg(lhs, op.loc, output, assembler);
+                load_arg(rhs, op.loc, output, assembler);
+                write_op(output, UxnOp::EOR2);
+                store_auto(output, index);
+            }
             Op::Binop {binop: Binop::BitShl, index, lhs, rhs} => {
                 load_arg(lhs, op.loc, output, assembler);
                 load_arg(rhs, op.loc, output, assembler);

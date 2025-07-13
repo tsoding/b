@@ -129,6 +129,9 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        or\n"))
                     }
                     Binop::BitAnd       => missingf!(op.loc, c!("Binop::BitAnd\n")),
+                    Binop::BitXor       => {
+                        sb_appendf(output, c!("        xor\n"))
+                    }
                     Binop::BitShl       => missingf!(op.loc, c!("Binop::BitShl\n")),
                     Binop::BitShr       => missingf!(op.loc, c!("Binop::BitShr\n")),
                 };
