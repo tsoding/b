@@ -32,7 +32,7 @@ Find the project documentation at [./docs/](./docs/).
 
 ## Contribution
 
-Accepting Pull Requests is currently paused. We are in the middle of Decentralizing this repo. The plan is
+Accepting Pull Requests is currently paused. We are in the middle of [Decentralizing](https://github.com/tsoding/b/issues/62) this repo. The plan is
 
 1. Create a separate organization for the language.
 2. Keep `*x86_64*` and `*aarch64*` codegens in the main repo.
