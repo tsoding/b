@@ -220,6 +220,7 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
 pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitOr],
     &[Binop::BitAnd],
+    &[Binop::BitXor],
     &[Binop::BitShl, Binop::BitShr],
     &[Binop::Equal, Binop::NotEqual],
     &[Binop::Less, Binop::Greater, Binop::GreaterEqual, Binop::LessEqual],
@@ -243,6 +244,7 @@ impl Binop {
             Token::ShrEq   => Some(Some(Binop::BitShr)),
             Token::OrEq    => Some(Some(Binop::BitOr)),
             Token::AndEq   => Some(Some(Binop::BitAnd)),
+            Token::XorEq   => Some(Some(Binop::BitXor)),
             _              => None,
         }
     }
@@ -262,6 +264,7 @@ impl Binop {
             Token::GreaterEq => Some(Binop::GreaterEqual),
             Token::Or        => Some(Binop::BitOr),
             Token::And       => Some(Binop::BitAnd),
+            Token::Xor       => Some(Binop::BitXor),
             Token::Shl       => Some(Binop::BitShl),
             Token::Shr       => Some(Binop::BitShr),
             _ => None,

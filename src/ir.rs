@@ -47,6 +47,7 @@ pub enum Binop {
     GreaterEqual,
     BitOr,
     BitAnd,
+    BitXor,
     BitShl,
     BitShr,
 }
@@ -193,6 +194,7 @@ pub unsafe fn dump_op(op: OpWithLocation, output: *mut String_Builder) {
             match binop {
                 Binop::BitOr        => sb_appendf(output, c!(" | ")),
                 Binop::BitAnd       => sb_appendf(output, c!(" & ")),
+                Binop::BitXor       => sb_appendf(output, c!(" ^ ")),
                 Binop::BitShl       => sb_appendf(output, c!(" << ")),
                 Binop::BitShr       => sb_appendf(output, c!(" >> ")),
                 Binop::Plus         => sb_appendf(output, c!(" + ")),
