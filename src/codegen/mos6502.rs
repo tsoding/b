@@ -232,6 +232,24 @@ pub struct Label {
 pub struct External {
     pub name: *const c_char,
     pub addr: u16,
+    pub loc: Loc,
+}
+
+pub unsafe fn add_external(name: *const c_char, addr: u16, loc: Loc, asm: *mut Assembler) -> Option<()> {
+    for i in 0..(*asm).externals.count {
+        let ext = *(*asm).externals.items.add(i);
+        if strcmp(ext.name, name) == 0 {
+            diagf!(loc,     c!("ERROR: redefinition of name `%s`\n"), name);
+            diagf!(ext.loc, c!("INFO: previously defined here\n"));
+            return None;
+        }
+    }
+
+    da_append(&mut (*asm).externals, External {
+        name, addr, loc
+    });
+
+    Some(())
 }
 
 #[derive(Clone, Copy)]
@@ -524,14 +542,13 @@ pub unsafe fn assemble_statement(out: *mut String_Builder,
     if len > 0 && *name.add(len-1) as u8 == b':' {
         *name.add(len-1) = 0;
         let label_addr = (*out).count as u16;
-        da_append(&mut (*asm).externals, External {
-            name,
-            addr: label_addr,
-        });
+        let mut lloc = loc;
+        lloc.line_offset += (line as isize - line_begin as isize + 1) as i32;
+
+        add_external(name, label_addr, lloc, asm);
 
         if *line != 0 {
-            loc.line_offset += (line as isize - line_begin as isize + 1) as i32;
-            diagf!(loc, c!("ERROR: trailing garbage after label: `%s`\n"), line);
+            diagf!(lloc, c!("ERROR: trailing garbage after label: `%s`\n"), line);
             abort();
         }
         return;
@@ -799,15 +816,12 @@ mod ops {
     }
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize,
+pub unsafe fn generate_function(name: *const c_char, loc: Loc, params_count: usize, auto_vars_count: usize,
                                 body: *const [OpWithLocation], out: *mut String_Builder,
                                 asm: *mut Assembler) {
     (*asm).frame_sz = 0;
     let fun_addr = (*out).count as u16;
-    da_append(&mut (*asm).externals, External {
-        name,
-        addr: fun_addr,
-    });
+    add_external(name, fun_addr, loc, asm);
 
     // prepare function labels for each op and the end of the function
     let mut op_addresses: Array<usize> = zeroed();
@@ -1380,7 +1394,7 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
 pub unsafe fn generate_funcs(out: *mut String_Builder, funcs: *const [Func], asm: *mut Assembler) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), out, asm);
+        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), out, asm);
     }
 }
 
@@ -1476,10 +1490,7 @@ pub unsafe fn generate_extrns(_out: *mut String_Builder, extrns: *const [*const 
 pub unsafe fn generate_globals(out: *mut String_Builder, globals: *mut [Global], asm: *mut Assembler) {
     for i in 0..globals.len() {
         let global = (*globals)[i];
-        da_append(&mut (*asm).externals, External {
-            name: global.name,
-            addr: (*out).count as u16,
-        });
+        add_external(global.name, (*out).count as u16, global.name_loc, asm);
 
         if global.is_vec {
             let address = create_address_label(asm);
@@ -1545,10 +1556,7 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
         let asm_func = (*asm_funcs)[i];
 
         let fun_addr = (*out).count as u16;
-        da_append(&mut (*asm).externals, External {
-            name: asm_func.name,
-            addr: fun_addr,
-        });
+        add_external(asm_func.name, fun_addr, asm_func.name_loc, asm);
 
         for j in 0..asm_func.body.count {
             let stmt = *asm_func.body.items.add(j);

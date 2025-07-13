@@ -978,6 +978,7 @@ pub struct Func {
 #[derive(Clone, Copy)]
 pub struct Global {
     name: *const c_char,
+    name_loc: Loc,
     values: Array<ImmediateValue>,
     is_vec: bool,
     minimum_size: usize,
@@ -1161,6 +1162,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 
                         let mut global = Global {
                             name,
+                            name_loc,
                             values: zeroed(),
                             is_vec: false,
                             minimum_size: 0,
