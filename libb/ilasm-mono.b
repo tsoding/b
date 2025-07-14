@@ -1,6 +1,7 @@
 malloc(size) {
     __asm__(
         "ldarg.0",
+        "conv.i",
         "call native int [mscorlib]System.Runtime.InteropServices.Marshal::AllocHGlobal(native int)",
         "ret"
     );
