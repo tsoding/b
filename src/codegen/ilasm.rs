@@ -119,7 +119,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                     },
                     Binop::LessEqual    => {
                         sb_appendf(output, c!("        cgt\n"));
-                        sb_appendf(output, c!("        ldc.i4 0\n"));
+                        sb_appendf(output, c!("        ldc.i4.0\n"));
                         sb_appendf(output, c!("        ceq\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
@@ -174,9 +174,10 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
+pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, mono: bool) {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
-    sb_appendf(output, c!(".module Main.exe\n"));
+    sb_appendf(output, c!(".assembly extern mscorlib {}\n"));
+    sb_appendf(output, c!(".module Main.%s\n"), if mono { c!("exe") } else { c!("dll") });
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
     generate_funcs(da_slice((*p).funcs), output, da_slice((*p).data));
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));

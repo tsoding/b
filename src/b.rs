@@ -1622,7 +1622,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(&mut output, &c.program);
+            codegen::ilasm::generate_program(&mut output, &c.program, true);
 
             let base_path;
             if (*output_path).is_null() {
@@ -1652,7 +1652,53 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::ilasm_mono::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                runner::ilasm::run(&mut cmd, effective_output_path, da_slice(run_args), None, true)?;
+            }
+        }
+        Target::ILasm_Core => {
+            codegen::ilasm::generate_program(&mut output, &c.program, false);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".dll")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.dll"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+            cmd_append!{
+                &mut cmd,
+                c!("ilasm"), c!("/dll"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
+            }
+
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+
+            let config_output_path = temp_sprintf(c!("%s.runtimeconfig.json"), base_path);
+            write_entire_file(config_output_path, c!("
+            {
+                \"runtimeOptions\": {
+                    \"framework\": {
+                        \"name\": \"Microsoft.NETCore.App\",
+                        \"version\": \"9.0.0\"
+                    }
+                }
+            }\0") as *const c_void, output.count)?;
+
+            if *run {
+                runner::ilasm::run(&mut cmd, effective_output_path, da_slice(run_args), None, false)?;
             }
         }
     }
