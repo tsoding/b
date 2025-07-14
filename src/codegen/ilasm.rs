@@ -52,7 +52,12 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                 sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
                 sb_appendf(out, c!("        ldc.i8 0\n"));
             } else {
-                sb_appendf(out, c!("        call int64 class Program::%s("), name);
+                if strcmp(name, c!("char")) == 0 {
+                    sb_appendf(out, c!("        call int64 class Program::_char("));
+                }
+                else {
+                    sb_appendf(out, c!("        call int64 class Program::%s("), name);
+                }
                 for i in 0..arity {
                     if i > 0 { sb_appendf(out, c!(", ")); }
                     sb_appendf(out, c!("int64"));
@@ -84,7 +89,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
 
     if func.params_count > 0 {
         for i in 0..func.params_count {
-            sb_appendf(output, c!("        ldarg %zu"), i);
+            sb_appendf(output, c!("        ldarg %zu\n"), i);
             sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
         }
     }
@@ -106,7 +111,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 load_arg(op.loc, rhs, output, data);
                 match binop {
                     Binop::Plus         => sb_appendf(output, c!("        add\n")),
-                    Binop::Minus        => missingf!(op.loc, c!("Binop::Minus\n")),
+                    Binop::Minus        => sb_appendf(output, c!("        sub\n")),
                     Binop::Mult         => {
                         sb_appendf(output, c!("        mul\n"))
                     }
@@ -136,7 +141,7 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        ceq\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
-                    Binop::Greater      => missingf!(op.loc, c!("Binop::Greater\n")),
+                    Binop::Greater      => sb_appendf(output, c!("        cgt\n")),
                     Binop::GreaterEqual => missingf!(op.loc, c!("Binop::GreaterEqual\n")),
                     Binop::BitOr        => {
                         sb_appendf(output, c!("        or\n"))
@@ -232,8 +237,36 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Global]) {
     if externs.len() > 0 {
         for i in 0..externs.len() {
+            let global = (*externs)[i];
+            if global.is_vec || global.values.count > 1 {
+                todo!("global.is_vec || global.values.count > 1\n")
+            }
+
             sb_appendf(output, c!("    .field public static int64 %s\n"), (*externs)[i].name);
         }
+
+        sb_appendf(output, c!("    .method static void .cctor() {\n"));
+        for i in 0..externs.len() {
+            let global = (*externs)[i];
+            match *global.values.items.add(0) {
+                ImmediateValue::Literal(lit)       => {
+                    sb_appendf(output, c!("        ldc.i8 %zu\n"), lit);
+                    sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+                },
+                ImmediateValue::Name(name) => {
+                    sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
+                    sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+                }
+                ImmediateValue::DataOffset(offset) => {
+                    sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                    sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+                    sb_appendf(output, c!("        add\n"));
+                    sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+                },
+            };
+        }
+        sb_appendf(output, c!("    ret\n"));
+        sb_appendf(output, c!("    }\n"));
     }
 }
 

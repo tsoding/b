@@ -27,3 +27,15 @@ usleep(us) {
         "ret"
     );
 }
+
+_char(s,n) {
+    __asm__(
+        "ldarg 0",
+        "ldarg 1",
+        "add",
+        "ldind.i1",
+        "conv.i8",
+        "ret"
+    );
+}
+
