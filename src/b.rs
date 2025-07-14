@@ -1650,7 +1650,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             cmd_append!{
                 &mut cmd,
-                c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
+                c!("ilasm"), output_asm_path, temp_sprintf(c!("-output=%s"), effective_output_path),
             }
 
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
@@ -1684,7 +1684,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             cmd_append!{
                 &mut cmd,
-                c!("ilasm"), c!("/dll"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
+                c!("ilasm"), c!("-dll"), output_asm_path, temp_sprintf(c!("-output=%s"), effective_output_path),
             }
 
             if !cmd_run_sync_and_reset(&mut cmd) { return None; }
