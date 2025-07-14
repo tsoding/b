@@ -240,33 +240,66 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Global]) {
     if externs.len() > 0 {
         for i in 0..externs.len() {
-            let global = (*externs)[i];
-            if global.is_vec || global.values.count > 1 {
-                todo!("global.is_vec || global.values.count > 1\n")
-            }
-
             sb_appendf(output, c!("    .field public static int64 %s\n"), (*externs)[i].name);
         }
 
         sb_appendf(output, c!("    .method static void .cctor() {\n"));
         for i in 0..externs.len() {
             let global = (*externs)[i];
-            match *global.values.items.add(0) {
-                ImmediateValue::Literal(lit)       => {
-                    sb_appendf(output, c!("        ldc.i8 %zu\n"), lit);
-                    sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
-                },
-                ImmediateValue::Name(name) => {
-                    sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
-                    sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
-                }
-                ImmediateValue::DataOffset(offset) => {
-                    sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                    sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
-                    sb_appendf(output, c!("        add\n"));
-                    sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
-                },
-            };
+            let is_array = global.values.count > 1;
+            if is_array {
+                sb_appendf(output, c!("        ldc.i8 %zu\n"), global.values.count * 8);
+                sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
+                sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name);
+            }
+
+            for j in 0..global.values.count {
+                match *global.values.items.add(j) {
+                    ImmediateValue::Literal(lit) => {
+                        if !is_array {
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), lit);
+                            sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+                        }
+                        else {
+                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), j * 8);
+                            sb_appendf(output, c!("        add\n"));
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), lit);
+                            sb_appendf(output, c!("        stind.i8\n"))
+                        }
+                    },
+                    ImmediateValue::Name(name) => {
+                        if !is_array {
+                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
+                            sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+                        }
+                        else {
+                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), j * 8);
+                            sb_appendf(output, c!("        add\n"));
+                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
+                            sb_appendf(output, c!("        stind.i8\n"))
+                        }
+                    }
+                    ImmediateValue::DataOffset(offset) => {
+                        if !is_array {
+                            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+                            sb_appendf(output, c!("        add\n"));
+                            sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+                        }
+                        else {
+                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), j * 8);
+                            sb_appendf(output, c!("        add\n"));
+                            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                            sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+                            sb_appendf(output, c!("        add\n"));
+                            sb_appendf(output, c!("        stind.i8\n"))
+                        }
+                    },
+                };
+            }
         }
         sb_appendf(output, c!("    ret\n"));
         sb_appendf(output, c!("    }\n"));
