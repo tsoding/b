@@ -5,7 +5,7 @@ use crate::lexer::*;
 use crate::missingf;
 use crate::ir::*;
 
-pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *const [u8]) {
+pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, _data: *const [u8]) {
     match arg {
         Arg::Bogus           => unreachable!("bogus-amogus"),
         Arg::AutoVar(index) => {
@@ -19,21 +19,9 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *c
             sb_appendf(output, c!("        ldc.i8 %zu\n"), literal);
         }
         Arg::DataOffset(offset) => {
-            let mut p = offset;
-            sb_appendf(output, c!("        ldstr \""), p);
-            while (*data)[p] != 0 {
-                let x = (*data)[p] as i32;
-                if isprint(x) != 0 {
-                    sb_appendf(output, c!("%c"), x);
-                } else {
-                    match x {
-                        x if x == '\n' as i32 => { sb_appendf(output, c!("\\n")); }
-                        _    => todo!(),
-                    }
-                }
-                p += 1;
-            }
-            sb_appendf(output, c!("\"\n"));
+            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+            sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+            sb_appendf(output, c!("        add\n"));
         },
     }
 }
@@ -50,6 +38,7 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
             //   The main difficulty here will be passing the string, since B ilasm-mono runtime only operates on int64
             //   as of right now. Some hack is required in here. Look into the direction of boxing the values.
             if strcmp(name, c!("printf")) == 0 {
+                sb_appendf(out, c!("        newobj instance void [mscorlib]System.String::.ctor(int8*)\n"));
                 sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
                 sb_appendf(out, c!("        ldc.i8 0\n"));
             } else {
@@ -174,12 +163,36 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
+pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+    sb_appendf(output, c!(".class '<BLangDataSection>' extends [mscorlib]System.Object {\n"));
+    sb_appendf(output, c!("    .class nested assembly 'DataSection' extends [mscorlib]System.ValueType {\n"));
+    sb_appendf(output, c!("        .pack 1\n"));
+    sb_appendf(output, c!("        .size %zu\n"), data.len());
+    sb_appendf(output, c!("    }\n"));
+    sb_appendf(output, c!("    .field assembly static initonly valuetype '<BLangDataSection>'/'DataSection' 'Data' at DataArray\n"));
+    sb_appendf(output, c!("    .data cil DataArray = bytearray ("));
+
+    for i in 0..data.len() {
+        if i > 0 { sb_appendf(output, c!(" ")); }
+        sb_appendf(output, c!("%02X"), (*data)[i] as c_uint);
+    }
+    sb_appendf(output, c!(")\n"));
+    sb_appendf(output, c!("}\n"));
+}
+
 pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, mono: bool) {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".assembly extern mscorlib {}\n"));
     sb_appendf(output, c!(".module Main.%s\n"), if mono { c!("exe") } else { c!("dll") });
+
+    let sliced_data = da_slice((*p).data);
+
+    if sliced_data.len() > 0 {
+        generate_data_section(output, sliced_data);
+    }
+
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
-    generate_funcs(da_slice((*p).funcs), output, da_slice((*p).data));
+    generate_funcs(da_slice((*p).funcs), output, sliced_data);
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
     sb_appendf(output, c!("        .entrypoint\n"));
     sb_appendf(output, c!("        call int64 class Program::main()\n"));
