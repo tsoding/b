@@ -11,7 +11,10 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, _data: *
         Arg::AutoVar(index) => {
             sb_appendf(output, c!("        ldloc V_%zu\n"), index);
         }
-        Arg::Deref(..)       => missingf!(loc, c!("Deref\n")),
+        Arg::Deref(index)       => {
+            sb_appendf(output, c!("        ldloc V_%zu\n"), index);
+            sb_appendf(output, c!("        ldind.i8\n"));
+        }
         Arg::RefAutoVar(..)  => missingf!(loc, c!("RefAutoVar\n")),
         Arg::RefExternal(..) => missingf!(loc, c!("RefExternal\n")),
         Arg::External(..)    => missingf!(loc, c!("External\n")),
@@ -75,6 +78,13 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
         sb_appendf(output, c!(")\n"));
     }
 
+    if func.params_count > 0 {
+        for i in 0..func.params_count {
+            sb_appendf(output, c!("        ldarg %zu"), i);
+            sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
+        }
+    }
+
     for i in 0..func.body.count {
         let op = *func.body.items.add(i);
         match op.opcode {
@@ -126,13 +136,24 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 };
                 sb_appendf(output, c!("        stloc V_%zu\n"), index);
             }
-            Op::Index {..}          => missingf!(op.loc, c!("Op::Index\n")),
+            Op::Index {result, arg, offset} => {
+                load_arg(op.loc, arg, output, data);
+                load_arg(op.loc, offset, output, data);
+                sb_appendf(output, c!("        ldc.i4.8\n"));
+                sb_appendf(output, c!("        mul\n"));
+                sb_appendf(output, c!("        add\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
             Op::AutoAssign {index, arg}     => {
                 load_arg(op.loc, arg, output, data);
                 sb_appendf(output, c!("        stloc V_%zu\n"), index);
             }
             Op::ExternalAssign {..} => missingf!(op.loc, c!("Op::ExternalAssign\n")),
-            Op::Store {..}          => missingf!(op.loc, c!("Op::Store\n")),
+            Op::Store {index, arg} => {
+                sb_appendf(output, c!("        ldloc V_%zu\n"), index);
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        stind.i8\n"));
+            }
             Op::Funcall {result, fun, args} => {
                 for i in 0..args.count {
                     load_arg(op.loc, *args.items.add(i), output, data);
@@ -151,11 +172,20 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 load_arg(op.loc, arg, output, data);
                 sb_appendf(output, c!("        brfalse L%zu\n"), label);
             }
-            Op::Return {..}         => missingf!(op.loc, c!("Op::Return\n")),
+            Op::Return {arg} => {
+                if let Some(arg) = arg {
+                    load_arg(op.loc, arg, output, data);
+                }
+                sb_appendf(output, c!("        ret\n"));
+            }
         }
     }
-    sb_appendf(output, c!("        ldc.i8 0\n"));
-    sb_appendf(output, c!("        ret\n"));
+
+    if func.body.count < 1 || !matches!((*func.body.items.add(func.body.count - 1)).opcode, Op::Asm {..} | Op::Return {..}) {
+        sb_appendf(output, c!("        ldc.i8 0\n"));
+        sb_appendf(output, c!("        ret\n"));
+    }
+
     sb_appendf(output, c!("    }\n"));
 }
 
@@ -168,7 +198,7 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
     sb_appendf(output, c!(".class '<BLangDataSection>' extends [mscorlib]System.Object {\n"));
-    sb_appendf(output, c!("    .class nested assembly 'DataSection' extends [mscorlib]System.ValueType {\n"));
+    sb_appendf(output, c!("    .class nested assembly sealed 'DataSection' extends [mscorlib]System.ValueType {\n"));
     sb_appendf(output, c!("        .pack 1\n"));
     sb_appendf(output, c!("        .size %zu\n"), data.len());
     sb_appendf(output, c!("    }\n"));
@@ -186,6 +216,12 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, mono: bool) {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".assembly extern mscorlib {}\n"));
+
+    if !mono {
+        sb_appendf(output, c!(".assembly extern System.Runtime {}\n"));
+        sb_appendf(output, c!(".assembly extern System.Runtime.InteropServices {}\n"));
+    }
+
     sb_appendf(output, c!(".module Main.%s\n"), if mono { c!("exe") } else { c!("dll") });
 
     let sliced_data = da_slice((*p).data);

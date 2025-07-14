@@ -1,7 +1,7 @@
-putchar(x) {
+malloc(size) {
     __asm__(
         "ldarg.0",
-        "conv.u2",
-        "call void class [mscorlib]System.Console::Write(char)"
+        "call native int [mscorlib]System.Runtime.InteropServices.Marshal::AllocHGlobal(native int)",
+        "ret"
     );
 }
