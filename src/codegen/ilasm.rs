@@ -16,8 +16,12 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, _data: *
             sb_appendf(output, c!("        ldind.i8\n"));
         }
         Arg::RefAutoVar(..)  => missingf!(loc, c!("RefAutoVar\n")),
-        Arg::RefExternal(..) => missingf!(loc, c!("RefExternal\n")),
-        Arg::External(..)    => missingf!(loc, c!("External\n")),
+        Arg::RefExternal(name) => {
+            sb_appendf(output, c!("        ldsflda int64 Program::%s\n"), name);
+        }
+        Arg::External(name)    => {
+            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
+        }
         Arg::Literal(literal) => {
             sb_appendf(output, c!("        ldc.i8 %zu\n"), literal);
         }
@@ -103,7 +107,9 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 match binop {
                     Binop::Plus         => sb_appendf(output, c!("        add\n")),
                     Binop::Minus        => missingf!(op.loc, c!("Binop::Minus\n")),
-                    Binop::Mult         => missingf!(op.loc, c!("Binop::Mult\n")),
+                    Binop::Mult         => {
+                        sb_appendf(output, c!("        mul\n"))
+                    }
                     Binop::Div          => {
                         sb_appendf(output, c!("        div\n"))
                     }
@@ -114,7 +120,12 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        ceq\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
-                    Binop::NotEqual     => missingf!(op.loc, c!("Binop::NotEqual\n")),
+                    Binop::NotEqual     => {
+                        sb_appendf(output, c!("        ceq\n"));
+                        sb_appendf(output, c!("        ldc.i4.0\n"));
+                        sb_appendf(output, c!("        ceq\n"));
+                        sb_appendf(output, c!("        conv.i8\n"))
+                    }
                     Binop::Less         => {
                         sb_appendf(output, c!("        clt\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
@@ -148,7 +159,10 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 load_arg(op.loc, arg, output, data);
                 sb_appendf(output, c!("        stloc V_%zu\n"), index);
             }
-            Op::ExternalAssign {..} => missingf!(op.loc, c!("Op::ExternalAssign\n")),
+            Op::ExternalAssign {name, arg} => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        stsfld int64 Program::%s\n"), name);
+            }
             Op::Store {index, arg} => {
                 sb_appendf(output, c!("        ldloc V_%zu\n"), index);
                 load_arg(op.loc, arg, output, data);
@@ -197,40 +211,46 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
 }
 
 pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
-    sb_appendf(output, c!(".class '<BLangDataSection>' extends [mscorlib]System.Object {\n"));
-    sb_appendf(output, c!("    .class nested assembly sealed 'DataSection' extends [mscorlib]System.ValueType {\n"));
-    sb_appendf(output, c!("        .pack 1\n"));
-    sb_appendf(output, c!("        .size %zu\n"), data.len());
-    sb_appendf(output, c!("    }\n"));
-    sb_appendf(output, c!("    .field assembly static initonly valuetype '<BLangDataSection>'/'DataSection' 'Data' at DataArray\n"));
-    sb_appendf(output, c!("    .data cil DataArray = bytearray ("));
+    if data.len() > 0 {
+        sb_appendf(output, c!(".class '<BLangDataSection>' extends [mscorlib]System.Object {\n"));
+        sb_appendf(output, c!("    .class nested assembly sealed 'DataSection' extends [mscorlib]System.ValueType {\n"));
+        sb_appendf(output, c!("        .pack 1\n"));
+        sb_appendf(output, c!("        .size %zu\n"), data.len());
+        sb_appendf(output, c!("    }\n"));
+        sb_appendf(output, c!("    .field assembly static initonly valuetype '<BLangDataSection>'/'DataSection' 'Data' at DataArray\n"));
+        sb_appendf(output, c!("    .data cil DataArray = bytearray ("));
 
-    for i in 0..data.len() {
-        if i > 0 { sb_appendf(output, c!(" ")); }
-        sb_appendf(output, c!("%02X"), (*data)[i] as c_uint);
+        for i in 0..data.len() {
+            if i > 0 { sb_appendf(output, c!(" ")); }
+            sb_appendf(output, c!("%02X"), (*data)[i] as c_uint);
+        }
+        sb_appendf(output, c!(")\n"));
+        sb_appendf(output, c!("}\n"));
     }
-    sb_appendf(output, c!(")\n"));
-    sb_appendf(output, c!("}\n"));
+}
+
+pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Global]) {
+    if externs.len() > 0 {
+        for i in 0..externs.len() {
+            sb_appendf(output, c!("    .field public static int64 %s\n"), (*externs)[i].name);
+        }
+    }
 }
 
 pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, mono: bool) {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".assembly extern mscorlib {}\n"));
-
     if !mono {
         sb_appendf(output, c!(".assembly extern System.Runtime {}\n"));
         sb_appendf(output, c!(".assembly extern System.Runtime.InteropServices {}\n"));
     }
-
     sb_appendf(output, c!(".module Main.%s\n"), if mono { c!("exe") } else { c!("dll") });
 
     let sliced_data = da_slice((*p).data);
-
-    if sliced_data.len() > 0 {
-        generate_data_section(output, sliced_data);
-    }
+    generate_data_section(output, sliced_data);
 
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
+    generate_externs(output, da_slice((*p).globals));
     generate_funcs(da_slice((*p).funcs), output, sliced_data);
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
     sb_appendf(output, c!("        .entrypoint\n"));
