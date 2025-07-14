@@ -76,10 +76,8 @@ pub type Cmd = Array<*const c_char>;
 
 #[macro_export]
 macro_rules! cmd_append {
-    ($cmd:expr,) => {};
-    ($cmd:expr, $arg:expr, $($tail:tt)*) => {
-        da_append($cmd, $arg);
-        cmd_append!($cmd, $($tail)*);
+    ($cmd:expr, $($arg:expr),+ $(,)?) => {
+        $(da_append($cmd, $arg);)+
     }
 }
 
