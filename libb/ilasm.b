@@ -1,6 +1,7 @@
 putchar(x) {
     __asm__(
         "ldarg.0",
+        "conv.u1",
         "conv.u2",
         "call void [mscorlib]System.Console::Write(char)",
         "ldc.i8 0",
@@ -37,5 +38,12 @@ _char(s,n) {
         "conv.i8",
         "ret"
     );
+}
+
+strlen(s) {
+    auto n;
+    n = 0;
+    while (_char(s, n)) n++;
+    return (n);
 }
 

@@ -195,6 +195,9 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                 if let Some(arg) = arg {
                     load_arg(op.loc, arg, output, data);
                 }
+                else {
+                    sb_appendf(output, c!("        ldc.i8 0\n"));
+                }
                 sb_appendf(output, c!("        ret\n"));
             }
         }
