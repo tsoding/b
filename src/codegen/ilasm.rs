@@ -38,6 +38,9 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
             //   The main difficulty here will be passing the string, since B ilasm-mono runtime only operates on int64
             //   as of right now. Some hack is required in here. Look into the direction of boxing the values.
             if strcmp(name, c!("printf")) == 0 {
+                for _i in 0..arity - 1 {
+                    sb_appendf(out, c!("        pop\n"));
+                }
                 sb_appendf(out, c!("        newobj instance void [mscorlib]System.String::.ctor(int8*)\n"));
                 sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
                 sb_appendf(out, c!("        ldc.i8 0\n"));
