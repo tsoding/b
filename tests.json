@@ -394,7 +394,7 @@
     {
         "case": "asm_func_6502",
         "target": "6502",
-        "expected_stdout": "",
+        "expected_stdout": "69\r\n1\r\n0\r\n1\r\n",
         "state": "Enabled",
         "comment": ""
     },
@@ -1192,7 +1192,7 @@
     {
         "case": "asm_6502",
         "target": "6502",
-        "expected_stdout": "",
+        "expected_stdout": "SUCCESS\r\n",
         "state": "Enabled",
         "comment": ""
     },

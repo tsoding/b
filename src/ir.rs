@@ -96,6 +96,7 @@ pub struct Func {
 #[derive(Clone, Copy)]
 pub struct Global {
     pub name: *const c_char,
+    pub name_loc: Loc,
     pub values: Array<ImmediateValue>,
     pub is_vec: bool,
     pub minimum_size: usize,

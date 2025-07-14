@@ -1,5 +1,16 @@
 /* This tests 6502 inline assembly with different addressing modes */
 
+check(v) {
+    extrn printf, exit;
+    if (v == 69) {
+        printf("SUCCESS\n");
+        exit(0);
+    } else {
+        printf("FAILURE: got %d\n", v);
+        exit(1);
+    }
+}
+
 main() {
     __asm__(
         "LDA #$10",
@@ -18,10 +29,6 @@ main() {
         "LDA (20),Y", /* indirect load A=((20),Y) = ((20),$10) = ($410,$10) = ($420) = 69 */
 
         "LDY #0",     /* clear upper half, now 69 in Y:A */
-        /* TODO: we should jump to a function/label here, to check 69, for now, we just subtract */
-        "SEC",
-        "SBC #69",
-
-        "JMP ($FFFC)" /* jump to address in reset vector [0 in this emulator] */
+        "JSR check"
     );
 }
