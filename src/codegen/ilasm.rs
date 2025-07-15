@@ -141,7 +141,10 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        ceq\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
-                    Binop::Greater      => sb_appendf(output, c!("        cgt\n")),
+                    Binop::Greater      => {
+                        sb_appendf(output, c!("        cgt\n"));
+                        sb_appendf(output, c!("        conv.i8\n"))
+                    }
                     Binop::GreaterEqual => missingf!(op.loc, c!("Binop::GreaterEqual\n")),
                     Binop::BitOr        => {
                         sb_appendf(output, c!("        or\n"))
