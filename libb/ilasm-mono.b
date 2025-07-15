@@ -9,8 +9,8 @@ malloc(size) {
 
 memset(addr, val, size) {
     __asm__(
-        ".locals init (int32 i)",
-        "ldc.i4.0",
+        ".locals init (int64 i)",
+        "ldc.i8 0",
         "stloc.0",
         "loop:",
             "ldloc.0",
@@ -23,7 +23,7 @@ memset(addr, val, size) {
             "conv.i1",
             "stind.i1",
             "ldloc.0",
-            "ldc.i4.1",
+            "ldc.i8 1",
             "add",
             "stloc.0",
             "br loop",

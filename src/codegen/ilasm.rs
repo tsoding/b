@@ -56,7 +56,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                     sb_appendf(out, c!("        call int64 class Program::_char("));
                 }
                 else {
-                    sb_appendf(out, c!("        call int64 class Program::%s("), name);
+                    sb_appendf(out, c!("        call int64 class Program::'%s'("), name); // If the function we want to call collides with a instruction
+                                                                                          // we will get a syntax error so '' are necessary.
                 }
                 for i in 0..arity {
                     if i > 0 { sb_appendf(out, c!(", ")); }
@@ -71,7 +72,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
 }
 
 pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *const [u8]) {
-    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name);
+    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name); // If the function we want to define collides with a instruction
+                                                                          // we will get a syntax error so '' are necessary.
     for i in 0..func.params_count {
         if i > 0 { sb_appendf(output, c!(", ")); }
         sb_appendf(output, c!("int64"));
