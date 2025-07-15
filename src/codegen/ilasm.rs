@@ -56,7 +56,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                     sb_appendf(out, c!("        call int64 class Program::_char("));
                 }
                 else {
-                    sb_appendf(out, c!("        call int64 class Program::%s("), name);
+                    sb_appendf(out, c!("        call int64 class Program::'%s'("), name); // If the function we want to call collides with a instruction
+                                                                                          // we will get a syntax error so '' are necessary.
                 }
                 for i in 0..arity {
                     if i > 0 { sb_appendf(out, c!(", ")); }
@@ -71,7 +72,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
 }
 
 pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *const [u8]) {
-    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name);
+    sb_appendf(output, c!("    .method static int64 '%s' ("), func.name); // If the function we want to define collides with a instruction
+                                                                          // we will get a syntax error so '' are necessary.
     for i in 0..func.params_count {
         if i > 0 { sb_appendf(output, c!(", ")); }
         sb_appendf(output, c!("int64"));
@@ -88,6 +90,9 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
             sb_appendf(output, c!(")\n"));
         }
 
+        sb_appendf(output, c!("        .maxstack %zu\n"), 16); // By default max execution stack size is 8, which isn't enough
+                                                               // in cases where we need to pass more than 8 args to a function call.
+                                                               // TODO: Find a way to unhardcode this?
         if func.params_count > 0 {
             for i in 0..func.params_count {
                 sb_appendf(output, c!("        ldarg %zu\n"), i);
@@ -100,8 +105,18 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
         let op = *func.body.items.add(i);
         match op.opcode {
             Op::Bogus               => unreachable!("bogus-amogus"),
-            Op::UnaryNot {..}       => missingf!(op.loc, c!("Op::UnaryNot\n")),
-            Op::Negate {..}         => missingf!(op.loc, c!("Op::Negate\n")),
+            Op::UnaryNot {result, arg}       => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        ceq\n"));
+                sb_appendf(output, c!("        conv.i8\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
+            Op::Negate {result, arg}         => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        neg\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
             Op::Asm {stmts} => {
                 for i in 0..stmts.count {
                     let stmt = *stmts.items.add(i);
@@ -147,13 +162,24 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        cgt\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
-                    Binop::GreaterEqual => missingf!(op.loc, c!("Binop::GreaterEqual\n")),
+                    Binop::GreaterEqual => {
+                        sb_appendf(output, c!("        clt\n"));
+                        sb_appendf(output, c!("        ldc.i4 0\n"));
+                        sb_appendf(output, c!("        ceq\n"));
+                        sb_appendf(output, c!("        conv.i8\n"))
+                    }
                     Binop::BitOr        => {
                         sb_appendf(output, c!("        or\n"))
                     }
-                    Binop::BitAnd       => missingf!(op.loc, c!("Binop::BitAnd\n")),
-                    Binop::BitShl       => missingf!(op.loc, c!("Binop::BitShl\n")),
-                    Binop::BitShr       => missingf!(op.loc, c!("Binop::BitShr\n")),
+                    Binop::BitAnd       => sb_appendf(output, c!("        and\n")),
+                    Binop::BitShl       => {
+                        sb_appendf(output, c!("        conv.i4\n")); //Shift amount must be int32 according to the CLI specification
+                        sb_appendf(output, c!("        shl\n"))
+                    }
+                    Binop::BitShr       => {
+                        sb_appendf(output, c!("        conv.i4\n")); //Shift amount must be int32 according to the CLI specification
+                        sb_appendf(output, c!("        shr\n"))
+                    }
                 };
                 sb_appendf(output, c!("        stloc V_%zu\n"), index);
             }
