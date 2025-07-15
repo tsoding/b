@@ -89,6 +89,9 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
         sb_appendf(output, c!(")\n"));
     }
 
+    sb_appendf(output, c!("        .maxstack %zu\n"), 16); // By default max execution stack size is 8, which isn't enough
+                                                           // in cases where we need to pass more than 8 args to a function call.
+                                                           // TODO: Find a way to unhardcode this?
     if func.params_count > 0 {
         for i in 0..func.params_count {
             sb_appendf(output, c!("        ldarg %zu\n"), i);
