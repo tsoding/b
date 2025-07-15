@@ -78,19 +78,21 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
     }
     sb_appendf(output, c!(") {\n"), func.name);
 
-    if func.auto_vars_count > 0 {
-        sb_appendf(output, c!("        .locals init ("));
-        for i in 0..func.auto_vars_count {
-            if i > 0 { sb_appendf(output, c!(", ")); }
-            sb_appendf(output, c!("int64 V_%zu"), i + 1);
+    if !(func.body.count == 1 && matches!((*func.body.items.add(0)).opcode, Op::Asm {..})) {
+        if func.auto_vars_count > 0 {
+            sb_appendf(output, c!("        .locals init ("));
+            for i in 0..func.auto_vars_count {
+                if i > 0 { sb_appendf(output, c!(", ")); }
+                sb_appendf(output, c!("int64 V_%zu"), i + 1);
+            }
+            sb_appendf(output, c!(")\n"));
         }
-        sb_appendf(output, c!(")\n"));
-    }
 
-    if func.params_count > 0 {
-        for i in 0..func.params_count {
-            sb_appendf(output, c!("        ldarg %zu\n"), i);
-            sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
+        if func.params_count > 0 {
+            for i in 0..func.params_count {
+                sb_appendf(output, c!("        ldarg %zu\n"), i);
+                sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
+            }
         }
     }
 
