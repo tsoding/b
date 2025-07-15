@@ -142,13 +142,24 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
                     Binop::Greater      => sb_appendf(output, c!("        cgt\n")),
-                    Binop::GreaterEqual => missingf!(op.loc, c!("Binop::GreaterEqual\n")),
+                    Binop::GreaterEqual => {
+                        sb_appendf(output, c!("        clt\n"));
+                        sb_appendf(output, c!("        ldc.i4 0\n"));
+                        sb_appendf(output, c!("        ceq\n"));
+                        sb_appendf(output, c!("        conv.i8\n"))
+                    }
                     Binop::BitOr        => {
                         sb_appendf(output, c!("        or\n"))
                     }
-                    Binop::BitAnd       => missingf!(op.loc, c!("Binop::BitAnd\n")),
-                    Binop::BitShl       => missingf!(op.loc, c!("Binop::BitShl\n")),
-                    Binop::BitShr       => missingf!(op.loc, c!("Binop::BitShr\n")),
+                    Binop::BitAnd       => sb_appendf(output, c!("        and\n")),
+                    Binop::BitShl       => {
+                        sb_appendf(output, c!("        conv.i4\n")); //Shift amount must be int32 according to the CLI specification
+                        sb_appendf(output, c!("        shl\n"))
+                    }
+                    Binop::BitShr       => {
+                        sb_appendf(output, c!("        conv.i4\n")); //Shift amount must be int32 according to the CLI specification
+                        sb_appendf(output, c!("        shr\n"))
+                    }
                 };
                 sb_appendf(output, c!("        stloc V_%zu\n"), index);
             }
