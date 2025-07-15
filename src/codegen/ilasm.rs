@@ -156,7 +156,10 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
                         sb_appendf(output, c!("        ceq\n"));
                         sb_appendf(output, c!("        conv.i8\n"))
                     }
-                    Binop::Greater      => sb_appendf(output, c!("        cgt\n")),
+                    Binop::Greater      => {
+                        sb_appendf(output, c!("        cgt\n"));
+                        sb_appendf(output, c!("        conv.i8\n"))
+                    }
                     Binop::GreaterEqual => {
                         sb_appendf(output, c!("        clt\n"));
                         sb_appendf(output, c!("        ldc.i4 0\n"));
