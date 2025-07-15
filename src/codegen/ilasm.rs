@@ -23,11 +23,11 @@ pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, _data: *
             sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
         }
         Arg::Literal(literal) => {
-            sb_appendf(output, c!("        ldc.i8 %zu\n"), literal);
+            sb_appendf(output, c!("        ldc.i8 %zd\n"), literal);
         }
         Arg::DataOffset(offset) => {
             sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-            sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
             sb_appendf(output, c!("        add\n"));
         },
     }
@@ -80,22 +80,24 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
     }
     sb_appendf(output, c!(") {\n"), func.name);
 
-    if func.auto_vars_count > 0 {
-        sb_appendf(output, c!("        .locals init ("));
-        for i in 0..func.auto_vars_count {
-            if i > 0 { sb_appendf(output, c!(", ")); }
-            sb_appendf(output, c!("int64 V_%zu"), i + 1);
+    if !(func.body.count == 1 && matches!((*func.body.items.add(0)).opcode, Op::Asm {..})) {
+        if func.auto_vars_count > 0 {
+            sb_appendf(output, c!("        .locals init ("));
+            for i in 0..func.auto_vars_count {
+                if i > 0 { sb_appendf(output, c!(", ")); }
+                sb_appendf(output, c!("int64 V_%zu"), i + 1);
+            }
+            sb_appendf(output, c!(")\n"));
         }
-        sb_appendf(output, c!(")\n"));
-    }
 
-    sb_appendf(output, c!("        .maxstack %zu\n"), 16); // By default max execution stack size is 8, which isn't enough
-                                                           // in cases where we need to pass more than 8 args to a function call.
-                                                           // TODO: Find a way to unhardcode this?
-    if func.params_count > 0 {
-        for i in 0..func.params_count {
-            sb_appendf(output, c!("        ldarg %zu\n"), i);
-            sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
+        sb_appendf(output, c!("        .maxstack %zu\n"), 16); // By default max execution stack size is 8, which isn't enough
+                                                               // in cases where we need to pass more than 8 args to a function call.
+                                                               // TODO: Find a way to unhardcode this?
+        if func.params_count > 0 {
+            for i in 0..func.params_count {
+                sb_appendf(output, c!("        ldarg %zu\n"), i);
+                sb_appendf(output, c!("        stloc V_%zu\n"), i + 1);
+            }
         }
     }
 
@@ -277,7 +279,7 @@ pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Glo
             let global = (*externs)[i];
             let is_array = global.values.count > 1;
             if is_array {
-                sb_appendf(output, c!("        ldc.i8 %zu\n"), global.values.count * 8);
+                sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
                 sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
                 sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name);
             }
@@ -286,14 +288,14 @@ pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Glo
                 match *global.values.items.add(j) {
                     ImmediateValue::Literal(lit) => {
                         if !is_array {
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), lit);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
                             sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
                         }
                         else {
                             sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), j * 8);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
                             sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), lit);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
                             sb_appendf(output, c!("        stind.i8\n"))
                         }
                     },
@@ -304,7 +306,7 @@ pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Glo
                         }
                         else {
                             sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), j * 8);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
                             sb_appendf(output, c!("        add\n"));
                             sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
                             sb_appendf(output, c!("        stind.i8\n"))
@@ -313,16 +315,16 @@ pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Glo
                     ImmediateValue::DataOffset(offset) => {
                         if !is_array {
                             sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
                             sb_appendf(output, c!("        add\n"));
                             sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
                         }
                         else {
                             sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), j * 8);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
                             sb_appendf(output, c!("        add\n"));
                             sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zu\n"), offset);
+                            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
                             sb_appendf(output, c!("        add\n"));
                             sb_appendf(output, c!("        stind.i8\n"))
                         }
