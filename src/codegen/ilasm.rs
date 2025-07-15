@@ -52,13 +52,8 @@ pub unsafe fn call_arg(loc: Loc, fun: Arg, out: *mut String_Builder, arity: usiz
                 sb_appendf(out, c!("        call void class [mscorlib]System.Console::Write(string)\n"));
                 sb_appendf(out, c!("        ldc.i8 0\n"));
             } else {
-                if strcmp(name, c!("char")) == 0 {
-                    sb_appendf(out, c!("        call int64 class Program::_char("));
-                }
-                else {
-                    sb_appendf(out, c!("        call int64 class Program::'%s'("), name); // If the function we want to call collides with a instruction
-                                                                                          // we will get a syntax error so '' are necessary.
-                }
+                sb_appendf(out, c!("        call int64 class Program::'%s'("), name); // If the function we want to call collides with a instruction
+                                                                                      // we will get a syntax error so '' are necessary.
                 for i in 0..arity {
                     if i > 0 { sb_appendf(out, c!(", ")); }
                     sb_appendf(out, c!("int64"));

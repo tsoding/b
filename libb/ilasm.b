@@ -29,7 +29,7 @@ usleep(us) {
     );
 }
 
-_char(s,n) {
+char(s,n) {
     __asm__(
         "ldarg 0",
         "ldarg 1",
@@ -43,7 +43,7 @@ _char(s,n) {
 strlen(s) {
     auto n;
     n = 0;
-    while (_char(s, n)) n++;
+    while (char(s, n)) n++;
     return (n);
 }
 
