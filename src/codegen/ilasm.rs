@@ -98,8 +98,18 @@ pub unsafe fn generate_function(func: Func, output: *mut String_Builder, data: *
         let op = *func.body.items.add(i);
         match op.opcode {
             Op::Bogus               => unreachable!("bogus-amogus"),
-            Op::UnaryNot {..}       => missingf!(op.loc, c!("Op::UnaryNot\n")),
-            Op::Negate {..}         => missingf!(op.loc, c!("Op::Negate\n")),
+            Op::UnaryNot {result, arg}       => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        ldc.i8 0\n"));
+                sb_appendf(output, c!("        ceq\n"));
+                sb_appendf(output, c!("        conv.i8\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
+            Op::Negate {result, arg}         => {
+                load_arg(op.loc, arg, output, data);
+                sb_appendf(output, c!("        neg\n"));
+                sb_appendf(output, c!("        stloc V_%zu\n"), result);
+            }
             Op::Asm {stmts} => {
                 for i in 0..stmts.count {
                     let stmt = *stmts.items.add(i);
