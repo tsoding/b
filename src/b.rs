@@ -35,6 +35,7 @@ pub mod codegen;
 pub mod runner;
 pub mod lexer;
 pub mod targets;
+pub mod ir;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -48,6 +49,7 @@ use crust::assoc_lookup_cstr;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
+use ir::*;
 
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
@@ -214,49 +216,6 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
     Some(())
 }
 
-#[derive(Clone, Copy)]
-pub enum Arg {
-    /// Bogus value of an Arg.
-    ///
-    /// You should always call unreachable!() if you encounterd it in
-    /// the codegens. This value indicates a compilation error and
-    /// encountering it means that the compiler didn't fail the
-    /// compilation before passing the Compiler struct to the
-    /// codegens.
-    Bogus,
-    AutoVar(usize),
-    Deref(usize),
-    /// Reference to the autovar with the specified index
-    ///
-    /// The autovars are currently expected to be layed out in memory from right to left,
-    /// which is not particularly historically accurate.
-    /// See TODO(2025-06-05 17:45:36)
-    RefAutoVar(usize),
-    RefExternal(*const c_char),
-    External(*const c_char),
-    Literal(u64),
-    DataOffset(usize),
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum Binop {
-    Plus,
-    Minus,
-    Mult,
-    Div,
-    Mod,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    BitOr,
-    BitAnd,
-    BitShl,
-    BitShr,
-}
-
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitOr],
@@ -322,36 +281,6 @@ impl Binop {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct AsmStmt {
-    line: *const c_char,
-    loc: Loc,
-}
-
-#[derive(Clone, Copy)]
-pub enum Op {
-    Bogus,
-    UnaryNot       {result: usize, arg: Arg},
-    Negate         {result: usize, arg: Arg},
-    Asm            {stmts: Array<AsmStmt>},
-    Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
-    Index          {result: usize, arg: Arg, offset: Arg},
-    AutoAssign     {index: usize, arg: Arg},
-    ExternalAssign {name: *const c_char, arg: Arg},
-    Store          {index: usize, arg: Arg},
-    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
-    Label          {label: usize},
-    JmpLabel       {label: usize},
-    JmpIfNotLabel  {label: usize, arg: Arg},
-    Return         {arg: Option<Arg>},
-}
-
-#[derive(Clone, Copy)]
-pub struct OpWithLocation {
-    pub opcode: Op,
-    pub loc: Loc,
-}
-
 pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
     da_append(&mut (*c).func_body, OpWithLocation {opcode, loc});
 }
@@ -390,16 +319,16 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 
 
 pub unsafe fn compile_string(string: *const c_char, c: *mut Compiler) -> usize {
-    let offset = (*c).data.count;
+    let offset = (*c).program.data.count;
     let string_len = strlen(string);
-    da_append_many(&mut (*c).data, slice::from_raw_parts(string as *const u8, string_len));
+    da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
     // TODO: Strings in B are not NULL-terminated.
     // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
     // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
     // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
     // libc. While the language is still in development we gonna terminate it with 0. We will make it
     // "spec complaint" later.
-    da_append(&mut (*c).data, 0); // NULL-terminator
+    da_append(&mut (*c).program.data, 0); // NULL-terminator
     offset
 }
 
@@ -767,7 +696,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena, (*l).string);
-                name_declare_if_not_exists(&mut (*c).extrns, name);
+                name_declare_if_not_exists(&mut (*c).program.extrns, name);
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
@@ -954,40 +883,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 }
 
 pub unsafe fn usage() {
+    fprintf(stderr(), c!("B compiler\n"));
     fprintf(stderr(), c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
     flag_print_options(stderr());
-}
-
-#[derive(Clone, Copy)]
-pub struct AsmFunc {
-    name: *const c_char,
-    name_loc: Loc,
-    body: Array<AsmStmt>,
-}
-
-#[derive(Clone, Copy)]
-pub struct Func {
-    name: *const c_char,
-    name_loc: Loc,
-    body: Array<OpWithLocation>,
-    params_count: usize,
-    auto_vars_count: usize,
-}
-
-#[derive(Clone, Copy)]
-pub struct Global {
-    name: *const c_char,
-    values: Array<ImmediateValue>,
-    is_vec: bool,
-    minimum_size: usize,
-}
-
-#[derive(Clone, Copy)]
-pub enum ImmediateValue {
-    Name(*const c_char),
-    Literal(u64),
-    DataOffset(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -998,27 +897,16 @@ pub struct Switch {
 }
 
 #[derive(Clone, Copy)]
-pub struct Variadic {
-    pub loc: Loc,
-    pub fixed_args: usize,
-}
-
-#[derive(Clone, Copy)]
 pub struct Compiler {
+    pub program: Program,
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
-    pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
     pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
-    pub data: Array<u8>,
-    pub extrns: Array<*const c_char>,
-    pub variadics: Array<(*const c_char, Variadic)>,
-    pub globals: Array<Global>,
-    pub asm_funcs: Array<AsmFunc>,
     /// Arena into which the Compiler allocates all the names and
     /// objects that need to live for the duration of the
     /// compilation. Even if some object/names don't need to live that
@@ -1032,7 +920,7 @@ pub struct Compiler {
     pub arena: Arena,
     pub target: Target,
     pub error_count: usize,
-    pub historical: bool
+    pub historical: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -1064,7 +952,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
                 let func = arena::strdup(&mut (*c).arena, (*l).string);
                 let func_loc = (*l).loc;
-                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).program.variadics), func) {
                     // TODO: report all the duplicate variadics maybe?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
@@ -1076,7 +964,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
                     bump_error_count(c)?;
                 }
-                da_append(&mut (*c).variadics, (func, Variadic {
+                da_append(&mut (*c).program.variadics, (func, Variadic {
                     loc: func_loc,
                     fixed_args: (*l).int_number as usize,
                 }));
@@ -1087,7 +975,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
                     let name = arena::strdup(&mut (*c).arena, (*l).string);
-                    name_declare_if_not_exists(&mut (*c).extrns, name);
+                    name_declare_if_not_exists(&mut (*c).program.extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
@@ -1138,7 +1026,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
                         }
 
-                        da_append(&mut (*c).funcs, Func {
+                        da_append(&mut (*c).program.funcs, Func {
                             name,
                             name_loc,
                             body: (*c).func_body,
@@ -1154,7 +1042,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     Token::Asm => { // Assembly function definition
                         let mut body: Array<AsmStmt> = zeroed();
                         compile_asm_stmts(l, c, &mut body)?;
-                        da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
+                        da_append(&mut (*c).program.asm_funcs, AsmFunc {name, name_loc, body});
                     }
                     _ => { // Variable definition
                         (*l).parse_point = saved_point;
@@ -1213,7 +1101,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         if !global.is_vec && global.values.count == 0 {
                             da_append(&mut global.values, ImmediateValue::Literal(0));
                         }
-                        da_append(&mut (*c).globals, global)
+                        da_append(&mut (*c).program.globals, global)
                     }
                 }
             }
@@ -1418,7 +1306,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let mut cmd: Cmd = zeroed();
 
     if *ir {
-        codegen::ir::generate_program(&mut output, &c);
+        dump_program(&mut output, &c.program);
         da_append(&mut output, 0);
         printf(c!("%s"), output.items);
         return Some(())
@@ -1426,7 +1314,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     match target {
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
+            codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1485,7 +1373,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
+            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Linux);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1536,7 +1424,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Gas_x86_64_Windows => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
+            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Windows);
 
             let base_path;
             if (*output_path).is_null() {
@@ -1593,7 +1481,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         },
         Target::Gas_x86_64_Darwin => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Darwin);
+            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Darwin);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1645,7 +1533,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Gas_AArch64_Darwin => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
+            codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Darwin);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1697,7 +1585,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(&mut output, &c);
+            codegen::uxn::generate_program(&mut output, &c.program);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1716,7 +1604,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
         Target::Mos6502 => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-            codegen::mos6502::generate_program(&mut output, &c, config);
+            codegen::mos6502::generate_program(&mut output, &c.program, config);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1750,6 +1638,40 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             printf(c!("INFO: Generated %s\n"), effective_output_path);
             if *run {
                 todo!("Interpret the IR?");
+            } 
+        }
+        Target::ILasm_Mono => {
+            codegen::ilasm_mono::generate_program(&mut output, &c.program);
+
+            let base_path;
+            if (*output_path).is_null() {
+                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    base_path = path;
+                } else {
+                    base_path = *input_paths.items;
+                }
+            } else {
+                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
+                    base_path = path;
+                } else {
+                    base_path = *output_path;
+                }
+            }
+
+            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+
+            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
+            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+            cmd_append!{
+                &mut cmd,
+                c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
+            }
+
+            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
+            if *run {
+                runner::ilasm_mono::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
             }
         }
     }

@@ -16,7 +16,7 @@ jobs:
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -qq -y clang make mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
+          sudo apt-get install -qq -y mono-devel clang make mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
           make cli

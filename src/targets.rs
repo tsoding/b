@@ -14,6 +14,7 @@ enum_with_order! {
         Uxn,
         Mos6502,
         Bytecode,
+        ILasm_Mono,
     }
 }
 
@@ -28,6 +29,7 @@ impl Target {
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502             => c!("6502"),
             Self::Bytecode            => c!("bytecode")
+            Self::ILasm_Mono          => c!("ilasm-mono"),
         }
     }
 
