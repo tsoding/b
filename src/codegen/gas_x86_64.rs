@@ -36,7 +36,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char,output: *mut String_B
             Os::Darwin              => sb_appendf(output, c!("    movq _%s(%%rip), %%%s\n"), name, reg),
         },
         Arg::AutoVar(index)     => sb_appendf(output, c!("    movq -%zu(%%rbp), %%%s\n"), index * 8, reg),
-        Arg::Literal(value)     => sb_appendf(output, c!("    movq $%ld, %%%s\n"), value, reg),
+        Arg::Literal(value)     => sb_appendf(output, c!("    movq $%lld, %%%s\n"), value, reg),
         Arg::DataOffset(offset) => {sb_appendf(output, c!("    leaq dat+%zu(%%rip), %%%s\n"), offset, reg)},
         Arg::Bogus => unreachable!("bogus-amogus"),
     };
