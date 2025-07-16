@@ -1,13 +1,15 @@
-write(ref, val) *ref = val;
-read(ref) return (*ref);
+// we cannot call these variables `read`, as some target may have
+// a read() function in libb
+rwrite(ref, val) *ref = val;
+rread(ref) return (*ref);
 
 y;
 test1() {
 	extrn printf;
 	auto x;
 
-	write(&x, 69);
-	write(&y, 420);
+	rwrite(&x, 69);
+	rwrite(&y, 420);
 
 	// printf("&x: %p\n", &x);
 	// printf("&y: %p\n", &y);
@@ -40,8 +42,8 @@ test3() {
 	// check generated IR to confirm that
 	printf(
 		"xs: [%d, %d]\n",
-		read(xs + 0*8),
-		read(&xs[1*8])
+		rread(xs + 0*8),
+		rread(&xs[1*8])
 	);
 }
 
