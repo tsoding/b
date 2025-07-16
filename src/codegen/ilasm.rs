@@ -263,15 +263,15 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_externs(output: *mut String_Builder, externs: *const [Global]) {
-    if externs.len() > 0 {
-        for i in 0..externs.len() {
-            sb_appendf(output, c!("    .field public static int64 %s\n"), (*externs)[i].name);
+pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
+    if globals.len() > 0 {
+        for i in 0..globals.len() {
+            sb_appendf(output, c!("    .field public static int64 %s\n"), (*globals)[i].name);
         }
 
         sb_appendf(output, c!("    .method static void .cctor() {\n"));
-        for i in 0..externs.len() {
-            let global = (*externs)[i];
+        for i in 0..globals.len() {
+            let global = (*globals)[i];
             let is_array = global.values.count > 1;
             if is_array {
                 sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
@@ -345,7 +345,7 @@ pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, m
     generate_data_section(output, sliced_data);
 
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
-    generate_externs(output, da_slice((*p).globals));
+    generate_globals(output, da_slice((*p).globals));
     generate_funcs(da_slice((*p).funcs), output, sliced_data);
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
     sb_appendf(output, c!("        .entrypoint\n"));
