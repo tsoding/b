@@ -1458,7 +1458,12 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
-pub unsafe fn generate_program(out: *mut String_Builder, p: *const Program, config: Config) -> Option<()> {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, config: Config,
+    // Temporaries
+    out: *mut String_Builder, _cmd: *mut Cmd,
+) -> Option<()> {
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
     asm.code_start = config.load_offset;
@@ -1473,6 +1478,9 @@ pub unsafe fn generate_program(out: *mut String_Builder, p: *const Program, conf
 
     log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
     apply_relocations(out, data_start, &mut asm);
+
+    write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
+    log(Log_Level::INFO, c!("generated %s"), program_path);
 
     Some(())
 }

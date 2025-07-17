@@ -480,9 +480,82 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, os: Os) {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool,
+    // Temporaries
+    output: *mut String_Builder, cmd: *mut Cmd,
+) -> Option<()> {
     generate_funcs(output, da_slice((*p).funcs), da_slice((*p).variadics), os);
     generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
     generate_globals(output, da_slice((*p). globals), os);
     generate_data_section(output, da_slice((*p).data));
+
+    let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+    match os {
+        Os::Linux => {
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+
+            cmd_append! {
+                cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append!(cmd, c!("-nostdlib"));
+            }
+            da_append_many(cmd, linker);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            Some(())
+        }
+        Os::Darwin => {
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            cmd_append! {
+                cmd,
+                cc, c!("-arch"), c!("arm64"), c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append! {
+                    cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            da_append_many(cmd, linker);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            Some(())
+        }
+        Os::Windows => todo!(),
+    }
 }
