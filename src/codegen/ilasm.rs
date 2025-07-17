@@ -332,7 +332,14 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, mono: bool) {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, _linker: *const [*const c_char],
+    // Temporaries
+    output: *mut String_Builder, cmd: *mut Cmd,
+    // Mono
+    mono: bool,
+) -> Option<()> {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".assembly extern mscorlib {}\n"));
     if !mono {
@@ -354,6 +361,50 @@ pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, m
     sb_appendf(output, c!("        ret\n"));
     sb_appendf(output, c!("    }\n"));
     sb_appendf(output, c!("}\n"));
+
+    let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+    if mono {
+        cmd_append! {
+            cmd,
+            c!("ilasm"), output_asm_path, temp_sprintf(c!("-output:%s"), program_path)
+        }
+    }
+    else {
+        cmd_append! {
+            cmd,
+            c!("ilasm"), c!("-dll"), output_asm_path, temp_sprintf(c!("-output:%s"), program_path)
+        }
+    }
+
+    if !cmd_run_sync_and_reset(cmd) { return None; }
+
+    if !mono {
+        let base_path;
+        if let Some(path) = temp_strip_suffix(program_path, c!(".dll")) {
+            base_path = path;
+        } else {
+            base_path = program_path;
+        }
+
+        let config_output_path = temp_sprintf(c!("%s.runtimeconfig.json"), base_path);
+        let config = c!("
+        {
+            \"runtimeOptions\": {
+                \"tfm\": \"net9.0\",
+                \"framework\": {
+                    \"name\": \"Microsoft.NETCore.App\",
+                    \"version\": \"9.0.0\"
+                }
+            }
+        }");
+
+        write_entire_file(config_output_path, config as *const c_void, strlen(config))?;
+    }
+
+    Some(())
 }
 
 // TODO: make this codegen self-contained eventually.
