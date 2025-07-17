@@ -1168,8 +1168,7 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
         write_entire_file(gitignore_path, c!("*") as *const c_void, 1)?;
     }
 
-    let base_filename = temp_strip_suffix(filename, c!(".b")).unwrap_or(filename);
-    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, base_filename, target.name()))
+    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, filename, target.name()))
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
@@ -1329,6 +1328,16 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(())
     }
 
+    let program_path = if (*output_path).is_null() {
+        temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
+    } else {
+        if get_file_ext(*output_path).is_some() {
+            *output_path
+        } else {
+            temp_sprintf(c!("%s%s"), *output_path, target.file_ext())
+        }
+    };
+
     // Compiler may produce lots of intermediate files (assembly,
     // object, etc) also known collectively as "garbage". We are
     // trying to keep the garbage away from the user in a separate
@@ -1341,21 +1350,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     //
     // Let's say you want to output an object file somewhere. The path
     // to that object should be computed as `temp_sprintf("%s.o", garbase_base)`.
-    let garbage_base = if (*output_path).is_null() {
-        get_garbage_base(*input_paths.items, target)?
-    } else {
-        get_garbage_base(*output_path, target)?
-    };
-
-    let program_path = if (*output_path).is_null() {
-        temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
-    } else {
-        if get_file_ext(*output_path).is_some() {
-            *output_path
-        } else {
-            temp_sprintf(c!("%s%s"), *output_path, target.file_ext())
-        }
-    };
+    let garbage_base = get_garbage_base(program_path, target)?;
 
     match target {
         Target::Gas_AArch64_Linux => {
