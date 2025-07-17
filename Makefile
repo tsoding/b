@@ -35,7 +35,6 @@ RSS=\
 	$(SRC)/runner/gas_aarch64_linux.rs \
 	$(SRC)/runner/gas_aarch64_darwin.rs \
 	$(SRC)/runner/mod.rs \
-	$(SRC)/runner/mos6502.rs \
 
 POSIX_OBJS=\
 	$(BUILD)/nob.posix.o \

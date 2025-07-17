@@ -1427,7 +1427,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::mos6502::run(&mut output, config, program_path, None)?;
+                codegen::mos6502::run_program(&mut output, config, program_path, None)?;
             }
         }
         Target::ILasm_Mono => {

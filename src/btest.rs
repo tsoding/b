@@ -25,7 +25,7 @@ use core::ptr;
 use crust::libc::*;
 use nob::*;
 use targets::*;
-use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
+use codegen::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 use glob::*;
 use jim::*;
@@ -160,7 +160,7 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Uxn                 => codegen::uxn::run_program(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-        Target::Mos6502             => runner::mos6502::run(sb, Config {
+        Target::Mos6502             => codegen::mos6502::run_program(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
         Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
