@@ -47,4 +47,13 @@ strlen(s) {
     return (n);
 }
 
+rand() {
+    __asm__(
+        "ldsfld class [mscorlib]System.Random Program::'<Random>'",
+        "callvirt instance int32 [mscorlib]System.Random::Next()",
+        "conv.i8",
+        "ret"
+    );
+}
+
 extrn printf;

@@ -263,71 +263,96 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
-    if globals.len() > 0 {
+pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Global], extrns: *const [*const c_char], mono: bool) {
+    let has_globals = globals.len() > 0;
+    if has_globals {
         for i in 0..globals.len() {
-            sb_appendf(output, c!("    .field public static int64 %s\n"), (*globals)[i].name);
+            sb_appendf(output, c!("    .field public static int64 '%s'\n"), (*globals)[i].name);
         }
+    }
 
+    let mut has_rand = false;
+    for i in 0..extrns.len() {
+        let extrn = (*extrns)[i];
+        if strcmp(extrn, c!("rand")) == 0 {
+            has_rand = true;
+            sb_appendf(output, c!("    .field public static class [mscorlib]System.Random '<Random>'\n"));
+            break;
+        }
+    }
+
+    if has_globals || has_rand {
         sb_appendf(output, c!("    .method static void .cctor() {\n"));
-        for i in 0..globals.len() {
-            let global = (*globals)[i];
-            let is_array = global.values.count > 1;
-            if is_array {
-                sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
-                sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
-                sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name);
-            }
 
-            for j in 0..global.values.count {
-                match *global.values.items.add(j) {
-                    ImmediateValue::Literal(lit) => {
-                        if !is_array {
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
-                            sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
+        if has_globals {
+            for i in 0..globals.len() {
+                let global = (*globals)[i];
+                let is_array = global.values.count > 1;
+                if is_array {
+                    sb_appendf(output, c!("        ldc.i8 %zd\n"), global.values.count * 8);
+                    sb_appendf(output, c!("        call int64 Program::malloc(int64)\n"));
+                    sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name);
+                }
+
+                for j in 0..global.values.count {
+                    match *global.values.items.add(j) {
+                        ImmediateValue::Literal(lit) => {
+                            if !is_array {
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
+                                sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
+                            } else {
+                                sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
+                                sb_appendf(output, c!("        add\n"));
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
+                                sb_appendf(output, c!("        stind.i8\n"))
+                            }
+                        },
+                        ImmediateValue::Name(name) => {
+                            if !is_array {
+                                sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), name);
+                                sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
+                            } else {
+                                sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
+                                sb_appendf(output, c!("        add\n"));
+                                sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), name);
+                                sb_appendf(output, c!("        stind.i8\n"))
+                            }
                         }
-                        else {
-                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), lit);
-                            sb_appendf(output, c!("        stind.i8\n"))
-                        }
-                    },
-                    ImmediateValue::Name(name) => {
-                        if !is_array {
-                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
-                            sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
-                        }
-                        else {
-                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), name);
-                            sb_appendf(output, c!("        stind.i8\n"))
-                        }
-                    }
-                    ImmediateValue::DataOffset(offset) => {
-                        if !is_array {
-                            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        stsfld int64 Program::%s\n"), global.name)
-                        }
-                        else {
-                            sb_appendf(output, c!("        ldsfld int64 Program::%s\n"), global.name);
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
-                            sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
-                            sb_appendf(output, c!("        add\n"));
-                            sb_appendf(output, c!("        stind.i8\n"))
-                        }
-                    },
-                };
+                        ImmediateValue::DataOffset(offset) => {
+                            if !is_array {
+                                sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
+                                sb_appendf(output, c!("        add\n"));
+                                sb_appendf(output, c!("        stsfld int64 Program::'%s'\n"), global.name)
+                            } else {
+                                sb_appendf(output, c!("        ldsfld int64 Program::'%s'\n"), global.name);
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), j * 8);
+                                sb_appendf(output, c!("        add\n"));
+                                sb_appendf(output, c!("        ldsflda valuetype '<BLangDataSection>'/'DataSection' '<BLangDataSection>'::'Data'\n"));
+                                sb_appendf(output, c!("        ldc.i8 %zd\n"), offset);
+                                sb_appendf(output, c!("        add\n"));
+                                sb_appendf(output, c!("        stind.i8\n"))
+                            }
+                        },
+                    };
+                }
             }
         }
-        sb_appendf(output, c!("    ret\n"));
+
+        if has_rand {
+            if mono {
+                sb_appendf(output, c!("        newobj instance void [mscorlib]System.Random::.ctor()\n"));
+            }
+            else {
+                sb_appendf(output, c!("        call class [mscorlib]System.Random [System.Runtime]System.Random::get_Shared()\n"));
+            }
+
+            sb_appendf(output, c!("        stsfld class [mscorlib]System.Random Program::'<Random>'\n"));
+        }
+
+        sb_appendf(output, c!("        ret\n"));
         sb_appendf(output, c!("    }\n"));
     }
 }
@@ -352,7 +377,8 @@ pub unsafe fn generate_program(
     generate_data_section(output, sliced_data);
 
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
-    generate_globals(output, da_slice((*p).globals));
+    generate_fields(output, da_slice((*p).globals), da_slice((*p).extrns), mono);
+
     generate_funcs(da_slice((*p).funcs), output, sliced_data);
     sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
     sb_appendf(output, c!("        .entrypoint\n"));
