@@ -1413,7 +1413,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::uxn::run(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
+                codegen::uxn::run_program(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502 => {

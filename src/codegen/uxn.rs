@@ -154,6 +154,20 @@ pub unsafe fn generate_program(
     Some(())
 }
 
+pub unsafe fn run_program(cmd: *mut Cmd, emu: *const c_char, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
+    cmd_append! {cmd, emu, program_path}
+    da_append_many(cmd, run_args);
+    if let Some(stdout_path) = stdout_path {
+        let mut fdout = fd_open_for_write(stdout_path);
+        let mut redirect: Cmd_Redirect = zeroed();
+        redirect.fdout = &mut fdout;
+        if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
+    } else {
+        if !cmd_run_sync_and_reset(cmd) { return None; }
+    }
+    Some(())
+}
+
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], assembler: &mut Assembler) {
     for i in 0..funcs.len() {
         generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, assembler);
