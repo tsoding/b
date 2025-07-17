@@ -1,12 +1,21 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::align_bytes;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::crust::assoc_lookup_cstr;
 use crate::ir::*;
-use crate::{missingf, Loc};
+use crate::lexer::*;
+use crate::missingf;
 use crate::targets::Os;
+
+pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
+    let rem = bytes%alignment;
+    if rem > 0 {
+        bytes + alignment - rem
+    } else {
+        bytes
+    }
+}
 
 pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, os: Os) {
     match arg {

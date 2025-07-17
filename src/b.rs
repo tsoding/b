@@ -285,15 +285,6 @@ pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
     da_append(&mut (*c).func_body, OpWithLocation {opcode, loc});
 }
 
-pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
-    let rem = bytes%alignment;
-    if rem > 0 {
-        bytes + alignment - rem
-    } else {
-        bytes
-    }
-}
-
 /// Allocator of Auto Vars
 #[derive(Clone, Copy)]
 pub struct AutoVarsAtor {
@@ -1448,7 +1439,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::ilasm_mono::run(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args), None)?;
             }
         }
     }

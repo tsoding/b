@@ -1,9 +1,17 @@
 use core::ffi::*;
 use core::cmp;
-use crate::align_bytes;
 use crate::ir::*;
 use crate::nob::*;
 use crate::targets::Os;
+
+pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
+    let rem = bytes%alignment;
+    if rem > 0 {
+        bytes + alignment - rem
+    } else {
+        bytes
+    }
+}
 
 pub unsafe fn call_arg(arg: Arg, output: *mut String_Builder, os: Os) {
     match arg {

@@ -3,7 +3,8 @@ use core::mem::zeroed;
 use crate::ir::*;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{missingf, Loc};
+use crate::lexer::Loc;
+use crate::missingf;
 use crate::diagf;
 
 // UXN memory map
