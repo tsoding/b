@@ -47,3 +47,4 @@ strlen(s) {
     return (n);
 }
 
+extrn printf;
