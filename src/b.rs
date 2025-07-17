@@ -1377,7 +1377,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::gas_x86_64_linux::run(&mut cmd, program_path, da_slice(run_args), None)?
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?
             }
         }
         Target::Gas_x86_64_Windows => {
@@ -1389,7 +1389,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::gas_x86_64_windows::run(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Windows)?;
             }
         },
         Target::Gas_x86_64_Darwin => {
@@ -1401,7 +1401,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::gas_x86_64_darwin::run(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
             }
         }
         Target::Uxn => {

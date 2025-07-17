@@ -156,9 +156,9 @@ pub unsafe fn execute_test(
     let run_result = match target {
         Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
         Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::Gas_x86_64_Linux    => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
+        Target::Gas_x86_64_Windows  => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Windows),
+        Target::Gas_x86_64_Darwin   => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
         Target::Uxn                 => codegen::uxn::run_program(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
         Target::Mos6502             => codegen::mos6502::run_program(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
