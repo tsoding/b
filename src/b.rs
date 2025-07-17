@@ -1118,9 +1118,7 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
     Some(())
 }
 
-pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
-    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
-
+pub unsafe fn get_file_name(path: *const c_char) -> *const c_char {
     let p = if cfg!(target_os = "windows") {
         let p1 = strrchr(path, '/' as i32);
         let p2 = strrchr(path, '\\' as i32);
@@ -1129,7 +1127,31 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
         strrchr(path, '/' as i32)
     };
 
-    let filename = if p.is_null() { path } else { p.add(1) };
+    if p.is_null() {
+        path
+    } else {
+        p.add(1)
+    }
+}
+
+pub unsafe fn get_file_ext(path: *const c_char) -> Option<*const c_char> {
+    let p = strrchr(get_file_name(path), '.' as i32);
+    if p.is_null() { return None; }
+    Some(p)
+}
+
+pub unsafe fn temp_strip_file_ext(path: *const c_char) -> *const c_char {
+    if let Some(ext) = get_file_ext(path) {
+        temp_sprintf(c!("%.*s"), strlen(path) - strlen(ext), path)
+    } else {
+        path
+    }
+}
+
+pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
+    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
+
+    let filename = get_file_name(path);
     let parent_len = filename.offset_from(path);
 
     let garbage_dir = if parent_len == 0 {
@@ -1146,8 +1168,7 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
         write_entire_file(gitignore_path, c!("*") as *const c_void, 1)?;
     }
 
-    let base_filename = temp_strip_suffix(filename, c!(".b")).unwrap_or(filename);
-    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, base_filename, target.name()))
+    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, filename, target.name()))
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
@@ -1300,11 +1321,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
-    let garbage_base = if (*output_path).is_null() {
-        get_garbage_base(*input_paths.items, target)?
-    } else {
-        get_garbage_base(*output_path, target)?
-    };
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
@@ -1315,394 +1331,143 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return Some(())
     }
 
+    let program_path = if (*output_path).is_null() {
+        temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
+    } else {
+        if get_file_ext(*output_path).is_some() {
+            *output_path
+        } else {
+            temp_sprintf(c!("%s%s"), *output_path, target.file_ext())
+        }
+    };
+
+    // Compiler may produce lots of intermediate files (assembly,
+    // object, etc) also known collectively as "garbage". We are
+    // trying to keep the garbage away from the user in a separate
+    // folder. But not delete it, because it's important for
+    // transparency! `garbase_base` is a path that has a format
+    // "/path/to/garbase/folder/base". It must be concatenated with an
+    // approriate suffix to get a file path where the compiler can
+    // output a garbage file without worrying about colliding with
+    // other garbage files produced by compilations of other programs.
+    //
+    // Let's say you want to output an object file somewhere. The path
+    // to that object should be computed as `temp_sprintf("%s.o", garbase_base)`.
+    let garbage_base = get_garbage_base(program_path, target)?;
+
     match target {
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Linux);
+            codegen::gas_aarch64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
-                (c!("as"), c!("cc"))
-            } else {
-                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
-                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
-                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-
-            cmd_append! {
-                &mut cmd,
-                cc, if cfg!(target_os = "android") {
-                    c!("-fPIC")
-                } else {
-                    c!("-no-pie")
-                },
-                c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
-        Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                log(Log_Level::ERROR, c!("Cross-compilation of x86_64 linux is not supported for now"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
-            }
-        }
-        Target::Gas_x86_64_Windows => {
-            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Windows);
-
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        },
-        Target::Gas_x86_64_Darwin => {
-            codegen::gas_x86_64::generate_program(&mut output, &c.program, targets::Os::Darwin);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let (gas, cc) = (c!("as"), c!("cc"));
-
-            if !(cfg!(target_os = "macos")) {
-                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-arch"), c!("x86_64"), c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-arch"), c!("x86_64"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_x86_64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                runner::gas_aarch64_linux::run(&mut cmd, program_path, da_slice(run_args), None)?;
             }
         }
         Target::Gas_AArch64_Darwin => {
-            codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Darwin);
+            codegen::gas_aarch64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let (gas, cc) = (c!("as"), c!("cc"));
-
-            if !(cfg!(target_os = "macos")) {
-                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-arch"), c!("arm64"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                runner::gas_aarch64_darwin::run(&mut cmd, program_path, da_slice(run_args), None)?;
+            }
+        }
+        Target::Gas_x86_64_Linux => {
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+
+            if *run {
+                runner::gas_x86_64_linux::run(&mut cmd, program_path, da_slice(run_args), None)?
+            }
+        }
+        Target::Gas_x86_64_Windows => {
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+
+            if *run {
+                runner::gas_x86_64_windows::run(&mut cmd, program_path, da_slice(run_args), None)?;
+            }
+        },
+        Target::Gas_x86_64_Darwin => {
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+
+            if *run {
+                runner::gas_x86_64_darwin::run(&mut cmd, program_path, da_slice(run_args), None)?;
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(&mut output, &c.program);
+            codegen::uxn::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker),
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.rom"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s\n"), effective_output_path);
             if *run {
-                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
+                runner::uxn::run(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502 => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-            codegen::mos6502::generate_program(&mut output, &c.program, config);
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.6502"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
+            codegen::mos6502::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, config,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), effective_output_path);
             if *run {
-                runner::mos6502::run(&mut output, config, effective_output_path, None)?;
+                runner::mos6502::run(&mut output, config, program_path, None)?;
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm::generate_program(&mut output, &c.program, true);
+            codegen::ilasm::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker),
+                // Temporaries
+                &mut output, &mut cmd,
+                // Mono
+                true,
+            )?;
 
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            cmd_append!{
-                &mut cmd,
-                c!("ilasm"), output_asm_path, temp_sprintf(c!("-output=%s"), effective_output_path),
-            }
-
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::ilasm::run(&mut cmd, effective_output_path, da_slice(run_args), None, true)?;
+                runner::ilasm::run(&mut cmd, program_path, da_slice(run_args), None, true)?;
             }
         }
         Target::ILasm_Core => {
-            codegen::ilasm::generate_program(&mut output, &c.program, false);
-
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".dll")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.dll"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            cmd_append!{
-                &mut cmd,
-                c!("ilasm"), c!("-dll"), output_asm_path, temp_sprintf(c!("-output=%s"), effective_output_path),
-            }
-
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-
-            let config_output_path = temp_sprintf(c!("%s.runtimeconfig.json"), base_path);
-            write_entire_file(config_output_path, c!("
-            {
-                \"runtimeOptions\": {
-                    \"tfm\": \"net9.0\",
-                    \"framework\": {
-                        \"name\": \"Microsoft.NETCore.App\",
-                        \"version\": \"9.0.0\"
-                    }
-                }
-            }\0") as *const c_void, output.count)?;
+            codegen::ilasm::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker),
+                // Temporaries
+                &mut output, &mut cmd,
+                // Mono
+                false,
+            )?;
 
             if *run {
-                runner::ilasm::run(&mut cmd, effective_output_path, da_slice(run_args), None, false)?;
+                runner::ilasm::run(&mut cmd, program_path, da_slice(run_args), None, false)?;
             }
         }
     }
