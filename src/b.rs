@@ -1118,9 +1118,7 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
     Some(())
 }
 
-pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
-    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
-
+pub unsafe fn get_file_name(path: *const c_char) -> *const c_char {
     let p = if cfg!(target_os = "windows") {
         let p1 = strrchr(path, '/' as i32);
         let p2 = strrchr(path, '\\' as i32);
@@ -1129,7 +1127,31 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
         strrchr(path, '/' as i32)
     };
 
-    let filename = if p.is_null() { path } else { p.add(1) };
+    if p.is_null() {
+        path
+    } else {
+        p.add(1)
+    }
+}
+
+pub unsafe fn get_file_ext(path: *const c_char) -> Option<*const c_char> {
+    let p = strrchr(get_file_name(path), '.' as i32);
+    if p.is_null() { return None; }
+    Some(p)
+}
+
+pub unsafe fn temp_strip_file_ext(path: *const c_char) -> *const c_char {
+    if let Some(ext) = get_file_ext(path) {
+        temp_sprintf(c!("%.*s"), strlen(path) - strlen(ext), path)
+    } else {
+        path
+    }
+}
+
+pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
+    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
+
+    let filename = get_file_name(path);
     let parent_len = filename.offset_from(path);
 
     let garbage_dir = if parent_len == 0 {
@@ -1297,11 +1319,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
-    let garbage_base = if (*output_path).is_null() {
-        get_garbage_base(*input_paths.items, target)?
-    } else {
-        get_garbage_base(*output_path, target)?
-    };
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
@@ -1311,6 +1328,24 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         printf(c!("%s"), output.items);
         return Some(())
     }
+
+    // Compiler may produce lots of intermediate files (assembly,
+    // object, etc) also known collectively as "garbage". We are
+    // trying to keep the garbage away from the user in a separate
+    // folder. But not delete it, because it's important for
+    // transparency! `garbase_base` is a path that has a format
+    // "/path/to/garbase/folder/base". It must be concatenated with an
+    // approriate suffix to get a file path where the compiler can
+    // output a garbage file without worrying about colliding with
+    // other garbage files produced by compilations of other programs.
+    //
+    // Let's say you want to output an object file somewhere. The path
+    // to that object should be computed as `temp_sprintf("%s.o", garbase_base)`.
+    let garbage_base = if (*output_path).is_null() {
+        get_garbage_base(*input_paths.items, target)?
+    } else {
+        get_garbage_base(*output_path, target)?
+    };
 
     match target {
         Target::Gas_AArch64_Linux => {
@@ -1622,37 +1657,21 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(&mut output, &c.program);
-
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
+            let program_path = if (*output_path).is_null() {
+                temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
             } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
+                *output_path
+            };
 
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
+            codegen::ilasm_mono::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            cmd_append!{
-                &mut cmd,
-                c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
-            }
-
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::ilasm_mono::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                runner::ilasm_mono::run(&mut cmd, program_path, da_slice(run_args), None)?;
             }
         }
     }

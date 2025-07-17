@@ -174,7 +174,12 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
+    // Temporaries
+    output: *mut String_Builder, cmd: *mut Cmd,
+) -> Option<()> {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".module Main.exe\n"));
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
@@ -186,6 +191,19 @@ pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
     sb_appendf(output, c!("        ret\n"));
     sb_appendf(output, c!("    }\n"));
     sb_appendf(output, c!("}\n"));
+
+    let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+    cmd_append!{
+        cmd,
+        c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), program_path)
+    }
+
+    if !cmd_run_sync_and_reset(cmd) { return None; }
+
+    Some(())
 }
 
 // TODO: make this codegen self-contained eventually.
