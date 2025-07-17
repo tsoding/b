@@ -9,12 +9,13 @@ pub mod crust;
 #[macro_use]
 pub mod nob;
 pub mod targets;
-pub mod runner;
 pub mod flag;
 pub mod glob;
 pub mod jim;
 pub mod jimp;
 pub mod lexer;
+pub mod codegen;
+pub mod ir;
 
 use core::ffi::*;
 use core::cmp;
@@ -23,7 +24,7 @@ use core::ptr;
 use crust::libc::*;
 use nob::*;
 use targets::*;
-use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
+use codegen::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 use glob::*;
 use jim::*;
@@ -152,16 +153,16 @@ pub unsafe fn execute_test(
         return Some(Outcome::BuildFail);
     }
     let run_result = match target {
-        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-        Target::Mos6502             => runner::mos6502::run(sb, Config {
+        Target::Gas_AArch64_Linux   => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
+        Target::Gas_AArch64_Darwin  => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
+        Target::Gas_x86_64_Linux    => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
+        Target::Gas_x86_64_Windows  => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Windows),
+        Target::Gas_x86_64_Darwin   => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
+        Target::Uxn                 => codegen::uxn::run_program(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
+        Target::Mos6502             => codegen::mos6502::run_program(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
-        Target::ILasm_Mono          => runner::ilasm_mono::run(cmd, program_path, &[], Some(stdout_path)),
+        Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
     };
 
     (*sb).count = 0;

@@ -3,7 +3,8 @@ use core::mem::zeroed;
 use crate::ir::*;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{missingf, Loc};
+use crate::lexer::Loc;
+use crate::missingf;
 use crate::diagf;
 
 // UXN memory map
@@ -150,6 +151,20 @@ pub unsafe fn generate_program(
     write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
     log(Log_Level::INFO, c!("generated %s\n"), program_path);
 
+    Some(())
+}
+
+pub unsafe fn run_program(cmd: *mut Cmd, emu: *const c_char, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
+    cmd_append! {cmd, emu, program_path}
+    da_append_many(cmd, run_args);
+    if let Some(stdout_path) = stdout_path {
+        let mut fdout = fd_open_for_write(stdout_path);
+        let mut redirect: Cmd_Redirect = zeroed();
+        redirect.fdout = &mut fdout;
+        if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
+    } else {
+        if !cmd_run_sync_and_reset(cmd) { return None; }
+    }
     Some(())
 }
 
