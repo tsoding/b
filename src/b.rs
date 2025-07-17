@@ -32,7 +32,6 @@ pub mod flag;
 pub mod crust;
 pub mod arena;
 pub mod codegen;
-pub mod runner;
 pub mod lexer;
 pub mod targets;
 pub mod ir;
@@ -1353,7 +1352,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?;
             }
         }
         Target::Gas_AArch64_Darwin => {
@@ -1365,7 +1364,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                runner::gas_aarch64_darwin::run(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
             }
         }
         Target::Gas_x86_64_Linux => {
