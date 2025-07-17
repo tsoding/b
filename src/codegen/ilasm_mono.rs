@@ -176,7 +176,7 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
 
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, _linker: *const [*const c_char],
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {

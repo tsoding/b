@@ -1347,6 +1347,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         get_garbage_base(*output_path, target)?
     };
 
+    let program_path = if (*output_path).is_null() {
+        temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
+    } else {
+        *output_path
+    };
+
     match target {
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64::generate_program(&mut output, &c.program, targets::Os::Linux);
@@ -1639,33 +1645,22 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
         Target::Mos6502 => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-            codegen::mos6502::generate_program(&mut output, &c.program, config);
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.6502"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
+            codegen::mos6502::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, config,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), effective_output_path);
             if *run {
-                runner::mos6502::run(&mut output, config, effective_output_path, None)?;
+                runner::mos6502::run(&mut output, config, program_path, None)?;
             }
         }
         Target::ILasm_Mono => {
-            let program_path = if (*output_path).is_null() {
-                temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
-            } else {
-                *output_path
-            };
-
             codegen::ilasm_mono::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base,
+                &c.program, program_path, garbage_base, da_slice(*linker),
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
