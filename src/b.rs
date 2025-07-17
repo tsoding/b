@@ -1626,21 +1626,15 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(&mut output, &c.program);
+            codegen::uxn::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker),
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.rom"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s\n"), effective_output_path);
             if *run {
-                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
+                runner::uxn::run(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502 => {
