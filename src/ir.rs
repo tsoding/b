@@ -145,7 +145,7 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
         Arg::Deref(index)       => sb_appendf(output, c!("deref[%zu]"), index),
         Arg::RefAutoVar(index)  => sb_appendf(output, c!("ref auto[%zu]"), index),
         Arg::RefExternal(name)  => sb_appendf(output, c!("ref %s"), name),
-        Arg::Literal(value)     => sb_appendf(output, c!("%ld"), value),
+        Arg::Literal(value)     => sb_appendf(output, c!("%lld"), value),
         Arg::AutoVar(index)     => sb_appendf(output, c!("auto[%zu]"), index),
         Arg::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
         Arg::Bogus              => unreachable!("bogus-amogus")
