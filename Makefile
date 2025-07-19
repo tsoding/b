@@ -5,6 +5,8 @@ ifneq ($(OS),Windows_NT)
     UNAMEOS = $(shell uname)
     ifeq ($(UNAMEOS),Darwin)
 		LDFLAGS=-lc
+	else ifeq ($(shell uname -o), Android)
+		LDFLAGS=-lc
 	else
 		LDFLAGS=-lc -lgcc
     endif

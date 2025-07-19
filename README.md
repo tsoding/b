@@ -16,7 +16,7 @@ Compiler for the [B Programming Language](https://en.wikipedia.org/wiki/B_(progr
 ## Dependencies
 
 - [Rust](https://www.rust-lang.org/) - the compiler is written in it;
-- [GCC](https://gcc.gnu.org/) or [Clang](https://clang.llvm.org/) (whatever surves as the `cc` on your POSIX platform) - the `x86_64` and `aarch64` targets generate assembly and pass it to `cc` to assemble and link.
+- [GCC](https://gcc.gnu.org/) or [Clang](https://clang.llvm.org/) (whatever serves as the `cc` on your POSIX platform) - the `x86_64` and `aarch64` targets generate assembly and pass it to `cc` to assemble and link.
 
 <!-- TODO: document specific dependencies for the rest of the targets. Like mingw32-w64 and wine on Linux for gas-x86_64-Windows, etc. -->
 
