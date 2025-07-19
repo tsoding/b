@@ -35,6 +35,7 @@ pub mod codegen;
 pub mod lexer;
 pub mod targets;
 pub mod ir;
+pub mod time;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -49,6 +50,7 @@ use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
 use ir::*;
+use time::Instant;
 
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
@@ -1276,7 +1278,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         sb_appendf(&mut sb, c!("%s"), input_path);
     }
     da_append(&mut sb, 0);
-    log(Log_Level::INFO, c!("compiling files %s"), sb.items);
+    log(Log_Level::INFO, c!("compiling %zu files: %s"), input_paths.count, sb.items);
+
+    let compilation_start = Instant::now();
 
     let mut input: String_Builder = zeroed();
 
@@ -1307,6 +1311,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     if c.error_count > 0 {
         return None
     }
+
+    log(Log_Level::INFO, c!("compilation took %.3fs"), compilation_start.elapsed().as_secs_f64());
 
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
