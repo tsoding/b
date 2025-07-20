@@ -470,14 +470,6 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
 
         let saved_point = (*l).parse_point;
         if skip_prefix(l, c!("//")) {
-            if (*l).historical {
-                (*l).parse_point = saved_point;
-                diagf!(loc(l), c!("LEXER ERROR: C++ style comments are not available in the historical mode.\n"));
-                (*l).token = Token::ParseError;
-                return None;
-            }
-            skip_until(l, c!("\n"));
-            continue 'comments;
         }
 
         if skip_prefix(l, c!("/*")) {
@@ -531,13 +523,6 @@ pub unsafe fn get_token(l: *mut Lexer) -> Option<()> {
 
     let start_of_number = (*l).parse_point;
     if skip_prefix(l, c!("0x")) {
-        if (*l).historical {
-            (*l).parse_point = start_of_number;
-            diagf!(loc(l), c!("LEXER ERROR: hex literals are not available in the historical mode.\n"));
-            (*l).token = Token::ParseError;
-            return None;
-        }
-
         (*l).token = Token::IntLit;
         (*l).int_number = 0;
         return parse_number(l, Radix::Hex, start_of_number);
