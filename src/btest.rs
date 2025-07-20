@@ -145,7 +145,7 @@ pub unsafe fn execute_test(
     cmd_append! {
         cmd,
         if cfg!(target_os = "windows") {
-            c!("./build/b.exe"),
+            c!("./build/b.exe")
         } else {
             c!("./build/b")
         },
