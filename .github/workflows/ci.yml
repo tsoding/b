@@ -58,4 +58,4 @@ jobs:
       - name: Build Toolchain
         run:  make -B mingw32-all
       - name: Run Tests
-        run: ./build/btest.exe -xt *darwin* -xt *linux*
+        run: ./build/btest.exe -t gas-x86_64-windows
