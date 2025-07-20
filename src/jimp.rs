@@ -66,18 +66,6 @@ pub unsafe fn jimp_object_begin(jimp: *mut Jimp) -> Option<()> {
     }
 }
 
-pub unsafe fn jimp_object_member(jimp: *mut Jimp) -> Option<()> {
-    extern "C" {
-        #[link_name="jimp_object_member"]
-        pub fn jimp_object_member_raw(jimp: *mut Jimp) -> bool;
-    }
-    if jimp_object_member_raw(jimp) {
-        Some(())
-    } else {
-        None
-    }
-}
-
 pub unsafe fn jimp_object_end(jimp: *mut Jimp) -> Option<()> {
     extern "C" {
         #[link_name="jimp_object_end"]
@@ -90,7 +78,34 @@ pub unsafe fn jimp_object_end(jimp: *mut Jimp) -> Option<()> {
     }
 }
 
+pub unsafe fn jimp_array_begin(jimp: *mut Jimp) -> Option<()> {
+    extern "C" {
+        #[link_name="jimp_array_begin"]
+        pub fn jimp_array_begin_raw(jimp: *mut Jimp) -> bool;
+    }
+    if jimp_array_begin_raw(jimp) {
+        Some(())
+    } else {
+        None
+    }
+}
+
+pub unsafe fn jimp_array_end(jimp: *mut Jimp) -> Option<()> {
+    extern "C" {
+        #[link_name="jimp_array_end"]
+        pub fn jimp_array_end_raw(jimp: *mut Jimp) -> bool;
+    }
+    if jimp_array_end_raw(jimp) {
+        Some(())
+    } else {
+        None
+    }
+}
+
 extern "C" {
     pub fn jimp_begin(jimp: *mut Jimp, file_path: *const c_char, input: *const c_char, input_size: usize);
     pub fn jimp_unknown_member(jimp: *mut Jimp);
+    pub fn jimp_diagf(jimp: *mut Jimp, fmt: *const c_char, ...);
+    pub fn jimp_object_member(jimp: *mut Jimp) -> bool;
+    pub fn jimp_array_item(jimp: *mut Jimp) -> bool;
 }

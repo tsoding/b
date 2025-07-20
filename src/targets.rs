@@ -6,6 +6,7 @@ use crate::strcmp;
 enum_with_order! {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Target in TARGET_ORDER {
+        // TODO: maybe instead of Gas_ the prefix should be Gnu_, 'cause that makes more sense.
         Gas_x86_64_Windows,
         Gas_x86_64_Linux,
         Gas_x86_64_Darwin,
@@ -13,16 +14,26 @@ enum_with_order! {
         Gas_AArch64_Darwin,
         Uxn,
         Mos6502,
-        Fasm_x86_64_Windows,
-        Fasm_x86_64_Linux,
+        ILasm_Mono,
     }
 }
 
 impl Target {
+    pub unsafe fn file_ext(self) -> *const c_char {
+        match self {
+            Self::Gas_x86_64_Windows => c!(".exe"),
+            Self::Gas_x86_64_Linux   => c!(""),
+            Self::Gas_x86_64_Darwin  => c!(""),
+            Self::Gas_AArch64_Linux  => c!(""),
+            Self::Gas_AArch64_Darwin => c!(""),
+            Self::Uxn                => c!(".rom"),
+            Self::Mos6502            => c!(".6502"),
+            Self::ILasm_Mono         => c!(".exe"),
+        }
+    }
+
     pub unsafe fn name(self) -> *const c_char {
         match self {
-            Self::Fasm_x86_64_Windows => c!("fasm-x86_64-windows"),
-            Self::Fasm_x86_64_Linux   => c!("fasm-x86_64-linux"),
             Self::Gas_x86_64_Windows  => c!("gas-x86_64-windows"),
             Self::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
             Self::Gas_x86_64_Darwin   => c!("gas-x86_64-darwin"),
@@ -30,6 +41,7 @@ impl Target {
             Self::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502             => c!("6502"),
+            Self::ILasm_Mono          => c!("ilasm-mono"),
         }
     }
 

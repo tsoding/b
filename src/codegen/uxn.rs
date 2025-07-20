@@ -1,9 +1,10 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
+use crate::ir::*;
 use crate::nob::*;
 use crate::crust::libc::*;
-use crate::{missingf, Loc};
+use crate::lexer::Loc;
+use crate::missingf;
 use crate::diagf;
 
 // UXN memory map
@@ -80,11 +81,11 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
             for j in 0..(*a).named_labels.count {
                 let named_label = *(*a).named_labels.items.add(j);
                 if named_label.label == patch.label {
-                    fprintf(stderr(), c!("Label '%s' was never linked\n"), named_label.name);
+                    log(Log_Level::ERROR, c!("uxn: Label '%s' was never linked"), named_label.name);
                     abort();
                 }
             }
-            fprintf(stderr(), c!("Label #%ld was never linked (error in the uxn codegen)\n"), patch.label);
+            log(Log_Level::ERROR, c!("uxn: Label #%ld was never linked"), patch.label);
             abort();
         }
         let offset = patch.offset;
@@ -109,7 +110,12 @@ pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, _linker: *const [*const c_char],
+    // Temporaries
+    output: *mut String_Builder, _cmd: *mut Cmd,
+) -> Option<()> {
     let mut assembler: Assembler = zeroed();
     assembler.data_section_label = create_label(&mut assembler);
     // set the top of the stack
@@ -117,8 +123,8 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     write_lit_stz2(output, SP);
     // call main or _start, _start having a priority
     let mut main_proc = c!("main");
-    for i in 0..(*c).funcs.count {
-        let name = (*(*c).funcs.items.add(i)).name;
+    for i in 0..(*p).funcs.count {
+        let name = (*(*p).funcs.items.add(i)).name;
         if strcmp(name, c!("_start")) == 0 {
             main_proc = c!("_start");
             break;
@@ -134,13 +140,32 @@ pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) 
     write_label_abs(output, vector_return_label, &mut assembler, 0);
     write_op(output, UxnOp::BRK);
 
-    generate_funcs(output, da_slice((*c).funcs), &mut assembler);
-    generate_asm_funcs(output, da_slice((*c).asm_funcs));
-    generate_extrns(output, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut assembler);
-    generate_data_section(output, da_slice((*c).data), &mut assembler);
-    generate_globals(output, da_slice((*c).globals), &mut assembler);
+    generate_funcs(output, da_slice((*p).funcs), &mut assembler);
+    generate_asm_funcs(output, da_slice((*p).asm_funcs));
+    generate_extrns(output, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), &mut assembler);
+    generate_data_section(output, da_slice((*p).data), &mut assembler);
+    generate_globals(output, da_slice((*p).globals), &mut assembler);
 
     apply_patches(output, &mut assembler);
+
+    write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s\n"), program_path);
+
+    Some(())
+}
+
+pub unsafe fn run_program(cmd: *mut Cmd, emu: *const c_char, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
+    cmd_append! {cmd, emu, program_path}
+    da_append_many(cmd, run_args);
+    if let Some(stdout_path) = stdout_path {
+        let mut fdout = fd_open_for_write(stdout_path);
+        let mut redirect: Cmd_Redirect = zeroed();
+        redirect.fdout = &mut fdout;
+        if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
+    } else {
+        if !cmd_run_sync_and_reset(cmd) { return None; }
+    }
+    Some(())
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], assembler: &mut Assembler) {
@@ -770,8 +795,17 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
             write_lit2(output, 0);
             write_lit_stz2(output, FIRST_ARG);
             write_op(output, UxnOp::JMP2r);
+        } else if strcmp(name, c!("uxn_div2")) == 0 {
+            // uxn_udiv(a, b)
+            // outputs 16 bit unsigned division of a / b.
+            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_div2")), (*output).count);
+            write_lit_ldz2(output, FIRST_ARG);
+            write_lit_ldz2(output, FIRST_ARG + 2);
+            write_op(output, UxnOp::DIV2);
+            write_lit_stz2(output, FIRST_ARG);
+            write_op(output, UxnOp::JMP2r);
         } else {
-            fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
+            log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
             abort();
         }
     }

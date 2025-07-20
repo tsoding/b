@@ -8,11 +8,11 @@
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
-use crate::{Func, OpWithLocation, Global, Op, Compiler, Binop, ImmediateValue, Arg, AsmFunc, Loc};
+use crate::lexer::*;
+use crate::ir::*;
 use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;
-use crate::runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 
 // TODO: does this have to be a macro?
 macro_rules! instr_enum {
@@ -45,7 +45,7 @@ instr_enum! {
         BCC, BCS, BEQ, BIT,
         BMI,
         BNE, BPL, BRK, BVC,
-        VBS,
+        BVS,
         CLC, CLD, CLI, CLV,
         CMP, CPX, CPY,
         DEC, DEX, DEY,
@@ -262,8 +262,7 @@ pub unsafe fn write_word_at(out: *mut String_Builder, word: u16, addr: u16) {
 pub unsafe fn instr0(out: *mut String_Builder, inst: Instr, mode: AddrMode) {
     let opcode = OPCODES[inst as usize][mode as usize];
     if opcode == INVL {
-        printf(c!("Invalid combination of opcode and operand %u and %u\n"),
-               inst as usize, mode as usize);
+        log(Log_Level::ERROR, c!("6502: Invalid combination of opcode and operand %u and %u"), inst as usize, mode as usize);
         abort();
     }
     write_byte(out, opcode);
@@ -1220,12 +1219,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
                 }
             },
             Op::Label{label} => {
-                // TODO: RE: https://github.com/tsoding/b/pull/147#issue-3154667157
+                // RE: https://github.com/tsoding/b/pull/147#issue-3154667157
                 // > For this thing I introduces a new NOP instruction because it would be a bit too
                 // > risky to just blindly jump on an address that could possibly be unused.
                 //
-                // Assess the risk and potentially remove this NOP
-                instr(out, NOP);
+                // We now, this label will always be followed by an instruction: either the next
+                // generated OP, or the return code at the end of a function. No NOP needed.
                 da_append(&mut (*asm).op_labels, Label {
                     func_name: name,
                     label,
@@ -1312,7 +1311,7 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
                         continue 'reloc_loop;
                     }
                 }
-                printf(c!("linking failed. could not find label `%s.%u'\n"), name, label);
+                log(Log_Level::ERROR, c!("6502: Linking failed. Could not find label `%s.%u'"), name, label);
                 unreachable!();
             },
             RelocationKind::External{name, offset, byte} => {
@@ -1328,7 +1327,7 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
                         continue 'reloc_loop;
                     }
                 }
-                printf(c!("linking failed. could not find extern `%s'\n"), name);
+                log(Log_Level::ERROR, c!("6502: Linking failed. Could not find extrn `%s'"), name);
                 unreachable!();
             },
             RelocationKind::AddressRel{idx} => {
@@ -1345,14 +1344,15 @@ pub unsafe fn apply_relocations(out: *mut String_Builder, data_start: u16, asm: 
     }
 }
 
-pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c_char],
-                              funcs: *const [Func], globals: *const [Global], asm: *mut Assembler) {
+pub unsafe fn generate_extrns(_out: *mut String_Builder, extrns: *const [*const c_char],
+                              funcs: *const [Func], globals: *const [Global],
+                              asm_funcs: *const [AsmFunc], _asm: *mut Assembler) {
     'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
-            let func = (*funcs)[j];
-            if strcmp(func.name, name) == 0 {
+            let func = (*funcs)[j].name;
+            if strcmp(func, name) == 0 {
                 continue 'skip_function_or_global
             }
         }
@@ -1362,77 +1362,15 @@ pub unsafe fn generate_extrns(out: *mut String_Builder, extrns: *const [*const c
                 continue 'skip_function_or_global
             }
         }
-
-        // TODO: consider implementing all these intrinsics in __asm__ if possible
-        if strcmp(name, c!("char")) == 0 {
-            // ch = char(string, i);
-            // returns the ith character in a string pointed to by string, 0 based
-
-            let fun_addr = (*out).count as u16;
-            da_append(&mut (*asm).externals, External {
-                name,
-                addr: fun_addr,
-            });
-
-            instr(out, TSX);
-            instr(out, CLC);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 1); // low
-
-            // load address to buffer in ZP to dereference, because registers
-            // only 8 bits
-            instr8(out, STA, ZP, ZP_DEREF_0);
-
-            instr(out, TYA);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 2); // high
-            instr8(out, STA, ZP, ZP_DEREF_1);
-            instr8(out, LDY, IMM, 0);
-
-            // A = ((0))
-            instr8(out, LDA, IND_Y, ZP_DEREF_0);
-
-            // TODO: maybe sign extend Y, if we expect signed chars?
-            // instr8(out, CMP, IMM, out, 0);
-            // instr8(out, BPL, REL, 1);
-            // instr(out, DEY);
-
-            instr(out, RTS);
-        } else if strcmp(name, c!("lchar")) == 0 {
-            // ch = char(string, i, ch);
-            // returns the ith character in a string pointed to by string, 0 based
-
-            let fun_addr = (*out).count as u16;
-            da_append(&mut (*asm).externals, External {
-                name,
-                addr: fun_addr,
-            });
-
-            instr(out, TSX);
-            instr(out, CLC);
-
-            // load address to buffer in ZP to dereference, because registers
-            // only 8 bits
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 1); // low
-            instr8(out, STA, ZP, ZP_DEREF_0);
-
-            instr(out, TYA);
-            instr16(out, ADC, ABS_X, STACK_PAGE + 2 + 2); // high
-            instr8(out, STA, ZP, ZP_DEREF_1);
-
-            instr16(out, LDA, ABS_X, STACK_PAGE + 2*2 + 1); // low
-            // instr16(out, LDY, ABS_X, STACK_PAGE + 2*2 + 1); // high
-            instr8(out, LDY, IMM, 0);
-            instr8(out, STA, IND_Y, ZP_DEREF_0);
-
-            // TODO: maybe sign extend Y, if we expect signed chars?
-            // instr8(output, CMP, IMM, 0);
-            // instr8(output, BPL, REL, 1);
-            // instr(output, DEY);
-
-            instr(out, RTS);
-        } else {
-            fprintf(stderr(), c!("Unknown extrn: `%s`, can not link\n"), name);
-            abort();
+        for j in 0..asm_funcs.len() {
+            let func = (*asm_funcs)[j].name;
+            if strcmp(func, name) == 0 {
+                continue 'skip_function_or_global
+            }
         }
+
+        log(Log_Level::ERROR, c!("6502: Unknown extrn: `%s`, can not link"), name);
+        abort();
     }
 }
 
@@ -1493,7 +1431,7 @@ pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) ->
             flag_sv.count += load_offset_prefix.count;
             config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
         } else {
-            fprintf(stderr(), c!("Unknown linker flag: %s\n"), flag);
+            log(Log_Level::ERROR, c!("6502: Unknown linker flag: %s"), flag);
             return None
         }
     }
@@ -1519,21 +1457,129 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
-pub unsafe fn generate_program(out: *mut String_Builder, c: *const Compiler, config: Config) -> Option<()> {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, config: Config,
+    // Temporaries
+    out: *mut String_Builder, _cmd: *mut Cmd,
+) -> Option<()> {
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
     asm.code_start = config.load_offset;
 
-    generate_funcs(out, da_slice((*c).funcs), &mut asm);
-    generate_asm_funcs(out, da_slice((*c).asm_funcs), &mut asm);
-    generate_extrns(out, da_slice((*c).extrns), da_slice((*c).funcs), da_slice((*c).globals), &mut asm);
+    generate_funcs(out, da_slice((*p).funcs), &mut asm);
+    generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
+    generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
 
     let data_start = config.load_offset + (*out).count as u16;
-    generate_data_section(out, da_slice((*c).data));
-    generate_globals(out, da_slice((*c).globals), &mut asm);
+    generate_data_section(out, da_slice((*p).data));
+    generate_globals(out, da_slice((*p).globals), &mut asm);
 
-    printf(c!("INFO: Generated size: 0x%x\n"), (*out).count as c_uint);
+    log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
     apply_relocations(out, data_start, &mut asm);
 
+    write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
+    log(Log_Level::INFO, c!("generated %s"), program_path);
+
     Some(())
+}
+
+pub const DEFAULT_LOAD_OFFSET: u16 = 0x8000;
+
+#[derive(Clone, Copy)]
+pub struct Config {
+    pub load_offset: u16,
+}
+
+pub mod fake6502 {
+    use core::mem::zeroed;
+    use crate::nob::*;
+
+    pub static mut MEMORY: [u8; 1<<16] = unsafe { zeroed() };
+
+    pub unsafe fn load_rom_at(rom: String_Builder, offset: u16) {
+        for i in 0..rom.count {
+            MEMORY[i + offset as usize] = *rom.items.add(i) as u8;
+        }
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn read6502(address: u16) -> u8 {
+        MEMORY[address as usize]
+    }
+
+    #[no_mangle]
+    pub unsafe extern "C" fn write6502(address: u16, value: u8) {
+        MEMORY[address as usize] = value;
+    }
+
+    extern "C" {
+        #[link_name = "reset6502"]
+        pub fn reset();
+        #[link_name = "step6502"]
+        pub fn step();
+        pub fn rts();
+        pub static mut pc: u16;
+        pub static mut sp: u16;
+        pub static mut a: u8;
+        pub static mut x: u8;
+        pub static mut y: u8;
+    }
+
+}
+
+pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut FILE) -> Option<()> {
+    fake6502::load_rom_at(*output, config.load_offset);
+    fake6502::reset();
+    fake6502::pc = config.load_offset;
+
+    // set reset to $0000 to exit on reset
+    fake6502::MEMORY[0xFFFC] = 0;
+    fake6502::MEMORY[0xFFFD] = 0;
+
+    while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
+        let prev_sp = fake6502::sp & 0xFF;
+        let opcode  = fake6502::MEMORY[fake6502::pc as usize];
+        fake6502::step();
+
+        let curr_sp = fake6502::sp & 0xFF;
+        if opcode == 0x48 && curr_sp > prev_sp { // PHA instruction
+            log(Log_Level::ERROR, c!("Stack overflow detected"));
+            log(Log_Level::ERROR, c!("SP changed from $%02X to $%02X after PHA instruction"), prev_sp as c_uint, curr_sp as c_uint);
+            return None;
+        }
+
+        if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
+            fprintf(stdout, c!("%c"), fake6502::a as c_uint);
+            fake6502::rts();
+        }
+    }
+    // print exit code (in Y:A)
+    let code = ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint;
+    log(Log_Level::INFO, c!("Exited with code %hd"), code);
+
+    if code != 0 {
+        return None;
+    }
+    Some(())
+}
+
+pub unsafe fn run_program(output: *mut String_Builder, config: Config, program_path: *const c_char, stdout_path: Option<*const c_char>) -> Option<()> {
+    (*output).count = 0;
+    read_entire_file(program_path, output)?;
+
+    let stdout = if let Some(stdout_path) = stdout_path {
+        let stdout = fopen(stdout_path, c!("wb"));
+        if stdout.is_null() {
+            return None
+        }
+        stdout
+    } else {
+        stdout()
+    };
+    let result = run_impl(output, config, stdout);
+    if stdout_path.is_some() {
+        fclose(stdout);
+    }
+    result
 }

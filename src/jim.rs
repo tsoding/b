@@ -18,4 +18,6 @@ extern "C" {
     pub fn jim_member_key(jim: *mut Jim, s: *const c_char);
     pub fn jim_object_end(jim: *mut Jim);
     pub fn jim_string(jim: *mut Jim, s: *const c_char);
+    pub fn jim_array_begin(jim: *mut Jim);
+    pub fn jim_array_end(jim: *mut Jim);
 }
