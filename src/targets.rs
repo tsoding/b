@@ -6,6 +6,7 @@ use crate::strcmp;
 enum_with_order! {
     #[derive(Clone, Copy, PartialEq, Eq)]
     enum Target in TARGET_ORDER {
+        // TODO: maybe instead of Gas_ the prefix should be Gnu_, case that makes more sense.
         Gas_x86_64_Windows,
         Gas_x86_64_Linux,
         Gas_x86_64_Darwin,

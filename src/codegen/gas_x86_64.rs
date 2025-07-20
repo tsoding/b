@@ -431,14 +431,9 @@ pub unsafe fn generate_program(
             }
             if !cmd_run_sync_and_reset(cmd) { return None; }
 
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
             cmd_append! {
                 cmd,
-                cc, c!("-no-pie"), c!("-o"), program_path, output_obj_path,
+                c!("x86_64-w64-mingw32-gcc"), c!("-no-pie"), c!("-o"), program_path, output_obj_path,
             }
             if nostdlib {
                 cmd_append!(cmd, c!("-nostdlib"));

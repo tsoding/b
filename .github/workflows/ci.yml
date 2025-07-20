@@ -25,7 +25,7 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin*
   macos-aarch64:
     runs-on: macos-latest
     steps:
@@ -59,4 +59,4 @@ jobs:
       - name: Build Toolchain
         run:  make -B mingw32-all
       - name: Run Tests
-        run: ./build/btest.exe
+        run: ./build/btest.exe  -xt *darwin*
