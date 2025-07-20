@@ -1,4 +1,5 @@
 use core::ffi::*;
+use core::mem::zeroed;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::lexer::*;
@@ -174,7 +175,12 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, _linker: *const [*const c_char],
+    // Temporaries
+    output: *mut String_Builder, cmd: *mut Cmd,
+) -> Option<()> {
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".module Main.exe\n"));
     sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
@@ -186,6 +192,38 @@ pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program) {
     sb_appendf(output, c!("        ret\n"));
     sb_appendf(output, c!("    }\n"));
     sb_appendf(output, c!("}\n"));
+
+    let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+    cmd_append!{
+        cmd,
+        c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), program_path)
+    }
+
+    if !cmd_run_sync_and_reset(cmd) { return None; }
+
+    Some(())
+}
+
+pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
+    cmd_append!{
+        cmd,
+        c!("mono"), program_path,
+    }
+
+    da_append_many(cmd, run_args);
+
+    if let Some(stdout_path) = stdout_path {
+        let mut fdout = fd_open_for_write(stdout_path);
+        let mut redirect: Cmd_Redirect = zeroed();
+        redirect.fdout = &mut fdout;
+        if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
+    } else {
+        if !cmd_run_sync_and_reset(cmd) { return None; }
+    }
+    Some(())
 }
 
 // TODO: make this codegen self-contained eventually.

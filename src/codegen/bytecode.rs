@@ -55,7 +55,7 @@
 
 use core::ffi::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler};
+use crate::ir::*;
 use crate::crust::libc::*;
 use crate::lexer::Loc;
 use core::mem::zeroed;
@@ -317,7 +317,7 @@ const version: u8 = 0x01;
 
 
 // Get the last bytes of the pgram for the table
-pub unsafe fn generate_program(output: *mut Array<u8>, c: *const Compiler) {
+pub unsafe fn generate_program(output: *mut Array<u8>, program: *const Program) {
     append_u8(output, 0xDE);
     append_u8(output, 0xBC);
     //VERSION
@@ -327,13 +327,13 @@ pub unsafe fn generate_program(output: *mut Array<u8>, c: *const Compiler) {
 
 
     let extrn_pos = (*output).count;
-    generate_extrns(output, da_slice((*c).program.extrns), &mut string_table);
+    generate_extrns(output, da_slice((*program).extrns), &mut string_table);
     let data_pos = (*output).count;
-    generate_data_section(output, da_slice((*c).program.data));
+    generate_data_section(output, da_slice((*program).data));
     let globals_pos = (*output).count;
-    generate_globals(output, da_slice((*c).program.globals), &mut string_table);
+    generate_globals(output, da_slice((*program).globals), &mut string_table);
     let funcs_pos = (*output).count;
-    generate_funcs(output, da_slice((*c).program.funcs), &mut string_table);
+    generate_funcs(output, da_slice((*program).funcs), &mut string_table);
     let string_table_pos = (*output).count;
     append_u64(output, string_table.count.try_into().unwrap());
     for i in 0..string_table.count {
@@ -346,3 +346,4 @@ pub unsafe fn generate_program(output: *mut Array<u8>, c: *const Compiler) {
     append_u64(output, funcs_pos.try_into().unwrap());
     append_u64(output, string_table_pos.try_into().unwrap());
 }
+

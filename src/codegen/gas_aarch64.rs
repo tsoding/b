@@ -1,12 +1,21 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::align_bytes;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::crust::assoc_lookup_cstr;
 use crate::ir::*;
-use crate::{missingf, Loc};
+use crate::lexer::*;
+use crate::missingf;
 use crate::targets::Os;
+
+pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
+    let rem = bytes%alignment;
+    if rem > 0 {
+        bytes + alignment - rem
+    } else {
+        bytes
+    }
+}
 
 pub unsafe fn call_arg(arg: Arg, loc: Loc, output: *mut String_Builder, os: Os) {
     match arg {
@@ -480,9 +489,152 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, p: *const Program, os: Os) {
+pub unsafe fn generate_program(
+    // Inputs
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool,
+    // Temporaries
+    output: *mut String_Builder, cmd: *mut Cmd,
+) -> Option<()> {
     generate_funcs(output, da_slice((*p).funcs), da_slice((*p).variadics), os);
     generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
     generate_globals(output, da_slice((*p). globals), os);
     generate_data_section(output, da_slice((*p).data));
+
+    let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+    match os {
+        Os::Linux => {
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+
+            cmd_append! {
+                cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
+                } else {
+                    c!("-no-pie")
+                },
+                c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append!(cmd, c!("-nostdlib"));
+            }
+            da_append_many(cmd, linker);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            Some(())
+        }
+        Os::Darwin => {
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            cmd_append! {
+                cmd,
+                cc, c!("-arch"), c!("arm64"), c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append! {
+                    cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            da_append_many(cmd, linker);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            Some(())
+        }
+        Os::Windows => todo!(),
+    }
+}
+
+pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>, os: Os) -> Option<()> {
+    match os {
+        Os::Linux => {
+            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
+                cmd_append! {
+                    cmd,
+                    c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
+                }
+            }
+
+            // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
+            let run_path: *const c_char;
+            if (strchr(program_path, '/' as c_int)).is_null() {
+                run_path = temp_sprintf(c!("./%s"), program_path);
+            } else {
+                run_path = program_path;
+            }
+
+            cmd_append! {
+                cmd,
+                run_path,
+            }
+
+            da_append_many(cmd, run_args);
+
+            if let Some(stdout_path) = stdout_path {
+                let mut fdout = fd_open_for_write(stdout_path);
+                let mut redirect: Cmd_Redirect = zeroed();
+                redirect.fdout = &mut fdout;
+                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
+            } else {
+                if !cmd_run_sync_and_reset(cmd) { return None; }
+            }
+            Some(())
+        }
+        Os::Darwin => {
+            if !cfg!(target_arch = "aarch64") {
+                log(Log_Level::ERROR, c!("This runner is only for aarch64 Darwin, but the current target is not aarch64 Darwin."));
+                return None;
+            }
+
+            // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Darwin. It has to be `./program`.
+            let run_path: *const c_char;
+            if (strchr(program_path, '/' as c_int)).is_null() {
+                run_path = temp_sprintf(c!("./%s"), program_path);
+            } else {
+                run_path = program_path;
+            }
+
+            cmd_append! {
+                cmd,
+                run_path,
+            }
+
+            da_append_many(cmd, run_args);
+
+            if let Some(stdout_path) = stdout_path {
+                let mut fdout = fd_open_for_write(stdout_path);
+                let mut redirect: Cmd_Redirect = zeroed();
+                redirect.fdout = &mut fdout;
+                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
+            } else {
+                if !cmd_run_sync_and_reset(cmd) { return None; }
+            }
+            Some(())
+        }
+        Os::Windows => todo!(),
+    }
 }
