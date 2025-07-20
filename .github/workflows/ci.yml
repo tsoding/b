@@ -1,7 +1,6 @@
 name: CI
 on: [push, pull_request]
 
-# TODO: add jobs that test on different host platforms (windows, aarch64, etc)
 # TODO: build examples on CI
 #   May require a special support for build-only mode in btest
 
@@ -59,4 +58,4 @@ jobs:
       - name: Build Toolchain
         run:  make -B mingw32-all
       - name: Run Tests
-        run: ./build/btest.exe  -xt *darwin*
+        run: ./build/btest.exe -xt *darwin* -xt *linux*
