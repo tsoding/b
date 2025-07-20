@@ -144,7 +144,11 @@ pub unsafe fn execute_test(
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
         cmd,
-        c!("./build/b"),
+        if cfg!(target_os = "windows") {
+            c!("./build/b.exe"),
+        } else {
+            c!("./build/b")
+        },
         input_path,
         c!("-t"), target.name(),
         c!("-o"), program_path,
