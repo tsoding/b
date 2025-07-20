@@ -5,6 +5,7 @@ use crate::ir::*;
 use crate::nob::*;
 use crate::targets::Os;
 use crate::crust::libc::*;
+use crate::lexer::Loc;
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
@@ -52,7 +53,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char,output: *mut String_B
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: usize, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count * 8, 16);
     match os {
         Os::Linux | Os::Windows => {
@@ -66,6 +67,16 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             sb_appendf(output, c!("_%s:\n"), name);
         }
     }
+
+    sb_appendf(output, c!("    .file %lld \"%s\"\n"), func_index, name_loc.input_path);
+    // we need to place line information directly after the label, before any instrucitons
+    // ideally pointing to the first statement instead of the function name
+    if body.len() > 0 {
+        sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, (*body)[0].loc.line_number);
+    } else {
+        sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, name_loc.line_number);
+    }
+
     sb_appendf(output, c!("    pushq %%rbp\n"));
     sb_appendf(output, c!("    movq %%rsp, %%rbp\n"));
     if stack_size > 0 {
@@ -93,6 +104,12 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
     for i in 0..body.len() {
         let op = (*body)[i];
+
+        // location info of the first op has already been pushed
+        if i > 0 {
+            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, op.loc.line_number);
+        }
+
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return { arg } => {
@@ -260,7 +277,8 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
+        let func = (*funcs)[i];
+        generate_function(func.name, func.name_loc, i, func.params_count, func.auto_vars_count, da_slice(func.body), output, os);
     }
 }
 
