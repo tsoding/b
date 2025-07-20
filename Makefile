@@ -57,6 +57,9 @@ all: $(BUILD)/b $(BUILD)/btest
 test: $(BUILD)/b $(BUILD)/btest
 	$(BUILD)/btest
 
+.PHONY: mingw32-all
+mingw32-all: $(BUILD)/b.exe $(BUILD)/btest.exe
+
 $(BUILD)/b: $(RSS) $(POSIX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/b.rs -o $(BUILD)/b
 

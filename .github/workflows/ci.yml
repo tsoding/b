@@ -57,5 +57,6 @@ jobs:
       - name: Install Rust
         run: rustup toolchain install stable --no-self-update --profile minimal
       - name: Build Toolchain
-        run: |
-          make -B ./build/b.exe
+        run:  make -B mingw32-all
+      - name: Run Tests
+        run: ./build/btest.exe
