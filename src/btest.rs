@@ -137,7 +137,7 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
-        Target::Bytecode            => todo!()
+        Target::Bytecode            => todo!(),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
         Target::ILasm_Mono          => c!("exe"),
     });

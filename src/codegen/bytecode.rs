@@ -327,13 +327,13 @@ pub unsafe fn generate_program(output: *mut Array<u8>, c: *const Compiler) {
 
 
     let extrn_pos = (*output).count;
-    generate_extrns(output, da_slice((*c).extrns), &mut string_table);
+    generate_extrns(output, da_slice((*c).program.extrns), &mut string_table);
     let data_pos = (*output).count;
-    generate_data_section(output, da_slice((*c).data));
+    generate_data_section(output, da_slice((*c).program.data));
     let globals_pos = (*output).count;
-    generate_globals(output, da_slice((*c).globals), &mut string_table);
+    generate_globals(output, da_slice((*c).program.globals), &mut string_table);
     let funcs_pos = (*output).count;
-    generate_funcs(output, da_slice((*c).funcs), &mut string_table);
+    generate_funcs(output, da_slice((*c).program.funcs), &mut string_table);
     let string_table_pos = (*output).count;
     append_u64(output, string_table.count.try_into().unwrap());
     for i in 0..string_table.count {
