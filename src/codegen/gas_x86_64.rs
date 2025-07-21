@@ -53,7 +53,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char,output: *mut String_B
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: usize, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: usize, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], debug: bool, output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count * 8, 16);
     match os {
         Os::Linux | Os::Windows => {
@@ -68,13 +68,15 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: 
         }
     }
 
-    sb_appendf(output, c!("    .file %lld \"%s\"\n"), func_index, name_loc.input_path);
-    // we need to place line information directly after the label, before any instrucitons
-    // ideally pointing to the first statement instead of the function name
-    if body.len() > 0 {
-        sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, (*body)[0].loc.line_number);
-    } else {
-        sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, name_loc.line_number);
+    if debug {
+        sb_appendf(output, c!("    .file %lld \"%s\"\n"), func_index, name_loc.input_path);
+        // we need to place line information directly after the label, before any instrucitons
+        // ideally pointing to the first statement instead of the function name
+        if body.len() > 0 {
+            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, (*body)[0].loc.line_number);
+        } else {
+            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, name_loc.line_number);
+        }
     }
 
     sb_appendf(output, c!("    pushq %%rbp\n"));
@@ -105,9 +107,11 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: 
     for i in 0..body.len() {
         let op = (*body)[i];
 
-        // location info of the first op has already been pushed
-        if i > 0 {
-            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, op.loc.line_number);
+        if debug {
+            // location info of the first op has already been pushed
+            if i > 0 {
+                sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, op.loc.line_number);
+            }
         }
 
         match op.opcode {
@@ -275,10 +279,10 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: 
     sb_appendf(output, c!("    ret\n"));
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], debug: bool, os: Os) {
     for i in 0..funcs.len() {
         let func = (*funcs)[i];
-        generate_function(func.name, func.name_loc, i, func.params_count, func.auto_vars_count, da_slice(func.body), output, os);
+        generate_function(func.name, func.name_loc, i, func.params_count, func.auto_vars_count, da_slice(func.body), debug, output, os);
     }
 }
 
@@ -365,7 +369,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool,
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
@@ -373,7 +377,7 @@ pub unsafe fn generate_program(
         Os::Darwin => sb_appendf(output, c!(".text\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
     };
-    generate_funcs(output, da_slice((*p).funcs), os);
+    generate_funcs(output, da_slice((*p).funcs), debug, os);
     generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
     match os {
         Os::Darwin => sb_appendf(output, c!(".data\n")),
