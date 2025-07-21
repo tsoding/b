@@ -112,10 +112,12 @@ pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const
 
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, _linker: *const [*const c_char],
+    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, _linker: *const [*const c_char], debug: bool,
     // Temporaries
     output: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
+    if debug { todo!("Debug information for uxn") }
+
     let mut assembler: Assembler = zeroed();
     assembler.data_section_label = create_label(&mut assembler);
     // set the top of the stack
