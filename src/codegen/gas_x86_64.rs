@@ -560,13 +560,25 @@ pub unsafe fn generate_globals_debuginfo(output: *mut String_Builder, globals: A
         sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_variable);
         sb_appendf(output, c!(".string \"%s\"\n"), global.name);
         sb_appendf(output, c!(".long debug_info_word_type_offset\n"));
-        sb_appendf(output, c!(".uleb128 0x9\n"));
+        sb_appendf(output, c!(".uleb128 0x9\n")); // .byte (1) + .quad (8) = 9
         sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_addr);
         match os {
             Os::Linux | Os::Windows => sb_appendf(output, c!(".quad %s\n"),  global.name),
             Os::Darwin              => sb_appendf(output, c!(".quad _%s\n"), global.name)
         };
     }
+}
+
+pub unsafe fn sleb128_length(mut n: i64) -> u64 {
+    if n == 0 { return 1 }
+
+    let mut len = 0;
+    n <<= 1;
+    while n != 0 && n != -1 {
+        n >>= 7;
+        len += 1;
+    }
+    len
 }
 
 pub unsafe fn generate_funcs_debuginfo(output: *mut String_Builder, funcs: Array<Func>, os: Os) {
@@ -580,7 +592,7 @@ pub unsafe fn generate_funcs_debuginfo(output: *mut String_Builder, funcs: Array
             Os::Linux | Os::Windows => sb_appendf(output, c!(".quad .L%s_end\n"), func.name),
             Os::Darwin              => sb_appendf(output, c!(".quad  L%s_end\n"), func.name),
         };
-        sb_appendf(output, c!(".uleb128 0x1\n"));
+        sb_appendf(output, c!(".uleb128 0x1\n")); // .byte (1) = 1
         sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_call_frame_cfa);
 
         for j in 0..func.scope_events.count {
@@ -589,9 +601,11 @@ pub unsafe fn generate_funcs_debuginfo(output: *mut String_Builder, funcs: Array
                     sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_variable);
                     sb_appendf(output, c!(".string \"%s\"\n"), name);
                     sb_appendf(output, c!(".long debug_info_word_type_offset\n"));
-                    sb_appendf(output, c!(".uleb128 0x2\n"));
+
+                    let offset = -(index as i64 + 2)*8;
+                    sb_appendf(output, c!(".uleb128 %lld\n"), sleb128_length(offset)+1);
                     sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_fbreg);
-                    sb_appendf(output, c!(".sleb128 -%lld\n"), (index +2)*8);
+                    sb_appendf(output, c!(".sleb128 %lld\n"), offset);
                 }
                 ScopeEvent::BlockBegin { index } => {
                     sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_block);
