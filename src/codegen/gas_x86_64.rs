@@ -452,6 +452,7 @@ mod dwarf {
     pub const FORM_sec_offset           : u64 = 0x17;
     pub const FORM_exprloc              : u64 = 0x18;
 
+    pub const OP_addr                   : u64 = 0x03;
     pub const OP_fbreg                  : u64 = 0x91;
     pub const OP_call_frame_cfa         : u64 = 0x9c;
 
@@ -465,7 +466,7 @@ mod dwarf {
 
 
 // TODO: all of this probably doesn't work on gas-x86_64-darwin
-pub unsafe fn generate_debuginfo(output: *mut String_Builder, funcs: Array<Func>, os: Os) {
+pub unsafe fn generate_debuginfo(output: *mut String_Builder, funcs: Array<Func>, globals: Array<Global>, os: Os) {
     sb_appendf(output, c!(".section .debug_abbrev\n"));
 
         sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_compilation_unit);
@@ -540,16 +541,32 @@ pub unsafe fn generate_debuginfo(output: *mut String_Builder, funcs: Array<Func>
 
             sb_appendf(output, c!(".long .debug_line\n"));
             generate_funcs_debuginfo(output, funcs, os);
+            generate_globals_debuginfo(output, globals, os);
 
-            sb_appendf(output, c!("debug_info_type_i64_offset = .-.debug_info\n"));
+            sb_appendf(output, c!("debug_info_word_type_offset = .-.debug_info\n"));
             sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_type);
             sb_appendf(output, c!(".byte %lld\n"), dwarf::default_type_size);
             sb_appendf(output, c!(".byte %lld\n"), dwarf::DW_ATE_signed);
-            sb_appendf(output, c!(".string \"i64\"\n"));
+            sb_appendf(output, c!(".string \"word\"\n"));
 
         sb_appendf(output, c!(".byte 0\n"));
 
     sb_appendf(output, c!(".debug_info_end: \n"));
+}
+
+pub unsafe fn generate_globals_debuginfo(output: *mut String_Builder, globals: Array<Global>, os: Os) {
+    for i in 0..globals.count {
+        let global = *globals.items.add(i);
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_variable);
+        sb_appendf(output, c!(".string \"%s\"\n"), global.name);
+        sb_appendf(output, c!(".long debug_info_word_type_offset\n"));
+        sb_appendf(output, c!(".uleb128 0x9\n"));
+        sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_addr);
+        match os {
+            Os::Linux | Os::Windows => sb_appendf(output, c!(".quad %s\n"),  global.name),
+            Os::Darwin              => sb_appendf(output, c!(".quad _%s\n"), global.name)
+        };
+    }
 }
 
 pub unsafe fn generate_funcs_debuginfo(output: *mut String_Builder, funcs: Array<Func>, os: Os) {
@@ -571,7 +588,7 @@ pub unsafe fn generate_funcs_debuginfo(output: *mut String_Builder, funcs: Array
                 ScopeEvent::Declare { name, index } => {
                     sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_variable);
                     sb_appendf(output, c!(".string \"%s\"\n"), name);
-                    sb_appendf(output, c!(".long debug_info_type_i64_offset\n"));
+                    sb_appendf(output, c!(".long debug_info_word_type_offset\n"));
                     sb_appendf(output, c!(".uleb128 0x2\n"));
                     sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_fbreg);
                     sb_appendf(output, c!(".sleb128 -%lld\n"), (index +2)*8);
@@ -597,7 +614,7 @@ pub unsafe fn generate_program(
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
-    if debug { generate_debuginfo(output, (*p).funcs, os); }
+    if debug { generate_debuginfo(output, (*p).funcs, (*p).globals, os); }
     match os {
         Os::Darwin => sb_appendf(output, c!(".text\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
