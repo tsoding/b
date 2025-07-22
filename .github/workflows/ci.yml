@@ -1,12 +1,11 @@
 name: CI
 on: [push, pull_request]
 
-# TODO: add jobs that test on different host platforms (windows, aarch64, etc)
 # TODO: build examples on CI
 #   May require a special support for build-only mode in btest
 
 jobs:
-  ubuntu:
+  ubuntu-excluding-macos:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -25,7 +24,7 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin*
   macos-aarch64:
     runs-on: macos-latest
     steps:
@@ -48,3 +47,15 @@ jobs:
         run: make -B
       - name: Run Tests
         run: ./build/btest -t gas-x86_64-darwin
+  windows-x86_64:
+    name: windows
+    runs-on: windows-latest
+    steps:
+      - name: Clone GIT repo
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Build Toolchain
+        run:  make -B mingw32-all
+      - name: Run Tests
+        run: ./build/btest.exe -t gas-x86_64-windows

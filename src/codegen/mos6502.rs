@@ -1459,10 +1459,12 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
 
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, config: Config,
+    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, config: Config, debug: bool,
     // Temporaries
     out: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
+    if debug { todo!("Debug information for 6502") }
+
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
     asm.code_start = config.load_offset;

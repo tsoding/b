@@ -1190,6 +1190,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
     let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
     let quiet       = flag_bool(c!("q"), false, c!("Makes the compiler yap less about what it's doing"));
+    let debug       = flag_bool(c!("g"), false, c!("Add debug information to the compiled program (if applicable for the target)"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1349,7 +1350,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Gas_AArch64_Linux => {
             codegen::gas_aarch64::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib,
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1361,7 +1362,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Gas_AArch64_Darwin => {
             codegen::gas_aarch64::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib,
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1373,7 +1374,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Gas_x86_64_Linux => {
             codegen::gas_x86_64::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib,
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1385,7 +1386,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Gas_x86_64_Windows => {
             codegen::gas_x86_64::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib,
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib, *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1397,7 +1398,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Gas_x86_64_Darwin => {
             codegen::gas_x86_64::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib,
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1409,7 +1410,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Uxn => {
             codegen::uxn::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker),
+                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1423,7 +1424,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             codegen::mos6502::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, config,
+                &c.program, program_path, garbage_base, config, *debug,
                 // Temporaries
                 &mut output, &mut cmd,
             )?;
@@ -1435,7 +1436,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::ILasm_Mono => {
             codegen::ilasm::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker),
+                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
                 // Temporaries
                 &mut output, &mut cmd,
                 // Mono

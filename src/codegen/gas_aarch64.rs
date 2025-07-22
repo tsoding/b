@@ -491,10 +491,12 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
 
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool,
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
+    if debug { todo!("Debug information for aarch64") }
+
     generate_funcs(output, da_slice((*p).funcs), da_slice((*p).variadics), os);
     generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
     generate_globals(output, da_slice((*p). globals), os);
