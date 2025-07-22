@@ -1450,7 +1450,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::ILasm_Core => {
             codegen::ilasm::generate_program(
                 // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker),
+                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
                 // Temporaries
                 &mut output, &mut cmd,
                 // Mono

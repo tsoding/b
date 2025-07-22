@@ -360,12 +360,14 @@ pub unsafe fn generate_fields(output: *mut String_Builder, globals: *const [Glob
 
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, _linker: *const [*const c_char],
+    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, _linker: *const [*const c_char], debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
     // Mono
     mono: bool,
 ) -> Option<()> {
+    if debug { todo!("Debug information for ilasm-mono") }
+
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
     sb_appendf(output, c!(".assembly extern mscorlib {}\n"));
     if !mono {
