@@ -53,7 +53,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char,output: *mut String_B
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: usize, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], debug: bool, output: *mut String_Builder, os: Os) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: usize, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], scope_events: *const [ScopeEvent], debug: bool, output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count * 8, 16);
     match os {
         Os::Linux | Os::Windows => {
@@ -70,17 +70,21 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: 
 
     if debug {
         sb_appendf(output, c!("    .file %lld \"%s\"\n"), func_index, name_loc.input_path);
-        // we need to place line information directly after the label, before any instrucitons
-        // ideally pointing to the first statement instead of the function name
-        if body.len() > 0 {
-            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, (*body)[0].loc.line_number);
-        } else {
-            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, name_loc.line_number);
-        }
+        sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, name_loc.line_number);
     }
 
+    if debug {
+        sb_appendf(output, c!("    .cfi_startproc\n"));
+    }
     sb_appendf(output, c!("    pushq %%rbp\n"));
+    if debug {
+        sb_appendf(output, c!("    .cfi_def_cfa_offset 16\n"));
+        sb_appendf(output, c!("    .cfi_offset rbp, -16\n"));
+    }
     sb_appendf(output, c!("    movq %%rsp, %%rbp\n"));
+    if debug {
+        sb_appendf(output, c!("    .cfi_def_cfa_register rbp\n"));
+    }
     if stack_size > 0 {
         sb_appendf(output, c!("    subq $%zu, %%rsp\n"), stack_size);
     }
@@ -104,14 +108,32 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: 
         sb_appendf(output, c!("    movq %%rax, -%zu(%%rbp)\n"), (j + 1)*8);
     }
 
+    let mut proccessed_scope_events = 0;
     for i in 0..body.len() {
         let op = (*body)[i];
 
         if debug {
-            // location info of the first op has already been pushed
-            if i > 0 {
-                sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, op.loc.line_number);
+            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, op.loc.line_number);
+
+            for j in proccessed_scope_events..op.scope_events_count {
+                // TODO: duplicate code
+                match (*scope_events)[j] {
+                    ScopeEvent::Declare    {  ..   } => {}
+                    ScopeEvent::BlockBegin { index } => {
+                        match os {
+                            Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_block_start_%zu:\n"), name, index),
+                            Os::Darwin              => sb_appendf(output, c!( "L%s_block_start_%zu:\n"), name, index),
+                        };
+                    }
+                    ScopeEvent::BlockEnd   { index } => {
+                        match os {
+                            Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_block_end_%zu:\n"), name, index),
+                            Os::Darwin              => sb_appendf(output, c!( "L%s_block_end_%zu:\n"), name, index),
+                        };
+                    }
+                };
             }
+            proccessed_scope_events = op.scope_events_count;
         }
 
         match op.opcode {
@@ -277,12 +299,39 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: 
     sb_appendf(output, c!("    movq %%rbp, %%rsp\n"));
     sb_appendf(output, c!("    popq %%rbp\n"));
     sb_appendf(output, c!("    ret\n"));
+
+    if debug {
+        sb_appendf(output, c!("    .cfi_endproc\n"));
+        match os {
+            Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_end:\n"), name),
+            Os::Darwin              => sb_appendf(output, c!( "L%s_end:\n"), name),
+        };
+
+        for i in proccessed_scope_events..scope_events.len() {
+            // TODO: duplicate code
+            match (*scope_events)[i] {
+                ScopeEvent::Declare    {  ..   } => {}
+                ScopeEvent::BlockBegin { index } => {
+                    match os {
+                        Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_block_start_%zu:\n"), name, index),
+                        Os::Darwin              => sb_appendf(output, c!( "L%s_block_start_%zu:\n"), name, index),
+                    };
+                }
+                ScopeEvent::BlockEnd   { index } => {
+                    match os {
+                        Os::Linux | Os::Windows => sb_appendf(output, c!(".L%s_block_end_%zu:\n"), name, index),
+                        Os::Darwin              => sb_appendf(output, c!( "L%s_block_end_%zu:\n"), name, index),
+                    };
+                }
+            };
+        }
+    }
 }
 
 pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], debug: bool, os: Os) {
     for i in 0..funcs.len() {
         let func = (*funcs)[i];
-        generate_function(func.name, func.name_loc, i, func.params_count, func.auto_vars_count, da_slice(func.body), debug, output, os);
+        generate_function(func.name, func.name_loc, i, func.params_count, func.auto_vars_count, da_slice(func.body), da_slice(func.scope_events), debug, output, os);
     }
 }
 
@@ -367,12 +416,188 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+mod dwarf {
+    // arbitrary constants
+    pub const TEMPLATE_compilation_unit : u64 = 1;
+    pub const TEMPLATE_function         : u64 = 2;
+    pub const TEMPLATE_variable         : u64 = 3;
+    pub const TEMPLATE_block            : u64 = 4;
+    pub const TEMPLATE_type             : u64 = 5;
+
+    // other constants
+    pub const version                   : u64 = 5;
+    pub const addr_size                 : u64 = 8;
+    pub const default_type_size         : u64 = 8;
+
+    // taken from dwarf.h, DW_ prefix stripped
+    pub const CHILDREN_no               : u64 = 0;
+    pub const CHILDREN_yes              : u64 = 1;
+
+    pub const AT_location               : u64 = 0x02;
+    pub const AT_name                   : u64 = 0x03;
+    pub const AT_byte_size              : u64 = 0x0b;
+    pub const AT_stmt_list              : u64 = 0x10;
+    pub const AT_low_pc                 : u64 = 0x11;
+    pub const AT_high_pc                : u64 = 0x12;
+    pub const AT_encoding               : u64 = 0x3e;
+    pub const AT_frame_base             : u64 = 0x40;
+    pub const AT_type                   : u64 = 0x49;
+
+    pub const DW_ATE_signed             : u64 = 0x05;
+
+    pub const FORM_addr                 : u64 = 0x01;
+    pub const FORM_string               : u64 = 0x08;
+    pub const FORM_data1                : u64 = 0x0b;
+    pub const FORM_ref4                 : u64 = 0x13;
+    pub const FORM_sec_offset           : u64 = 0x17;
+    pub const FORM_exprloc              : u64 = 0x18;
+
+    pub const OP_fbreg                  : u64 = 0x91;
+    pub const OP_call_frame_cfa         : u64 = 0x9c;
+
+    pub const UT_compile                : u64 = 0x01;
+    pub const TAG_lexical_block         : u64 = 0x0b;
+    pub const TAG_compile_unit          : u64 = 0x11;
+    pub const TAG_base_type             : u64 = 0x24;
+    pub const TAG_subprogram            : u64 = 0x2e;
+    pub const TAG_variable              : u64 = 0x34;
+}
+
+
+// TODO: all of this probably doesn't work on gas-x86_64-darwin
+pub unsafe fn generate_debuginfo(output: *mut String_Builder, funcs: Array<Func>, os: Os) {
+    sb_appendf(output, c!(".section .debug_abbrev\n"));
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_compilation_unit);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TAG_compile_unit);
+            sb_appendf(output, c!(".byte %lld\n"),    dwarf::CHILDREN_yes);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_stmt_list);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_sec_offset);
+        sb_appendf(output, c!(".byte 0\n"));
+        sb_appendf(output, c!(".byte 0\n"));
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_function);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TAG_subprogram);
+            sb_appendf(output, c!(".byte %lld\n"), dwarf::CHILDREN_yes);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_name);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_string);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_low_pc);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_addr);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_high_pc);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_addr);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_frame_base);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_exprloc);
+        sb_appendf(output, c!(".byte 0\n"));
+        sb_appendf(output, c!(".byte 0\n"));
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_variable);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TAG_variable);
+            sb_appendf(output, c!(".byte	%lld\n"), dwarf::CHILDREN_no);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_name);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_string);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_type);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_ref4);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_location);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_exprloc);
+        sb_appendf(output, c!(".byte	0\n"));
+        sb_appendf(output, c!(".byte	0\n"));
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_block);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TAG_lexical_block);
+            sb_appendf(output, c!(".byte %lld\n"), dwarf::CHILDREN_yes);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_low_pc);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_addr);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_high_pc);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_addr);
+        sb_appendf(output, c!(".byte 0\n"));
+        sb_appendf(output, c!(".byte 0\n"));
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_type);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TAG_base_type);
+            sb_appendf(output, c!(".byte %lld\n"), dwarf::CHILDREN_no);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_byte_size);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_data1);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_encoding);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_data1);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::AT_name);
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::FORM_string);
+        sb_appendf(output, c!(".byte 0\n"));
+        sb_appendf(output, c!(".byte 0\n"));
+
+    sb_appendf(output, c!(".byte 0\n"));
+
+
+    sb_appendf(output, c!(".section .debug_info\n"));
+
+        sb_appendf(output, c!(".long .debug_info_end - .debug_info_start\n"));
+        sb_appendf(output, c!(".debug_info_start: \n"));
+        sb_appendf(output, c!(".value %lld\n"), dwarf::version);
+        sb_appendf(output, c!(".byte %lld\n"), dwarf::UT_compile);
+        sb_appendf(output, c!(".byte %lld\n"), dwarf::addr_size);
+        sb_appendf(output, c!(".long .debug_abbrev\n"));
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_compilation_unit);
+
+            sb_appendf(output, c!(".long .debug_line\n"));
+            generate_funcs_debuginfo(output, funcs, os);
+
+            sb_appendf(output, c!("debug_info_type_i64_offset = .-.debug_info\n"));
+            sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_type);
+            sb_appendf(output, c!(".byte %lld\n"), dwarf::default_type_size);
+            sb_appendf(output, c!(".byte %lld\n"), dwarf::DW_ATE_signed);
+            sb_appendf(output, c!(".string \"i64\"\n"));
+
+        sb_appendf(output, c!(".byte 0\n"));
+
+    sb_appendf(output, c!(".debug_info_end: \n"));
+}
+
+pub unsafe fn generate_funcs_debuginfo(output: *mut String_Builder, funcs: Array<Func>, os: Os) {
+    for i in 0..funcs.count {
+        let func = *funcs.items.add(i);
+
+        sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_function);
+        sb_appendf(output, c!(".string \"%s\"\n"), func.name);
+        sb_appendf(output, c!(".quad %s\n"), func.name);
+        match os {
+            Os::Linux | Os::Windows => sb_appendf(output, c!(".quad .L%s_end\n"), func.name),
+            Os::Darwin              => sb_appendf(output, c!(".quad  L%s_end\n"), func.name),
+        };
+        sb_appendf(output, c!(".uleb128 0x1\n"));
+        sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_call_frame_cfa);
+
+        for j in 0..func.scope_events.count {
+            match *func.scope_events.items.add(j) {
+                ScopeEvent::Declare { name, index } => {
+                    sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_variable);
+                    sb_appendf(output, c!(".string \"%s\"\n"), name);
+                    sb_appendf(output, c!(".long debug_info_type_i64_offset\n"));
+                    sb_appendf(output, c!(".uleb128 0x2\n"));
+                    sb_appendf(output, c!(".byte %lld\n"), dwarf::OP_fbreg);
+                    sb_appendf(output, c!(".sleb128 -%lld\n"), (index +2)*8);
+                }
+                ScopeEvent::BlockBegin { index } => {
+                    sb_appendf(output, c!(".uleb128 %lld\n"), dwarf::TEMPLATE_block);
+                    sb_appendf(output, c!(".quad .L%s_block_start_%zu\n"), func.name, index);
+                    sb_appendf(output, c!(".quad .L%s_block_end_%zu\n"), func.name, index);
+                }
+                ScopeEvent::BlockEnd { .. } => {
+                    sb_appendf(output, c!(".byte 0\n"));
+                }
+            }
+        }
+
+        sb_appendf(output, c!(".byte 0\n"));
+    }
+}
+
 pub unsafe fn generate_program(
     // Inputs
     p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
+    if debug { generate_debuginfo(output, (*p).funcs, os); }
     match os {
         Os::Darwin => sb_appendf(output, c!(".text\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
