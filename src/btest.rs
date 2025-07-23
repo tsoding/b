@@ -138,6 +138,7 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502             => c!("6502"),
+        Target::Bytecode            => todo!(),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
         Target::ILasm_Mono          => c!("exe"),
     });
@@ -166,6 +167,7 @@ pub unsafe fn execute_test(
         Target::Mos6502             => codegen::mos6502::run_program(sb, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, Some(stdout_path)),
+        targets::Target::Bytecode => todo!(),
         Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
     };
 
