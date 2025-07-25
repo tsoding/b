@@ -15,6 +15,7 @@ enum_with_order! {
         Uxn,
         Mos6502,
         ILasm_Mono,
+        Custom,
     }
 }
 
@@ -29,6 +30,7 @@ impl Target {
             Self::Uxn                => c!(".rom"),
             Self::Mos6502            => c!(".6502"),
             Self::ILasm_Mono         => c!(".exe"),
+            Self::Custom             => c!("") // Not Determined here
         }
     }
 
@@ -42,6 +44,7 @@ impl Target {
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502             => c!("6502"),
             Self::ILasm_Mono          => c!("ilasm-mono"),
+            Self::Custom              => c!("custom")
         }
     }
 

@@ -2,6 +2,7 @@ use core::ffi::*;
 use crate::lexer::*;
 use crate::nob::*;
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub enum Arg {
     /// Bogus value of an Arg.
@@ -26,12 +27,14 @@ pub enum Arg {
     DataOffset(usize),
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct OpWithLocation {
     pub opcode: Op,
     pub loc: Loc,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq)]
 pub enum Binop {
     Plus,
@@ -51,12 +54,14 @@ pub enum Binop {
     BitShr,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AsmStmt {
     pub line: *const c_char,
     pub loc: Loc,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub enum Op {
     Bogus,
@@ -78,12 +83,15 @@ pub enum Op {
 // TODO: instead of the variadics we should have a general purpose
 // mechanism that adds attributes to to functions and passes them to
 // codegens
+
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Variadic {
     pub loc: Loc,
     pub fixed_args: usize,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Func {
     pub name: *const c_char,
@@ -93,6 +101,7 @@ pub struct Func {
     pub auto_vars_count: usize,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Global {
     pub name: *const c_char,
@@ -101,6 +110,7 @@ pub struct Global {
     pub minimum_size: usize,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub enum ImmediateValue {
     Name(*const c_char),
@@ -108,6 +118,7 @@ pub enum ImmediateValue {
     DataOffset(usize),
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct AsmFunc {
     pub name: *const c_char,
@@ -115,6 +126,7 @@ pub struct AsmFunc {
     pub body: Array<AsmStmt>,
 }
 
+#[repr(C)]
 #[derive(Clone, Copy)]
 pub struct Program {
     pub funcs: Array<Func>,

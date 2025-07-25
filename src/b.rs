@@ -1161,6 +1161,7 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
     Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, filename, target.name()))
 }
 
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
@@ -1191,7 +1192,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
     let quiet       = flag_bool(c!("q"), false, c!("Makes the compiler yap less about what it's doing"));
     let debug       = flag_bool(c!("g"), false, c!("Add debug information to the compiled program (if applicable for the target)"));
-
+    let dlltarget   = flag_str(c!("c"), ptr::null(), c!("Target for -t custom. Example: -t custom -c ./targets/uxn.so"))
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
     'args: while argc > 0 {
@@ -1440,6 +1441,24 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if *run {
                 codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args), None)?;
+            }
+        }
+        Target::Custom => {
+            
+            let dll = dlopen(*dlltarget, 0); // TODO
+            
+            let generate_program: unsafe extern "C" fn(
+                *const Program, *const [*const c_char], bool, bool,
+                *mut String_Builder, *mut Cmd
+            ) -> *mut c_void = core::mem::transmute(dlsym(dll, c!("generate_program")));
+            
+            let run_program: unsafe extern "C" fn(
+                *mut c_void, *mut Cmd, *const [*const c_char], *const c_char
+            ) = core::mem::transmute(dlsym(dll, c!("run_program")));
+
+            let data: *mut c_void = generate_program(&c.program, da_slice(*linker), *nostdlib, *debug, &mut output, &mut cmd); // Data is for needed information between things
+            if *run {
+                run_program(data, &mut cmd, da_slice(run_args), ptr::null());
             }
         }
     }

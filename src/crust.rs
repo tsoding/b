@@ -114,6 +114,10 @@ pub mod libc {
         pub fn tolower(c: c_int) -> c_int;
         pub fn toupper(c: c_int) -> c_int;
         pub fn qsort(base: *mut c_void, nmemb: usize, size: usize, compar: unsafe extern "C" fn(*const c_void, *const c_void) -> c_int);
+
+        pub fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        pub fn dlclose(handle: *mut c_void) -> c_int;
+        pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     }
 
     // count is the amount of items, not bytes
