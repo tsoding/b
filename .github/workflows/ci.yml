@@ -24,7 +24,7 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin*
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin* -xt bytecode
   macos-aarch64:
     runs-on: macos-latest
     steps:

@@ -14,6 +14,7 @@ enum_with_order! {
         Gas_AArch64_Darwin,
         Uxn,
         Mos6502,
+        Bytecode,
         ILasm_Mono,
     }
 }
@@ -29,6 +30,7 @@ impl Target {
             Self::Uxn                => c!(".rom"),
             Self::Mos6502            => c!(".6502"),
             Self::ILasm_Mono         => c!(".exe"),
+            Self::Bytecode           => c!(".ir")
         }
     }
 
@@ -41,6 +43,7 @@ impl Target {
             Self::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502             => c!("6502"),
+            Self::Bytecode            => c!("bytecode"),
             Self::ILasm_Mono          => c!("ilasm-mono"),
         }
     }
@@ -60,5 +63,5 @@ impl Target {
 pub enum Os {
     Linux,
     Windows,
-    Darwin,
+    Darwin
 }

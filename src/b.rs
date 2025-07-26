@@ -1430,6 +1430,25 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 codegen::mos6502::run_program(&mut output, config, program_path, None)?;
             }
         }
+        Target::Bytecode => {
+            let mut IR_Output: Array<u8> = zeroed();
+            codegen::bytecode::generate_program(&mut IR_Output, &c.program);
+
+            let effective_output_path;
+            if (*output_path).is_null() {
+                let input_path = *input_paths.items;
+                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
+                effective_output_path = temp_sprintf(c!("%s.ir"), base_path);
+            } else {
+                effective_output_path = *output_path;
+            }
+
+            write_entire_file(effective_output_path, IR_Output.items as *const c_void, IR_Output.count)?;
+            printf(c!("INFO: Generated %s\n"), effective_output_path);
+            if *run {
+                todo!("Interpret the IR?");
+            } 
+        }
         Target::ILasm_Mono => {
             codegen::ilasm_mono::generate_program(
                 // Inputs
