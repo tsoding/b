@@ -2035,5 +2035,117 @@
         "expected_stdout": "HELO\n",
         "state": "Enabled",
         "comment": ""
+    },
+    {
+        "case": "asm_uxn",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_uxn",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_uxn",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_uxn",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_uxn",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_uxn",
+        "target": "uxn",
+        "expected_stdout": "BBB\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_uxn",
+        "target": "6502",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_uxn",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "uxn",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "6502",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_uxn",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     }
 ]
