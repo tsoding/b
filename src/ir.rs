@@ -30,6 +30,7 @@ pub enum Arg {
 pub struct OpWithLocation {
     pub opcode: Op,
     pub loc: Loc,
+    pub scope_events_count: usize,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -85,12 +86,20 @@ pub struct Variadic {
 }
 
 #[derive(Clone, Copy)]
+pub enum ScopeEvent {
+    Declare { name: *const c_char, index: usize },
+    BlockBegin { index: usize },
+    BlockEnd { index: usize },
+}
+
+#[derive(Clone, Copy)]
 pub struct Func {
     pub name: *const c_char,
     pub name_loc: Loc,
     pub body: Array<OpWithLocation>,
     pub params_count: usize,
     pub auto_vars_count: usize,
+    pub scope_events: Array<ScopeEvent>,
 }
 
 #[derive(Clone, Copy)]
