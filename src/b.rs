@@ -1161,6 +1161,13 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
     Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, filename, target.name()))
 }
 
+pub unsafe fn print_available_targets() {
+    fprintf(stderr(), c!("Compilation targets:\n"));
+    for i in 0..TARGET_ORDER.len() {
+        fprintf(stderr(), c!("    %s\n"), (*TARGET_ORDER)[i].name());
+    }
+}
+
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let default_target;
     if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
@@ -1228,15 +1235,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     if strcmp(*target_name, c!("list")) == 0 {
-        fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..TARGET_ORDER.len() {
-            fprintf(stderr(), c!("    %s\n"), (*TARGET_ORDER)[i].name());
-        }
+        print_available_targets();
         return Some(());
     }
 
     let Some(target) = Target::by_name(*target_name) else {
         usage();
+        print_available_targets();
         log(Log_Level::ERROR, c!("Unknown target `%s`"), *target_name);
         return None;
     };
@@ -1416,7 +1421,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 codegen::uxn::run_program(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
             }
         }
-        Target::Mos6502 => {
+        Target::Mos6502_Posix => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
 
             codegen::mos6502::generate_program(
@@ -1427,7 +1432,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
 
             if *run {
-                codegen::mos6502::run_program(&mut output, config, program_path, None)?;
+                codegen::mos6502::run_program(&mut cmd, config, program_path, da_slice(run_args), None)?;
             }
         }
         Target::ILasm_Mono => {
