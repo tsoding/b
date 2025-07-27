@@ -50,6 +50,8 @@ update_obj(obj) {
 draw_obj(obj) DrawRectangle(obj[OBJ_X], obj[OBJ_Y], 100, 100, COLORS[obj[OBJ_C]]);
 
 main() {
+    extrn malloc, rand;
+
     W = &0[1];
 
     auto i;
@@ -77,7 +79,7 @@ main() {
 
     InitWindow(800, 600, "Hello, from B");
     SetTargetFPS(60);
-    while (!WindowShouldClose()) {
+    while (!(WindowShouldClose() & 1)) {
         if (IsKeyPressed(32)) {
             paused = !paused;
         }
@@ -96,9 +98,6 @@ main() {
         EndDrawing();
     }
 }
-
-// libc
-extrn malloc, rand;
 
 // Raylib
 extrn InitWindow, BeginDrawing, EndDrawing,

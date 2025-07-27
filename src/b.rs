@@ -1257,13 +1257,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     c.historical = *historical;
 
     if !*nostdlib {
-        // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
+        // TODO: should be probably a list libb paths which we sequentially probe to find which one exists.
         //   And of course we should also enable the user to append additional paths via the command line.
         //   Paths to potentially check by default:
         //   - Current working directory (like right now)
         //   - Directory where the b executable resides
         //   - Some system paths like /usr/include/libb on Linux? (Not 100% sure about this one)
-        //   - Some sort of instalation prefix? (Requires making build system more complicated)
+        //   - Some sort of installation prefix? (Requires making build system more complicated)
         //
         //     - rexim (2025-06-12 20:56:08)
         let libb_path = c!("./libb");
@@ -1273,6 +1273,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         }
         include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
         include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
+        if target == Target::ILasm_Mono || target == Target::ILasm_Core {
+            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/ilasm.b"), libb_path, *target_name));
+        }
     }
 
     let mut sb: String_Builder = zeroed();
@@ -1436,15 +1439,31 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(
+            codegen::ilasm::generate_program(
                 // Inputs
                 &c.program, program_path, garbage_base, da_slice(*linker), *debug,
                 // Temporaries
                 &mut output, &mut cmd,
+                // Mono
+                true,
             )?;
 
             if *run {
-                codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::ilasm::run_program(&mut cmd, program_path, da_slice(run_args), None, true)?;
+            }
+        }
+        Target::ILasm_Core => {
+            codegen::ilasm::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+                // Mono
+                false,
+            )?;
+
+            if *run {
+                codegen::ilasm::run_program(&mut cmd, program_path, da_slice(run_args), None, false)?;
             }
         }
     }

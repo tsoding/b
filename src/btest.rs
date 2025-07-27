@@ -140,6 +140,7 @@ pub unsafe fn execute_test(
         Target::Mos6502_Posix       => c!("6502"),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
         Target::ILasm_Mono          => c!("exe"),
+        Target::ILasm_Core          => c!("dll"),
     });
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
@@ -166,7 +167,8 @@ pub unsafe fn execute_test(
         Target::Mos6502_Posix       => codegen::mos6502::run_program(cmd, Config {
             load_offset: DEFAULT_LOAD_OFFSET
         }, program_path, &[], Some(stdout_path)),
-        Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
+        Target::ILasm_Mono          => codegen::ilasm::run_program(cmd, program_path, &[], Some(stdout_path), true),
+        Target::ILasm_Core          => codegen::ilasm::run_program(cmd, program_path, &[], Some(stdout_path), false),
     };
 
     (*sb).count = 0;
