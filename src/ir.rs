@@ -1,6 +1,130 @@
 use core::ffi::*;
+use crate::lexer::*;
 use crate::nob::*;
-use crate::{Op, Binop, OpWithLocation, Arg, Func, Global, ImmediateValue, Compiler, AsmFunc};
+
+#[derive(Clone, Copy)]
+pub enum Arg {
+    /// Bogus value of an Arg.
+    ///
+    /// You should always call unreachable!() if you encounterd it in
+    /// the codegens. This value indicates a compilation error and
+    /// encountering it means that the compiler didn't fail the
+    /// compilation before passing the Compiler struct to the
+    /// codegens.
+    Bogus,
+    AutoVar(usize),
+    Deref(usize),
+    /// Reference to the autovar with the specified index
+    ///
+    /// The autovars are currently expected to be layed out in memory from right to left,
+    /// which is not particularly historically accurate.
+    /// See TODO(2025-06-05 17:45:36)
+    RefAutoVar(usize),
+    RefExternal(*const c_char),
+    External(*const c_char),
+    Literal(u64),
+    DataOffset(usize),
+}
+
+#[derive(Clone, Copy)]
+pub struct OpWithLocation {
+    pub opcode: Op,
+    pub loc: Loc,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub enum Binop {
+    Plus,
+    Minus,
+    Mult,
+    Div,
+    Mod,
+    Equal,
+    NotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    BitOr,
+    BitAnd,
+    BitShl,
+    BitShr,
+}
+
+#[derive(Clone, Copy)]
+pub struct AsmStmt {
+    pub line: *const c_char,
+    pub loc: Loc,
+}
+
+#[derive(Clone, Copy)]
+pub enum Op {
+    Bogus,
+    UnaryNot       {result: usize, arg: Arg},
+    Negate         {result: usize, arg: Arg},
+    Asm            {stmts: Array<AsmStmt>},
+    Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
+    Index          {result: usize, arg: Arg, offset: Arg},
+    AutoAssign     {index: usize, arg: Arg},
+    ExternalAssign {name: *const c_char, arg: Arg},
+    Store          {index: usize, arg: Arg},
+    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
+    Label          {label: usize},
+    JmpLabel       {label: usize},
+    JmpIfNotLabel  {label: usize, arg: Arg},
+    Return         {arg: Option<Arg>},
+}
+
+// TODO: instead of the variadics we should have a general purpose
+// mechanism that adds attributes to to functions and passes them to
+// codegens
+#[derive(Clone, Copy)]
+pub struct Variadic {
+    pub loc: Loc,
+    pub fixed_args: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct Func {
+    pub name: *const c_char,
+    pub name_loc: Loc,
+    pub body: Array<OpWithLocation>,
+    pub params_count: usize,
+    pub auto_vars_count: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct Global {
+    pub name: *const c_char,
+    pub values: Array<ImmediateValue>,
+    pub is_vec: bool,
+    pub minimum_size: usize,
+}
+
+#[derive(Clone, Copy)]
+pub enum ImmediateValue {
+    Name(*const c_char),
+    Literal(u64),
+    DataOffset(usize),
+}
+
+#[derive(Clone, Copy)]
+pub struct AsmFunc {
+    pub name: *const c_char,
+    pub name_loc: Loc,
+    pub body: Array<AsmStmt>,
+}
+
+#[derive(Clone, Copy)]
+pub struct Program {
+    pub funcs: Array<Func>,
+    pub data: Array<u8>,
+    pub extrns: Array<*const c_char>,
+    pub variadics: Array<(*const c_char, Variadic)>,
+    pub globals: Array<Global>,
+    pub asm_funcs: Array<AsmFunc>,
+}
+
 
 pub unsafe fn dump_arg_call(arg: Arg, output: *mut String_Builder) {
     match arg {
@@ -21,7 +145,7 @@ pub unsafe fn dump_arg(output: *mut String_Builder, arg: Arg) {
         Arg::Deref(index)       => sb_appendf(output, c!("deref[%zu]"), index),
         Arg::RefAutoVar(index)  => sb_appendf(output, c!("ref auto[%zu]"), index),
         Arg::RefExternal(name)  => sb_appendf(output, c!("ref %s"), name),
-        Arg::Literal(value)     => sb_appendf(output, c!("%ld"), value),
+        Arg::Literal(value)     => sb_appendf(output, c!("%lld"), value),
         Arg::AutoVar(index)     => sb_appendf(output, c!("auto[%zu]"), index),
         Arg::DataOffset(offset) => sb_appendf(output, c!("data[%zu]"), offset),
         Arg::Bogus              => unreachable!("bogus-amogus")
@@ -125,22 +249,22 @@ pub unsafe fn dump_op(op: OpWithLocation, output: *mut String_Builder) {
     }
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn dump_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder) {
     sb_appendf(output, c!("%s(%zu, %zu):\n"), name, params_count, auto_vars_count);
     for i in 0..body.len() {
         dump_op((*body)[i], output)
     }
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func]) {
+pub unsafe fn dump_funcs(output: *mut String_Builder, funcs: *const [Func]) {
     sb_appendf(output, c!("-- Functions --\n"));
     sb_appendf(output, c!("\n"));
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
+        dump_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output);
     }
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
+pub unsafe fn dump_extrns(output: *mut String_Builder, extrns: *const [*const c_char]) {
     sb_appendf(output, c!("\n"));
     sb_appendf(output, c!("-- External Symbols --\n\n"));
     for i in 0..extrns.len() {
@@ -148,7 +272,7 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
     }
 }
 
-pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global]) {
+pub unsafe fn dump_globals(output: *mut String_Builder, globals: *const [Global]) {
     sb_appendf(output, c!("\n"));
     sb_appendf(output, c!("-- Global Variables --\n\n"));
     for i in 0..globals.len() {
@@ -172,7 +296,7 @@ pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Glo
     }
 }
 
-pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u8]) {
+pub unsafe fn dump_data_section(output: *mut String_Builder, data: *const [u8]) {
     if data.len() > 0 {
         sb_appendf(output, c!("\n"));
         sb_appendf(output, c!("-- Data Section --\n"));
@@ -211,7 +335,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
-pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+pub unsafe fn dump_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
     for i in 0..asm_funcs.len() {
         let asm_func = (*asm_funcs)[i];
         sb_appendf(output, c!("%s(asm):\n"), asm_func.name);
@@ -222,10 +346,10 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
-pub unsafe fn generate_program(output: *mut String_Builder, c: *const Compiler) {
-    generate_funcs(output, da_slice((*c).funcs));
-    generate_asm_funcs(output, da_slice((*c).asm_funcs));
-    generate_extrns(output, da_slice((*c).extrns));
-    generate_globals(output, da_slice((*c).globals));
-    generate_data_section(output, da_slice((*c).data));
+pub unsafe fn dump_program(output: *mut String_Builder, p: *const Program) {
+    dump_funcs(output, da_slice((*p).funcs));
+    dump_asm_funcs(output, da_slice((*p).asm_funcs));
+    dump_extrns(output, da_slice((*p).extrns));
+    dump_globals(output, da_slice((*p).globals));
+    dump_data_section(output, da_slice((*p).data));
 }

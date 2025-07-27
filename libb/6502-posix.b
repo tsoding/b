@@ -10,6 +10,35 @@ putchar(c) {
     0xFFEF(c);
 }
 
+char __asm__(
+    "TSX",
+    "CLC",
+    "ADC $0103,X", // i&0xFF
+    "STA $00", // we can safely use zero-page, as our assembler
+               // doesn't expect it to be preserved across op-boundaries
+    "TYA",
+    "ADC $0104,X", // i&0xFF00 >> 8
+    "STA $01",
+    "LDY #0",
+    "LDA ($00),Y",
+    "RTS"
+);
+
+lchar __asm__(
+    "TSX",
+    "CLC",
+    "ADC $0103,X", // i&0xFF
+    "STA $00", // we can safely use zero-page, as our assembler
+               // doesn't expect it to be preserved across op-boundaries
+    "TYA",
+    "ADC $0104,X", // i&0xFF00 >> 8
+    "STA $01",
+    "LDA $0105,X",
+    "LDY #0",
+    "STA ($00),Y",
+    "RTS"
+);
+
 /* TODO: fd not supported */
 fputc(c, fd) {
     putchar(c);
@@ -105,7 +134,6 @@ printn(n, b, sign) {
 }
 
 printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
-    extrn char;
     auto i, j, arg, c;
     i = 0;
     j = 0;
@@ -136,7 +164,7 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
                 while (c = char(*arg, j++)) {
                     putchar(c);
                 }
-            } else if ((c == 'z') | (c == 'l')) { /* hack for %zu %lu, % */
+            } else if (c == 'z' | c == 'l') { /* hack for %zu %lu, % */
                 c = '%';
                 goto while_end;
             } else {
@@ -149,12 +177,11 @@ printf(str, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12, x13, x14, x15) {
         }
         i++;
         c = char(str, i);
-        while_end:
+        while_end:;
     }
 }
 
 strlen(s) {
-    extrn char;
     auto n;
     n = 0;
     while (char(s, n)) n++;

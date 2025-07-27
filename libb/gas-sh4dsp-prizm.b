@@ -8,10 +8,12 @@ idx;
 // or 0 on a runner.
 is_realcalc;
 
+a 6;
+
 start() {
     // This is the part where we're left to manage most pre-init things
-    // like enabling 16-bit colors (the OS makes the display run in a limited 8-color mode before anything ever 
-    // happens).
+    // like enabling 16-bit colors (the OS makes the display run in a limited 
+    // 8-color mode before anything ever happens).
     extrn Bdisp_AllClr_VRAM, Bdisp_EnableColor;
     extrn Locate_OS;
     extrn memcpy, memset;
@@ -21,26 +23,15 @@ start() {
 
     extrn detect_calculator;
 
-    // We don't call any syscalls, thus we can mostly promuise r10 will be safe
-
     // Load in the data section
     memcpy(&data_vrtstart, &data_phystart, &data_size);
     memset(&bss_vrtstart, 0, &bss_size);
 
-    // HACK to get r14
+    
+    // HACK to get r14 through inline assembly
     __asm__ ( 
-        "mov.l start_hackskaddr, r8",
-        "mov.l r14, @r8",
-
-        "nop",
-        "bra start_hackend",
-        "nop",
-
-        ".align 4",
-        "start_hackskaddr: .long start_r14",
-        "start_hackend:",
-        "nop",
-        "nop"
+        "mov &start_r14, r8",       // Note that this doesn't compile to two bytes. At all.
+        "mov.l r14, @r8"
     );
 
     is_realcalc = detect_calculator();
@@ -53,25 +44,17 @@ start() {
     txt_x = 1;
     txt_y = 1;
 
-    putchar('E');
-    putchar(10);
-
     extrn exit;
-    exit(main(0,0));
+    main(0,0);
+    return (69);
 }
+L_ilram 0xE5200000;
 detect_calculator __asm__ (
-    "mov.l .L_ilram, r4",
-    "nop",
-    "bra tramp_end",
+    "mov &L_ilram, r4",
+    "mov.l @r4, r4",
     "nop",
 
-    ".align 4",
-    ".L_ilram: .long 0xE5200000",
-    "tramp_end:",
-
-    "mov #0, r0",
-    "mov.l r0, @r4",
-    "mov #69, r0",
+    "mov 69, r0",
     "mov.l r0, @r4",
     "mov.l @r4, r4",
     "cmp/eq r0, r4",
@@ -134,7 +117,8 @@ toupper(c) {
 Exit __asm__ ( 
     "mov r4, r0",                       // CODE = return
 
-    "mov.l exit_hackskaddr, r4",
+    "mov &start_r14, r4",
+    "mov.l @r4, r4",
     "mov.l @r4, r15",
     "lds.l @r15+, pr",
     "mov.l @r15+, r14",
@@ -146,23 +130,21 @@ Exit __asm__ (
     "mov.l @r15+, r8",
     
     "rts",
-    "nop",
-
-    ".align 4",
-    "exit_hackskaddr:   .long start_r14"
+    "nop"
 );
+
 exit(code) {
-    if (is_realcalc) {
-        Exit(code);
-    }
-    __asm__ ( 
-        "mov r4, r0",
-        "mov #-1, r1",
-        "jmp @r1"
-    );
+    Exit(code);
 }
 abort() {
     exit(0xFFFF);
+}
+getchar() {
+    if (!is_realcalc) {
+        auto ilram;        
+        ilram = 0xE5200000;
+        return (ilram[1]);
+    }
 }
 // We have no proper output "file", so we have to emulate
 putchar(ch) {
@@ -195,16 +177,6 @@ putchar(ch) {
     }
 }
 
-printu(n, b) {
-    auto a, c, d;
-    extrn divu, modu;
-
-    if(a=divu(n,b)) /* assignment, not test for equality */
-        printu(a, b); /* recursive */
-    c = (modu(n,b)) + '0';
-    if (c > '9') c += 7;
-    putchar(c);
-}
 printn(n, b) {
     auto a, c, d;
 
@@ -281,164 +253,111 @@ strlen(str) {
 
 
 // Syscall-specific functions
-Bdisp_EnableColor __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x0921"
-);
-Bdisp_AllClr_VRAM __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x025F"
-);
+SYS_JUMPPOINT           0x80020070;
+
+SYS_Bdisp_PutDisp_DD   0x00000025F;
 Bdisp_PutDisp_DD __asm__(
     // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x025F"
-);
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
 
-PrintPixXY __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
+    "mov &SYS_Bdisp_PutDisp_DD, r0",
+    "mov.l @r0, r0", 
     "jmp @r2",
     "nop",
     "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x18F7"
+    "nop"
 );
-Bdisp_Rectangle __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x0924"
-);
-Bdisp_Fill_VRAM __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x0275"
-);
-Locate_OS __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x1863"
-);
-GetVRAMAddress __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x1E6"
-);
+SYS_PrintMiniMini   0x00000021B;
 PrintMiniMini __asm__(
     // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x021B"
-);
-Print_OS __asm__(
-    // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
-    "jmp @r2",
-    "nop",
-    "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x01F9"
-);
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
 
-// TODO: malloc/free
+    "mov &SYS_PrintMiniMini, r0",
+    "mov.l @r0, r0", 
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop"
+);
+SYS_Locate_OS   0x000001863;
+Locate_OS __asm__(
+    // Prepare r2
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
+
+    "mov &SYS_Locate_OS, r0",
+    "mov.l @r0, r0", 
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop"
+);
+SYS_Bdisp_Fill_VRAM   0x00000275;
+Bdisp_Fill_VRAM __asm__(
+    // Prepare r2
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
+
+    "mov &SYS_Bdisp_Fill_VRAM, r0",
+    "mov.l @r0, r0", 
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop"
+);
+SYS_Bdisp_AllClr_VRAM   0x00000272;
+Bdisp_AllClr_VRAM __asm__(
+    // Prepare r2
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
+
+    "mov &SYS_Bdisp_AllClr_VRAM, r0",
+    "mov.l @r0, r0", 
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop"
+);
+SYS_Bdisp_EnableColor   0x00000921;
+Bdisp_EnableColor __asm__(
+    // Prepare r2
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
+
+    "mov &SYS_Bdisp_EnableColor, r0",
+    "mov.l @r0, r0", 
+    "jmp @r2",
+    "nop",
+    "rts",
+    "nop"
+);
+SYS_Malloc   0x00001F44;
 Malloc __asm__(
     // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
+
+    "mov &SYS_Malloc, r0",
+    "mov.l @r0, r0", 
     "jmp @r2",
     "nop",
     "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x1F44"
+    "nop"
 );
+SYS_Free   0x00001F42;
 Free __asm__(
     // Prepare r2
-    "mov.l 1f, r2",
-    "mov.l 2f, r0",           // syscall ID
+    "mov &SYS_JUMPPOINT, r2",
+    "mov.l @r2, r2", 
+
+    "mov &SYS_Free, r0",
+    "mov.l @r0, r0", 
     "jmp @r2",
     "nop",
     "rts",
-    "nop",
-    
-    ".align 4",
-    "1: .long 0x80020070",
-    "2:   .long 0x1F42"
+    "nop"
 );
 
 malloc(size) {
@@ -464,14 +383,27 @@ intrisic_div __asm__ (
     "mov     r2,r3",
     "rotcl   r3",
     "subc    r1,r1",
-    "mov     #0,r3",
+    "mov      0,r3",
     "subc    r3,r2",
     "div0s   r0,r1",
 
-    ".rept 32",
-    "rotcl   r2",
-    "div1    r0,r1",
-    ".endr",
+    // WOE! DIVISION! (fun SuperH hjinks)
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
+    "rotcl   r2", "div1    r0, r1", "rotcl   r2", "div1    r0, r1",
 
     "rotcl   r2",
     "addc    r3,r2",
@@ -482,32 +414,5 @@ intrisic_div __asm__ (
 intrisic_mod (a, b) {
     auto q;
     q = intrisic_div(a, b);
-    return (a - (b * q));
-}
-
-divu __asm__ (
-    "mov r4, r2",
-    "mov r5, r0",
-    "mov     r2,r3",
-    "rotcl   r3",
-    "subc    r1,r1",
-    "mov     #0,r3",
-    "subc    r3,r2",
-    "div0u",
-
-    ".rept 32",
-    "rotcl   r2",
-    "div1    r0,r1",
-    ".endr",
-
-    "rotcl   r2",
-    "addc    r3,r2",
-
-    "rts",
-    "mov r2, r0"
-);
-modu (a, b) {
-    auto q;
-    q = divu(a, b);
     return (a - (b * q));
 }

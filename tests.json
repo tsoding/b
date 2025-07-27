@@ -1,1628 +1,2039 @@
-{
-    "rvalue_call": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Foo\nBar\nBaz\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Foo\nBar\nBaz\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Foo\nBar\nBaz\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Foo\nBar\nBaz\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Foo\nBar\nBaz\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Foo\nBar\nBaz\n",
-            "state": "Enabled",
-            "comment": "Failed to build on record"
-        }
+[
+    {
+        "case": "rvalue_call",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "multiple-postfix": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "34  35\r\n70 419\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "34  35\n70 419\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "34  35\n70 419\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "34  35\n70 419\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "34  35\n70 419\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "34  35\r\n70 419\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "34  35\n70 419\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "34  35\n70 419\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "rvalue_call",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "ternary": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "0:\t..69\r\n42:\t..69\r\n69:\t69\r\n96:\t69..420\r\n420:\t420\r\n690:\t420..=1337\r\n1337:\t420..=1337\r\n4269:\t1337..\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "0:\t..69\r\n42:\t..69\r\n69:\t69\r\n96:\t69..420\r\n420:\t420\r\n690:\t420..=1337\r\n1337:\t420..=1337\r\n4269:\t1337..\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "rvalue_call",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "deref_assign": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "*v =   1    v=1\r\n*v |=  16   v=17\r\n*v *=  2    v=34\r\n*v +=  35   v=69\r\n*v <<= 1    v=138\r\n*v &=  127  v=10\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "*v =   1    v=1\r\n*v |=  16   v=17\r\n*v *=  2    v=34\r\n*v +=  35   v=69\r\n*v <<= 1    v=138\r\n*v &=  127  v=10\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "rvalue_call",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "asm_gas_x86_64_linux": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "0\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "uxn": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "6502": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "ilasm-mono": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        }
+    {
+        "case": "rvalue_call",
+        "target": "uxn",
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "return": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "69\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "69\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "rvalue_call",
+        "target": "6502-posix",
+        "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "asm_func_gas_x86_64_linux": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "uxn": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "6502": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "69\n",
-            "state": "Disabled",
-            "comment": ""
-        },
-        "ilasm-mono": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        }
+    {
+        "case": "rvalue_call",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Foo\nBar\nBaz\n",
+        "state": "Enabled",
+        "comment": "Failed to build on record"
     },
-    "asm_func_6502": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "uxn": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "6502": {
-            "expected_stdout": "",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Failed to build on record"
-        },
-        "ilasm-mono": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "34  35\r\n70 419\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "call_stack_args": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\r\n1 2 3 4 5 6 7 8 12 11 10\r\n1 2 3 4 5 6 7 8 12 11 10 9\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\r\n1 2 3 4 5 6 7 8 12 11 10\r\n1 2 3 4 5 6 7 8 12 11 10 9\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "34  35\n70 419\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "globals": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "foo == 0x0102030405060708: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "34  35\n70 419\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "recursion": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "10\r\n9\r\n8\r\n7\r\n6\r\n5\r\n4\r\n3\r\n2\r\n1\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "10\r\n9\r\n8\r\n7\r\n6\r\n5\r\n4\r\n3\r\n2\r\n1\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "34  35\n70 419\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "lexer": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "uxn",
+        "expected_stdout": "34  35\n70 419\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "forward-declare": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Foo\r\nBar\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Foo\nBar\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Foo\nBar\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Foo\nBar\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Foo\nBar\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Foo\r\nBar\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Foo\nBar\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Foo\nBar\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "6502-posix",
+        "expected_stdout": "34  35\r\n70 419\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "ternary-side-effect": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "ilasm-mono": {
-            "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "multiple-postfix",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "34  35\n70 419\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "compare": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "5 == 3: OK\r\n3 == 3: OK\r\n5 != 3: OK\r\n3 != 3: OK\r\n5 >= 3: OK\r\n3 >= 5: OK\r\n3 >= 3: OK\r\n3 >  3: OK\r\n5 >  3: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "5 == 3: OK\r\n3 == 3: OK\r\n5 != 3: OK\r\n3 != 3: OK\r\n5 >= 3: OK\r\n3 >= 5: OK\r\n3 >= 3: OK\r\n3 >  3: OK\r\n5 >  3: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "ternary",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "0:\t..69\r\n42:\t..69\r\n69:\t69\r\n96:\t69..420\r\n420:\t420\r\n690:\t420..=1337\r\n1337:\t420..=1337\r\n4269:\t1337..\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "literals": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "69\n16960\n64177\n",
-            "state": "Enabled",
-            "comment": "Since uxn word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
-        },
-        "6502": {
-            "expected_stdout": "69\r\n16960\r\n64177\r\n",
-            "state": "Enabled",
-            "comment": "Since 6502 word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "69\n1000000\n123456789987654321\n",
-            "state": "Enabled",
-            "comment": "TODO: libb does not currently support %lu for this platform, and the last litteral is too large to fit within a longword anyways >_>"
-        }
+    {
+        "case": "ternary",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "minus_2": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "-4\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "-4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "-4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "-4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "-4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "-4\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "-4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "-4\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "ternary",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "e": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "EEEEEEE\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "EEEEEEE\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "ternary",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "divmod": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Division:\r\n1/100 = 0\r\n-1/100 = 0\r\n100/100 = 1\r\n-100/100 = -1\r\n101/100 = 1\r\n-101/100 = -1\r\n201/100 = 2\r\n-201/100 = -2\r\n\r\nRemainder:\r\n1%100 = 1\r\n99%100 = 99\r\n100%100 = 0\r\n101%100 = 1\r\n201%100 = 1\r\n-1%100 = -1\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Division:\r\n1/100 = 0\r\n-1/100 = 0\r\n100/100 = 1\r\n-100/100 = -1\r\n101/100 = 1\r\n-101/100 = -1\r\n201/100 = 2\r\n-201/100 = -2\r\n\r\nRemainder:\r\n1%100 = 1\r\n99%100 = 99\r\n100%100 = 0\r\n101%100 = 1\r\n201%100 = 1\r\n-1%100 = -1\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "ternary",
+        "target": "uxn",
+        "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "switch": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "(69,69)    => 690: OK\r\n(420,420)  => 42: OK\r\n(420,1337) => 7331: OK\r\n(420,69)   => -2: OK\r\n(34,35)    => -1: OK\r\n------------------------------\r\n0\r\n1\r\n2\r\n3\r\n4\r\n------------------------------\r\n3\r\n4\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "(69,69)    => 690: OK\r\n(420,420)  => 42: OK\r\n(420,1337) => 7331: OK\r\n(420,69)   => -2: OK\r\n(34,35)    => -1: OK\r\n------------------------------\r\n0\r\n1\r\n2\r\n3\r\n4\r\n------------------------------\r\n3\r\n4\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "ternary",
+        "target": "6502-posix",
+        "expected_stdout": "0:\t..69\r\n42:\t..69\r\n69:\t69\r\n96:\t69..420\r\n420:\t420\r\n690:\t420..=1337\r\n1337:\t420..=1337\r\n4269:\t1337..\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "args11": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "",
-            "state": "Enabled",
-            "comment": "TODO: Stack overflow"
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "ternary",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "0:\t..69\n42:\t..69\n69:\t69\n96:\t69..420\n420:\t420\n690:\t420..=1337\n1337:\t420..=1337\n4269:\t1337..\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "negative-ivals": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "deref_assign",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "*v =   1    v=1\r\n*v |=  16   v=17\r\n*v *=  2    v=34\r\n*v +=  35   v=69\r\n*v <<= 1    v=138\r\n*v &=  127  v=10\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "ternary-assign": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "deref_assign",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "asm_6502": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "uxn": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "6502": {
-            "expected_stdout": "",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Failed to build on record"
-        },
-        "ilasm-mono": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        }
+    {
+        "case": "deref_assign",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "ref": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "x: 69 69 69 69 69\r\ny: 420 420 420 420 420\r\na: 1337\r\nxs: [13, 42]\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "x: 69 69 69 69 69\r\ny: 420 420 420 420 420\r\na: 1337\r\nxs: [13, 42]\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "deref_assign",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "vector": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "deref_assign",
+        "target": "uxn",
+        "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "args11-extrn": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\r\nExpected output is `1 2 3 4 5 6 7 8 9 10`\r\n1 2 3 4 5 6 7 8 9 10\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\r\nExpected output is `1 2 3 4 5 6 7 8 9 10`\r\n1 2 3 4 5 6 7 8 9 10\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "deref_assign",
+        "target": "6502-posix",
+        "expected_stdout": "*v =   1    v=1\r\n*v |=  16   v=17\r\n*v *=  2    v=34\r\n*v +=  35   v=69\r\n*v <<= 1    v=138\r\n*v &=  127  v=10\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "goto": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "0\r\n1\r\n2\r\n3\r\n4\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "0\n1\n2\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "0\n1\n2\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "0\n1\n2\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "0\n1\n2\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "0\r\n1\r\n2\r\n3\r\n4\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "0\n1\n2\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "0\n1\n2\n3\n4\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "deref_assign",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "*v =   1    v=1\n*v |=  16   v=17\n*v *=  2    v=34\n*v +=  35   v=69\n*v <<= 1    v=138\n*v &=  127  v=10\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "unary_priority": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "69\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "69\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "69\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "args6": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\r\nExpected output is `1 2 3 4 5`\r\n1 2 3 4 5\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\r\nExpected output is `1 2 3 4 5`\r\n1 2 3 4 5\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "0\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "stack_alloc": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "a = 1\r\nb = 2\r\nc = 3\r\n69\r\n420\r\n1337\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "a = 1\r\nb = 2\r\nc = 3\r\n69\r\n420\r\n1337\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "hello": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "HELLOOOOO\r\nHELLOOOOO\r\nHELLOOOOO\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "ilasm-mono": {
-            "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "inc_dec": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "x: 3\r\n++x: 4\r\nx++: 4\r\nx: 5\r\nx--: 5\r\n--x: 3\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "x: 3\r\n++x: 4\r\nx++: 4\r\nx: 5\r\nx--: 5\r\n--x: 3\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "upper": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "compile-overflow": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "x = 8000000000000000\r\ny = 8000000000000000\r\nz = 8000000000000000\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "The word size of this platform is too small."
-        },
-        "6502": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "The word size of this platform is too small."
-        },
-        "gas-sh4dsp-prizm": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "The word size of this platform is too small."
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "execvp-error-checking": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "OK\r\n",
-            "state": "Enabled",
-            "comment": "TODO: fix on this target"
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "OK\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "OK\n",
-            "state": "Enabled",
-            "comment": "TODO: fix on this target"
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "OK\n",
-            "state": "Enabled",
-            "comment": "TODO: fix on this target"
-        },
-        "uxn": {
-            "expected_stdout": "OK\n",
-            "state": "Disabled",
-            "comment": "Does not make sense on this platform"
-        },
-        "6502": {
-            "expected_stdout": "OK\r\n",
-            "state": "Disabled",
-            "comment": "Does not make sense on this platform"
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "OK\n",
-            "state": "Enabled",
-            "comment": "TODO: fix on this target"
-        },
-        "ilasm-mono": {
-            "expected_stdout": "",
-            "state": "Disabled",
-            "comment": "Doesn't make sense for this target"
-        }
+    {
+        "case": "asm_gas_x86_64_linux",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
     },
-    "out_of_order_funcalls": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "No forward declaration is required\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "No forward declaration is required\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "No forward declaration is required\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "No forward declaration is required\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "No forward declaration is required\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "No forward declaration is required\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "No forward declaration is required\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "ilasm-mono": {
-            "expected_stdout": "No forward declaration is required\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "0\r\n",
+        "state": "Enabled",
+        "comment": ""
     },
-    "statements": {
-        "gas-x86_64-windows": {
-            "expected_stdout": "HELO\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-linux": {
-            "expected_stdout": "HELO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-x86_64-darwin": {
-            "expected_stdout": "HELO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-linux": {
-            "expected_stdout": "HELO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "gas-aarch64-darwin": {
-            "expected_stdout": "HELO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "uxn": {
-            "expected_stdout": "HELO\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "6502": {
-            "expected_stdout": "HELO\r\n",
-            "state": "Enabled",
-            "comment": ""
-        },
-        "ilasm-mono": {
-            "expected_stdout": "HELO\n",
-            "state": "Enabled",
-            "comment": ""
-        }
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "return",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "69\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "return",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "return",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "return",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "return",
+        "target": "uxn",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "return",
+        "target": "6502-posix",
+        "expected_stdout": "69\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "return",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Disabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_linux",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "69\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Disabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },    
+    {
+        "case": "asm_func_6502",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Failed to build on record"
+    },
+    {
+        "case": "asm_func_6502",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "call_stack_args",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\r\n1 2 3 4 5 6 7 8 12 11 10\r\n1 2 3 4 5 6 7 8 12 11 10 9\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "call_stack_args",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "call_stack_args",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "call_stack_args",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "call_stack_args",
+        "target": "uxn",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "call_stack_args",
+        "target": "6502-posix",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\r\n1 2 3 4 5 6 7 8 12 11 10\r\n1 2 3 4 5 6 7 8 12 11 10 9\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "call_stack_args",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "1 2 3 4 5 6 7 8 12 11\n1 2 3 4 5 6 7 8 12 11 10\n1 2 3 4 5 6 7 8 12 11 10 9\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "uxn",
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "6502-posix",
+        "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "globals",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "foo == 0x0102030405060708: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "10\r\n9\r\n8\r\n7\r\n6\r\n5\r\n4\r\n3\r\n2\r\n1\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "uxn",
+        "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "6502-posix",
+        "expected_stdout": "10\r\n9\r\n8\r\n7\r\n6\r\n5\r\n4\r\n3\r\n2\r\n1\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "recursion",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "10\n9\n8\n7\n6\n5\n4\n3\n2\n1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "uxn",
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "6502-posix",
+        "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "lexer",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "0105 == 69: OK\n0x45 == 69: OK\n'E' == 0x45: OK\n'EF' == 0x4546: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Foo\r\nBar\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Foo\nBar\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Foo\nBar\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Foo\nBar\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "uxn",
+        "expected_stdout": "Foo\nBar\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "6502-posix",
+        "expected_stdout": "Foo\r\nBar\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "forward-declare",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Foo\nBar\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "uxn",
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "6502-posix",
+        "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-side-effect",
+        "target": "ilasm-mono",
+        "expected_stdout": "Only Foo should be printed bellow:\n  Foo\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "5 == 3: OK\r\n3 == 3: OK\r\n5 != 3: OK\r\n3 != 3: OK\r\n5 >= 3: OK\r\n3 >= 5: OK\r\n3 >= 3: OK\r\n3 >  3: OK\r\n5 >  3: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "uxn",
+        "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "6502-posix",
+        "expected_stdout": "5 == 3: OK\r\n3 == 3: OK\r\n5 != 3: OK\r\n3 != 3: OK\r\n5 >= 3: OK\r\n3 >= 5: OK\r\n3 >= 3: OK\r\n3 >  3: OK\r\n5 >  3: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compare",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "5 == 3: OK\n3 == 3: OK\n5 != 3: OK\n3 != 3: OK\n5 >= 3: OK\n3 >= 5: OK\n3 >= 3: OK\n3 >  3: OK\n5 >  3: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "literals",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "69\r\n1000000\r\n123456789987654321\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "literals",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "literals",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "literals",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "literals",
+        "target": "uxn",
+        "expected_stdout": "69\n16960\n64177\n",
+        "state": "Enabled",
+        "comment": "Since uxn word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
+    },
+    {
+        "case": "literals",
+        "target": "6502-posix",
+        "expected_stdout": "69\r\n16960\r\n64177\r\n",
+        "state": "Enabled",
+        "comment": "Since 6502 word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
+    },
+    {
+        "case": "literals",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "69\n1000000\n123456789987654321\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "-4\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "-4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "-4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "-4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "uxn",
+        "expected_stdout": "-4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "6502-posix",
+        "expected_stdout": "-4\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "minus_2",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "-4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "EEEEEEE\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "EEEEEEE\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "EEEEEEE\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "EEEEEEE\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "uxn",
+        "expected_stdout": "EEEEEEE\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "6502-posix",
+        "expected_stdout": "EEEEEEE\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "e",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "EEEEEEE\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Division:\r\n1/100 = 0\r\n-1/100 = 0\r\n100/100 = 1\r\n-100/100 = -1\r\n101/100 = 1\r\n-101/100 = -1\r\n201/100 = 2\r\n-201/100 = -2\r\n\r\nRemainder:\r\n1%100 = 1\r\n99%100 = 99\r\n100%100 = 0\r\n101%100 = 1\r\n201%100 = 1\r\n-1%100 = -1\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "uxn",
+        "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "6502-posix",
+        "expected_stdout": "Division:\r\n1/100 = 0\r\n-1/100 = 0\r\n100/100 = 1\r\n-100/100 = -1\r\n101/100 = 1\r\n-101/100 = -1\r\n201/100 = 2\r\n-201/100 = -2\r\n\r\nRemainder:\r\n1%100 = 1\r\n99%100 = 99\r\n100%100 = 0\r\n101%100 = 1\r\n201%100 = 1\r\n-1%100 = -1\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "divmod",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Division:\n1/100 = 0\n-1/100 = 0\n100/100 = 1\n-100/100 = -1\n101/100 = 1\n-101/100 = -1\n201/100 = 2\n-201/100 = -2\n\nRemainder:\n1%100 = 1\n99%100 = 99\n100%100 = 0\n101%100 = 1\n201%100 = 1\n-1%100 = -1\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "(69,69)    => 690: OK\r\n(420,420)  => 42: OK\r\n(420,1337) => 7331: OK\r\n(420,69)   => -2: OK\r\n(34,35)    => -1: OK\r\n------------------------------\r\n0\r\n1\r\n2\r\n3\r\n4\r\n------------------------------\r\n3\r\n4\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "uxn",
+        "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "6502-posix",
+        "expected_stdout": "(69,69)    => 690: OK\r\n(420,420)  => 42: OK\r\n(420,1337) => 7331: OK\r\n(420,69)   => -2: OK\r\n(34,35)    => -1: OK\r\n------------------------------\r\n0\r\n1\r\n2\r\n3\r\n4\r\n------------------------------\r\n3\r\n4\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "switch",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "(69,69)    => 690: OK\n(420,420)  => 42: OK\n(420,1337) => 7331: OK\n(420,69)   => -2: OK\n(34,35)    => -1: OK\n------------------------------\n0\n1\n2\n3\n4\n------------------------------\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\r\nExpected output is `23`\r\n23\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11",
+        "target": "uxn",
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Enabled",
+        "comment": "TODO: Stack overflow"
+    },
+    {
+        "case": "args11",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Testing how well passing 11 arguments to a function we defined works.\nExpected output is `23`\n23\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "uxn",
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "6502-posix",
+        "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "negative-ivals",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Hello, World\n-1\n-2\n-3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "uxn",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "6502-posix",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ternary-assign",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_6502",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_6502",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_6502",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_6502",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_6502",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_6502",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_6502",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Failed to build on record"
+    },
+    {
+        "case": "asm_6502",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "ref",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "x: 69 69 69 69 69\r\ny: 420 420 420 420 420\r\na: 1337\r\nxs: [13, 42]\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ref",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ref",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ref",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ref",
+        "target": "uxn",
+        "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ref",
+        "target": "6502-posix",
+        "expected_stdout": "x: 69 69 69 69 69\r\ny: 420 420 420 420 420\r\na: 1337\r\nxs: [13, 42]\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "ref",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "x: 69 69 69 69 69\ny: 420 420 420 420 420\na: 1337\nxs: [13, 42]\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "uxn",
+        "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "6502-posix",
+        "expected_stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "vector",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "34 + 35 = 69\nJust\nTesting\nGlobals\n1 => 2\n2 => 4\n3 => 6\n4 => 8\n5 => 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Testing how well passing 11 arguments works.\r\nExpected output is `1 2 3 4 5 6 7 8 9 10`\r\n1 2 3 4 5 6 7 8 9 10\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "uxn",
+        "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "6502-posix",
+        "expected_stdout": "Testing how well passing 11 arguments works.\r\nExpected output is `1 2 3 4 5 6 7 8 9 10`\r\n1 2 3 4 5 6 7 8 9 10\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args11-extrn",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Testing how well passing 11 arguments works.\nExpected output is `1 2 3 4 5 6 7 8 9 10`\n1 2 3 4 5 6 7 8 9 10\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "0\r\n1\r\n2\r\n3\r\n4\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "0\n1\n2\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "0\n1\n2\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "0\n1\n2\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "uxn",
+        "expected_stdout": "0\n1\n2\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "6502-posix",
+        "expected_stdout": "0\r\n1\r\n2\r\n3\r\n4\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "goto",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "0\n1\n2\n3\n4\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "69\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "uxn",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "6502-posix",
+        "expected_stdout": "69\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "unary_priority",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "Testing how well passing 6 arguments works.\r\nExpected output is `1 2 3 4 5`\r\n1 2 3 4 5\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "uxn",
+        "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "6502-posix",
+        "expected_stdout": "Testing how well passing 6 arguments works.\r\nExpected output is `1 2 3 4 5`\r\n1 2 3 4 5\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "args6",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "Testing how well passing 6 arguments works.\nExpected output is `1 2 3 4 5`\n1 2 3 4 5\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "a = 1\r\nb = 2\r\nc = 3\r\n69\r\n420\r\n1337\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "uxn",
+        "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "6502-posix",
+        "expected_stdout": "a = 1\r\nb = 2\r\nc = 3\r\n69\r\n420\r\n1337\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "stack_alloc",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "a = 1\nb = 2\nc = 3\n69\n420\n1337\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "HELLOOOOO\r\nHELLOOOOO\r\nHELLOOOOO\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "uxn",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "6502-posix",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "hello",
+        "target": "ilasm-mono",
+        "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "x: 3\r\n++x: 4\r\nx++: 4\r\nx: 5\r\nx--: 5\r\n--x: 3\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "uxn",
+        "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "6502-posix",
+        "expected_stdout": "x: 3\r\n++x: 4\r\nx++: 4\r\nx: 5\r\nx--: 5\r\n--x: 3\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "inc_dec",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "x: 3\n++x: 4\nx++: 4\nx: 5\nx--: 5\n--x: 3\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "uxn",
+        "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "6502-posix",
+        "expected_stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "upper",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "lower: hello, world\nUPPER: HELLO, WORLD\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compile-overflow",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "x = 8000000000000000\r\ny = 8000000000000000\r\nz = 8000000000000000\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compile-overflow",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compile-overflow",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compile-overflow",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "compile-overflow",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "The word size of this platform is too small."
+    },
+    {
+        "case": "compile-overflow",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "The word size of this platform is too small."
+    },
+    {
+        "case": "compile-overflow",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "x = 8000000000000000\ny = 8000000000000000\nz = 8000000000000000\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "OK\r\n",
+        "state": "Enabled",
+        "comment": "TODO: fix on this target"
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "OK\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "OK\n",
+        "state": "Enabled",
+        "comment": "TODO: fix on this target"
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "OK\n",
+        "state": "Enabled",
+        "comment": "TODO: fix on this target"
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "uxn",
+        "expected_stdout": "OK\n",
+        "state": "Disabled",
+        "comment": "Does not make sense on this platform"
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "6502-posix",
+        "expected_stdout": "OK\r\n",
+        "state": "Disabled",
+        "comment": "Does not make sense on this platform"
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "OK\n",
+        "state": "Enabled",
+        "comment": "TODO: fix on this target"
+    },
+    {
+        "case": "execvp-error-checking",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "No forward declaration is required\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "No forward declaration is required\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "No forward declaration is required\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "No forward declaration is required\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "uxn",
+        "expected_stdout": "No forward declaration is required\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "6502-posix",
+        "expected_stdout": "No forward declaration is required\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "No forward declaration is required\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "out_of_order_funcalls",
+        "target": "ilasm-mono",
+        "expected_stdout": "No forward declaration is required\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "HELO\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "HELO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "HELO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "HELO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "HELO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "uxn",
+        "expected_stdout": "HELO\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "6502-posix",
+        "expected_stdout": "HELO\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "statements",
+        "target": "ilasm-mono",
+        "expected_stdout": "HELO\n",
+        "state": "Enabled",
+        "comment": ""
     }
-}
+]

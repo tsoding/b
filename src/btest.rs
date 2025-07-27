@@ -9,21 +9,22 @@ pub mod crust;
 #[macro_use]
 pub mod nob;
 pub mod targets;
-pub mod runner;
 pub mod flag;
 pub mod glob;
 pub mod jim;
 pub mod jimp;
+pub mod lexer;
+pub mod codegen;
+pub mod ir;
 
 use core::ffi::*;
 use core::cmp;
 use core::mem::{zeroed, size_of};
 use core::ptr;
-use crust::*;
 use crust::libc::*;
 use nob::*;
 use targets::*;
-use runner::mos6502::{Config, DEFAULT_LOAD_OFFSET};
+use codegen::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 use glob::*;
 use jim::*;
@@ -31,68 +32,31 @@ use jimp::*;
 
 const GARBAGE_FOLDER: *const c_char = c!("./build/tests/");
 
-#[derive(Copy, Clone)]
-pub enum TestState {
-    Enabled,
-    Disabled,
-}
-
-pub unsafe fn test_state_deserialize(jimp: *mut Jimp) -> Option<TestState> {
-    jimp_string(jimp)?;
-    if strcmp((*jimp).string, c!("Enabled")) == 0 {
-        Some(TestState::Enabled)
-    } else if strcmp((*jimp).string, c!("Disabled")) == 0 {
-        Some(TestState::Disabled)
-    } else {
-        jimp_unknown_member(jimp); // TODO: jimp_unknown_member() is not appropriate here, but it works cause it reports on jimp->string
-        None
+enum_with_order! {
+    #[derive(Copy, Clone)]
+    enum TestState in TEST_STATE_ORDER {
+        Enabled,
+        Disabled,
     }
 }
 
-pub unsafe fn test_state_serialize(jim: *mut Jim, test_state: TestState) {
-    match test_state {
-        TestState::Enabled  => jim_string(jim, c!("Enabled")),
-        TestState::Disabled => jim_string(jim, c!("Disabled")),
-    }
-}
-
-#[derive(Copy, Clone)]
-pub struct TestConfig {
-    pub expected_stdout: *const c_char,
-    pub state: TestState,
-    pub comment: *const c_char,
-}
-
-pub unsafe fn test_config_serialize(jim: *mut Jim, test_config: TestConfig) {
-    jim_object_begin(jim);
-        jim_member_key(jim, c!("expected_stdout"));
-        jim_string(jim, test_config.expected_stdout);
-        jim_member_key(jim, c!("state"));
-        test_state_serialize(jim, test_config.state);
-        jim_member_key(jim, c!("comment"));
-        jim_string(jim, test_config.comment);
-    jim_object_end(jim);
-}
-
-pub unsafe fn test_config_deserialize(jimp: *mut Jimp) -> Option<TestConfig> {
-    let mut test_config: TestConfig = zeroed();
-    jimp_object_begin(jimp)?;
-    while let Some(()) = jimp_object_member(jimp) {
-        if strcmp((*jimp).string, c!("expected_stdout")) == 0 {
-            jimp_string(jimp)?;
-            test_config.expected_stdout = strdup((*jimp).string); // TODO: memory leak
-        } else if strcmp((*jimp).string, c!("state")) == 0 {
-            test_config.state = test_state_deserialize(jimp)?;
-        } else if strcmp((*jimp).string, c!("comment")) == 0 {
-            jimp_string(jimp)?;
-            test_config.comment = strdup((*jimp).string); // TODO: memory leak
-        } else {
-            jimp_unknown_member(jimp);
-            return None;
+impl TestState {
+    unsafe fn name(self) -> *const c_char {
+        match self {
+            Self::Enabled  => c!("Enabled"),
+            Self::Disabled => c!("Disabled"),
         }
     }
-    jimp_object_end(jimp)?;
-    Some(test_config)
+
+    unsafe fn from_name(name: *const c_char) -> Option<Self> {
+        for i in 0..TEST_STATE_ORDER.len() {
+            let state = (*TEST_STATE_ORDER)[i];
+            if strcmp(state.name(), name) == 0 {
+                return Some(state)
+            }
+        }
+        None
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -174,14 +138,18 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Gas_SH4_Prizm       => c!("g3a"),
         Target::Uxn                 => c!("rom"),
-        Target::Mos6502             => c!("6502"),
+        Target::Mos6502_Posix       => c!("6502"),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
         Target::ILasm_Mono          => c!("exe"),
     });
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
         cmd,
-        c!("./build/b"),
+        if cfg!(target_os = "windows") {
+            c!("./build/b.exe")
+        } else {
+            c!("./build/b")
+        },
         input_path,
         c!("-t"), target.name(),
         c!("-o"), program_path,
@@ -190,17 +158,17 @@ pub unsafe fn execute_test(
         return Some(Outcome::BuildFail);
     }
     let run_result = match target {
-        Target::Gas_AArch64_Linux   => runner::gas_aarch64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_AArch64_Darwin  => runner::gas_aarch64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Windows  => runner::gas_x86_64_windows::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Linux    => runner::gas_x86_64_linux::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_x86_64_Darwin   => runner::gas_x86_64_darwin::run(cmd, program_path, &[], Some(stdout_path)),
-        Target::Gas_SH4_Prizm       => runner::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path)),
-        Target::Uxn                 => runner::uxn::run(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-        Target::Mos6502             => runner::mos6502::run(sb, Config {
+        Target::Gas_AArch64_Linux   => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
+        Target::Gas_AArch64_Darwin  => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
+        Target::Gas_x86_64_Linux    => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
+        Target::Gas_x86_64_Windows  => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Windows),
+        Target::Gas_x86_64_Darwin   => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
+        Target::Uxn                 => codegen::uxn::run_program(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
+        Target::Gas_SH4_Prizm       => codegen::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path)),
+        Target::Mos6502_Posix       => codegen::mos6502::run_program(cmd, Config {
             load_offset: DEFAULT_LOAD_OFFSET
-        }, program_path, Some(stdout_path)),
-        Target::ILasm_Mono          => runner::ilasm_mono::run(cmd, program_path, &[], Some(stdout_path)),
+        }, program_path, &[], Some(stdout_path)),
+        Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
     };
     if let None = run_result {
         return Some(Outcome::RunFail);
@@ -219,6 +187,7 @@ pub unsafe fn execute_test(
 }
 
 pub unsafe fn usage() {
+    fprintf(stderr(), c!("B Compiler Testing Tool\n"));
     fprintf(stderr(), c!("Usage: %s [OPTIONS]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
     flag_print_options(stderr());
@@ -305,7 +274,7 @@ pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Optio
 
 pub unsafe fn record_tests(
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: *mut Bat,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], tt: *mut TestTable,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
     reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>,
@@ -320,17 +289,10 @@ pub unsafe fn record_tests(
             statuses: zeroed(),
         };
 
-        let target_test_config_table = if let Some(found) = assoc_lookup_cstr_mut(da_slice(*bat), case_name) {
-            found
-        } else {
-            da_append(bat, (case_name, zeroed()));
-            &mut (*da_last_mut(bat).unwrap()).1
-        };
-
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            if let Some(test_config) = assoc_lookup_mut(da_slice(*target_test_config_table), &target) {
-                match (*test_config).state {
+            if let Some(test_row) = test_table_find_row(tt, case_name, target) {
+                match (*test_row).state {
                     TestState::Enabled => {
                         let outcome = execute_test(
                             // Inputs
@@ -342,7 +304,7 @@ pub unsafe fn record_tests(
                             Outcome::BuildFail => da_append(&mut report.statuses, ReportStatus::BuildFail),
                             Outcome::RunFail   => da_append(&mut report.statuses, ReportStatus::RunFail),
                             Outcome::RunSuccess{stdout} => {
-                                (*test_config).expected_stdout = stdout;
+                                (*test_row).expected_stdout = stdout;
                                 da_append(&mut report.statuses, ReportStatus::OK);
                             }
                         }
@@ -358,30 +320,33 @@ pub unsafe fn record_tests(
                 )?;
                 match outcome {
                     Outcome::BuildFail => {
-                        let new_test_config = TestConfig {
+                        da_append(tt, TestRow {
+                            case_name,
+                            target,
                             expected_stdout: c!(""),
                             state: TestState::Enabled,
                             comment: c!("Failed to build on record"),
-                        };
-                        da_append(target_test_config_table, (target, new_test_config));
+                        });
                         da_append(&mut report.statuses, ReportStatus::BuildFail)
                     },
                     Outcome::RunFail => {
-                        let new_test_config = TestConfig {
+                        da_append(tt, TestRow {
+                            case_name,
+                            target,
                             expected_stdout: c!(""),
                             state: TestState::Enabled,
                             comment: c!("Failed to run on record"),
-                        };
-                        da_append(target_test_config_table, (target, new_test_config));
+                        });
                         da_append(&mut report.statuses, ReportStatus::RunFail)
                     }
                     Outcome::RunSuccess{stdout} => {
-                        let new_test_config = TestConfig {
+                        da_append(tt, TestRow {
+                            case_name,
+                            target,
                             expected_stdout: stdout,
                             state: TestState::Enabled,
                             comment: c!(""),
-                        };
-                        da_append(target_test_config_table, (target, new_test_config));
+                        });
                         da_append(&mut report.statuses, ReportStatus::OK);
                     }
                 }
@@ -438,13 +403,37 @@ pub unsafe fn generate_report(reports: *const [Report], stats_by_target: *const 
     print_legend(row_width);
 }
 
-type Bat = Array<(*const c_char, Array<(Target, TestConfig)>)>; // (Big Ass Table)
+pub struct TestRow {
+    pub case_name: *const c_char,
+    pub target: Target,
+    pub expected_stdout: *const c_char,
+    pub state: TestState,
+    pub comment: *const c_char,
+}
 
-pub unsafe fn load_bat_from_json_file_if_exists(
+type TestTable = Array<TestRow>;
+
+// TODO: test_table_find_row is O(n) which usually causes no problems on small arrays, but TestTable by the nature of the data
+// it holds has a tendency to grow rather fast (the growth is O(Cases*Targets), basically every time we add a case it adds
+// Targets amount of rows). We should invest into improving the performance of this operation rather soon. HashMap<K, V> is
+// out of the question of course since we are torturing ourselves with Crust. We could implement our own HashMap or we could
+// maybe sort this array on loading it from the JSON file and do Binary Search. Sorting has additional benefit of keeping
+// the JSON file tidy.
+pub unsafe fn test_table_find_row(tt: *mut TestTable, case_name: *const c_char, target: Target) -> Option<*mut TestRow> {
+    for i in 0..(*tt).count {
+        let row = (*tt).items.add(i);
+        if (*row).target == target && strcmp((*row).case_name, case_name) == 0 {
+            return Some(row)
+        }
+    }
+    None
+}
+
+pub unsafe fn load_tt_from_json_file_if_exists(
     json_path: *const c_char, test_folder: *const c_char,
     sb: *mut String_Builder, jimp: *mut Jimp
-) -> Option<Bat> {
-    let mut bat: Bat = zeroed();
+) -> Option<TestTable> {
+    let mut tt: TestTable = zeroed();
     if file_exists(json_path)? {
         printf(c!("INFO: loading file %s...\n"), json_path);
         // TODO: file may stop existing between file_exists() and read_entire_file() cools
@@ -456,62 +445,130 @@ pub unsafe fn load_bat_from_json_file_if_exists(
 
         jimp_begin(jimp, json_path, (*sb).items, (*sb).count);
 
-        jimp_object_begin(jimp)?;
-        while let Some(()) = jimp_object_member(jimp) {
-            let case_name = strdup((*jimp).string); // TODO: memory leak
-            let case_start = (*jimp).token_start;
-            let mut target_test_config_table: Array<(Target, TestConfig)> = zeroed();
+        jimp_array_begin(jimp)?;
+        'table: while jimp_array_item(jimp) {
+            let saved_point = (*jimp).point;
+
+            let mut case_name: *const c_char = ptr::null();
+            let mut target: Option<Target> = None;
+            let mut expected_stdout: *const c_char = c!("");
+            let mut state = TestState::Enabled;
+            let mut comment: *const c_char = c!("");
+
             jimp_object_begin(jimp)?;
-            while let Some(()) = jimp_object_member(jimp) {
-                let target_name = strdup((*jimp).string); // TODO: memory leak
-                let target = Target::by_name(target_name);
-                let target_start = (*jimp).token_start;
-                let test_config: TestConfig = test_config_deserialize(jimp)?;
-                if let Some(target) = target {
-                    da_append(&mut target_test_config_table, (target, test_config));
-                } else {
-                    (*jimp).token_start = target_start;
-                    // TODO: memory leak, we are dropping the whole test_config here
-                    jimp_diagf(jimp, c!("WARNING: Unknown target: %s. Ignoring it...\n"), target_name);
+            'row: while jimp_object_member(jimp) {
+                if strcmp((*jimp).string, c!("case")) == 0 {
+                    jimp_string(jimp)?;
+                    case_name = strdup((*jimp).string); // TODO: memory leak
+                    continue 'row;
                 }
+                if strcmp((*jimp).string, c!("target")) == 0 {
+                    jimp_string(jimp)?;
+                    if let Some(parsed_target) = Target::by_name((*jimp).string) {
+                        target = Some(parsed_target);
+                    } else {
+                        jimp_diagf(jimp, c!("WARNING: invalid target name `%s`\n"), (*jimp).string);
+                    }
+                    continue 'row;
+                }
+                if strcmp((*jimp).string, c!("expected_stdout")) == 0 {
+                    jimp_string(jimp)?;
+                    expected_stdout = strdup((*jimp).string); // TODO: memory leak
+                    continue 'row;
+                }
+                if strcmp((*jimp).string, c!("state")) == 0 {
+                    jimp_string(jimp)?;
+                    if let Some(parsed_state) = TestState::from_name((*jimp).string) {
+                        state = parsed_state;
+                    } else {
+                        jimp_diagf(jimp, c!("WARNING: invalid state name `%s`\n"), (*jimp).string);
+                    }
+                    continue 'row;
+                }
+                if strcmp((*jimp).string, c!("comment")) == 0 {
+                    jimp_string(jimp)?;
+                    comment = strdup((*jimp).string); // TODO: memory leak
+                    continue 'row;
+                }
+
+                jimp_diagf(jimp, c!("ERROR: unknown test row field `%s`\n"), (*jimp).string);
+                return None;
             }
             jimp_object_end(jimp)?;
 
-            let case_path = temp_sprintf(c!("%s/%s.b"), test_folder, case_name);
-            if file_exists(case_path)? {
-                da_append(&mut bat, (case_name, target_test_config_table));
-            } else {
-                (*jimp).token_start = case_start;
-                // TODO: memory leak, we are dropping the whole target_test_config_table here
-                jimp_diagf(jimp, c!("WARNING: %s does not exist. Ignoring %s test case...\n"), case_path, case_name);
+            let Some(target) = target else {
+                (*jimp).token_start = saved_point;
+                jimp_diagf(jimp, c!("WARNING: no valid `target` field is defined for this test row. Ignoring the entire row...\n"));
+                // TODO: memory leak, we are dropping the whole row here
+                continue 'table;
+            };
+
+            if case_name.is_null() {
+                (*jimp).token_start = saved_point;
+                jimp_diagf(jimp, c!("WARNING: no valid `case_name` field is defined for this test row. Ignoring the entire row...\n"));
+                // TODO: memory leak, we are dropping the whole row here
+                continue 'table;
             }
+
+            if let Some(_existing_row) = test_table_find_row(&mut tt, case_name, target) {
+                (*jimp).token_start = saved_point;
+                // TODO: report the location of existing_row here as a NOTE
+                // This requires keeping track of location in TestRow structure. Which requires location tracking capabilities
+                // comparable to lexer.rs but in jim/jimp.
+                jimp_diagf(jimp, c!("WARNING: Redefinition of the row case `%s`, target `%s`. We are using only the first definition. All the rest are gonna be prunned"), case_name, target.name());
+                // TODO: memory leak, we are dropping the whole row here
+                continue 'table;
+            }
+
+            let case_path = temp_sprintf(c!("%s/%s.b"), test_folder, case_name);
+            if !file_exists(case_path)? {
+                (*jimp).token_start = saved_point;
+                jimp_diagf(jimp, c!("WARNING: %s does not exist. Ignoring case `%s`, target `%s` ...\n"), case_path, case_name, target.name());
+                // TODO: memory leak, we are dropping the whole row here
+                continue 'table;
+            }
+
+            da_append(&mut tt, TestRow {
+                case_name,
+                target,
+                expected_stdout,
+                state,
+                comment,
+            });
         }
-        jimp_object_end(jimp)?;
+        jimp_array_end(jimp)?;
     } else {
         printf(c!("INFO: %s doesn't exist. Nothing to load.\n"), json_path);
     }
-    Some(bat)
+    Some(tt)
 }
 
-pub unsafe fn save_bat_to_json_file(
-    json_path: *const c_char, bat: Bat,
+pub unsafe fn save_tt_to_json_file(
+    json_path: *const c_char, tt: TestTable,
     jim: *mut Jim,
 ) -> Option<()> {
     printf(c!("INFO: saving file %s...\n"), json_path);
     jim_begin(jim);
-    jim_object_begin(jim);
-    for i in 0..bat.count {
-        let (case_name, target_test_config_table) = *bat.items.add(i);
-        jim_member_key(jim, case_name);
+    jim_array_begin(jim);
+    for i in 0..tt.count {
+        let row = tt.items.add(i);
+
         jim_object_begin(jim);
-        for j in 0..target_test_config_table.count {
-            let (target, outcome) = *target_test_config_table.items.add(j);
-            jim_member_key(jim, target.name());
-            test_config_serialize(jim, outcome);
-        }
+
+        jim_member_key(jim, c!("case"));
+        jim_string(jim, (*row).case_name);
+        jim_member_key(jim, c!("target"));
+        jim_string(jim, (*row).target.name());
+        jim_member_key(jim, c!("expected_stdout"));
+        jim_string(jim, (*row).expected_stdout);
+        jim_member_key(jim, c!("state"));
+        jim_string(jim, (*row).state.name());
+        jim_member_key(jim, c!("comment"));
+        jim_string(jim, (*row).comment);
+
         jim_object_end(jim);
     }
-    jim_object_end(jim);
+    jim_array_end(jim);
 
     write_entire_file(json_path, (*jim).sink as *const c_void, (*jim).sink_count)
 }
@@ -519,7 +576,7 @@ pub unsafe fn save_bat_to_json_file(
 pub unsafe fn replay_tests(
     // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], bat: Bat,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], mut tt: TestTable,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>, jim: *mut Jim,
 ) -> Option<()> {
@@ -534,16 +591,10 @@ pub unsafe fn replay_tests(
             statuses: zeroed(),
         };
 
-        let target_test_config_table = if let Some(found) = assoc_lookup_cstr(da_slice(bat), case_name) {
-            *found
-        } else {
-            zeroed()
-        };
-
         for j in 0..targets.len() {
             let target = (*targets)[j];
-            if let Some(test_config) = assoc_lookup(da_slice(target_test_config_table), &target) {
-                match (*test_config).state {
+            if let Some(row) = test_table_find_row(&mut tt, case_name, target) {
+                match (*row).state {
                     TestState::Enabled => {
                         let outcome = execute_test(
                             // Inputs
@@ -553,10 +604,10 @@ pub unsafe fn replay_tests(
                         )?;
                         match outcome {
                             Outcome::RunSuccess{stdout} =>
-                                if strcmp((*test_config).expected_stdout, stdout) != 0 {
+                                if strcmp((*row).expected_stdout, stdout) != 0 {
                                     fprintf(stderr(), c!("UNEXPECTED OUTCOME!!!\n"));
                                     jim_begin(jim);
-                                    jim_string(jim, (*test_config).expected_stdout);
+                                    jim_string(jim, (*row).expected_stdout);
                                     fprintf(stderr(), c!("EXPECTED: %.*s\n"), (*jim).sink_count, (*jim).sink);
                                     jim_begin(jim);
                                     jim_string(jim, stdout);
@@ -605,6 +656,7 @@ enum_with_order! {
         Record,
         Prune,
         Disable,
+        Count,
     }
 }
 
@@ -615,6 +667,7 @@ impl Action {
             Self::Record  => c!("record"),
             Self::Prune   => c!("prune"),
             Self::Disable => c!("disable"),
+            Self::Count   => c!("count"),
         }
     }
 
@@ -689,6 +742,9 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
                 Action::Disable => {
                     printf(c!("  %-*s - Disable all the tests in the selected Test Matrix slice.\n"), width, action.name());
                     printf(c!("  %-*s   You can optionally set the comment with the -%s flag.\n"), width, c!(""), flag_name(comment));
+                }
+                Action::Count => {
+                    printf(c!("  %-*s - Count the amount of rows in %s.\n"), width, action.name(), json_path);
                 }
             };
         }
@@ -817,27 +873,27 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
 
     match action {
         Action::Record => {
-            let mut bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            let mut tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             record_tests(
                 // Inputs
-                *test_folder, da_slice(cases), da_slice(targets), &mut bat,
+                *test_folder, da_slice(cases), da_slice(targets), &mut tt,
                 // Outputs
                 &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
             )?;
-            save_bat_to_json_file(json_path, bat, &mut jim)?;
+            save_tt_to_json_file(json_path, tt, &mut jim)?;
         }
         Action::Replay => {
-            let bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            let tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             replay_tests(
                 // Inputs
-                *test_folder, da_slice(cases), da_slice(targets), bat,
+                *test_folder, da_slice(cases), da_slice(targets), tt,
                 // Outputs
                 &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
             );
         }
         Action::Prune => {
-            let bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
-            save_bat_to_json_file(json_path, bat, &mut jim)?;
+            let tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            save_tt_to_json_file(json_path, tt, &mut jim)?;
         }
         Action::Disable => {
             let mut case_width = 0;
@@ -852,27 +908,21 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
                 target_width = cmp::max(target_width, strlen(target.name()));
             }
 
-            let mut bat = load_bat_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            let mut tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             for i in 0..cases.count {
                 let case_name = *cases.items.add(i);
-                let target_test_config_table =
-                    if let Some(target_test_config_table) = assoc_lookup_cstr_mut(da_slice(bat), case_name) {
-                        target_test_config_table
-                    } else {
-                        let target_test_config_table: Array<(Target, TestConfig)> = zeroed();
-                        da_append(&mut bat, (case_name, target_test_config_table));
-                        &mut (*da_last_mut(&mut bat).unwrap()).1
-                    };
                 for j in 0..targets.count {
                     let target = *targets.items.add(j);
                     printf(c!("INFO: disabling %-*s for %-*s\n"), case_width, case_name, target_width, target.name());
-                    if let Some(test_config) = assoc_lookup_mut(da_slice(*target_test_config_table), &target) {
-                        (*test_config).state = TestState::Disabled;
+                    if let Some(row) = test_table_find_row(&mut tt, case_name, target) {
+                        (*row).state = TestState::Disabled;
                         if !(*comment).is_null() {
-                            (*test_config).comment = *comment;
+                            (*row).comment = *comment;
                         }
                     } else {
-                        da_append(target_test_config_table, (target, TestConfig {
+                        da_append(&mut tt, TestRow {
+                            case_name,
+                            target,
                             expected_stdout: c!(""),
                             state: TestState::Disabled,
                             comment: if (*comment).is_null() {
@@ -880,11 +930,15 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
                             } else {
                                 *comment
                             },
-                        }));
+                        });
                     }
                 }
             }
-            save_bat_to_json_file(json_path, bat, &mut jim)?;
+            save_tt_to_json_file(json_path, tt, &mut jim)?;
+        }
+        Action::Count => {
+            let tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
+            printf(c!("%zu\n"), tt.count);
         }
     }
 

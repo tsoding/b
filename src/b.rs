@@ -32,9 +32,9 @@ pub mod flag;
 pub mod crust;
 pub mod arena;
 pub mod codegen;
-pub mod runner;
 pub mod lexer;
 pub mod targets;
+pub mod ir;
 
 use core::ffi::*;
 use core::mem::zeroed;
@@ -48,6 +48,7 @@ use crust::assoc_lookup_cstr;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
+use ir::*;
 
 pub unsafe fn expect_tokens(l: *mut Lexer, tokens: *const [Token]) -> Option<()> {
     for i in 0..tokens.len() {
@@ -214,49 +215,6 @@ pub unsafe fn define_goto_label(c: *mut Compiler, name: *const c_char, loc: Loc,
     Some(())
 }
 
-#[derive(Clone, Copy)]
-pub enum Arg {
-    /// Bogus value of an Arg.
-    ///
-    /// You should always call unreachable!() if you encounterd it in
-    /// the codegens. This value indicates a compilation error and
-    /// encountering it means that the compiler didn't fail the
-    /// compilation before passing the Compiler struct to the
-    /// codegens.
-    Bogus,
-    AutoVar(usize),
-    Deref(usize),
-    /// Reference to the autovar with the specified index
-    ///
-    /// The autovars are currently expected to be layed out in memory from right to left,
-    /// which is not particularly historically accurate.
-    /// See TODO(2025-06-05 17:45:36)
-    RefAutoVar(usize),
-    RefExternal(*const c_char),
-    External(*const c_char),
-    Literal(u64),
-    DataOffset(usize),
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum Binop {
-    Plus,
-    Minus,
-    Mult,
-    Div,
-    Mod,
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-    BitOr,
-    BitAnd,
-    BitShl,
-    BitShr,
-}
-
 // The higher the index of the row in this table the higher the precedence of the Binop
 pub const PRECEDENCE: *const [*const [Binop]] = &[
     &[Binop::BitOr],
@@ -322,47 +280,8 @@ impl Binop {
     }
 }
 
-#[derive(Clone, Copy)]
-pub struct AsmStmt {
-    line: *const c_char,
-    loc: Loc,
-}
-
-#[derive(Clone, Copy)]
-pub enum Op {
-    Bogus,
-    UnaryNot       {result: usize, arg: Arg},
-    Negate         {result: usize, arg: Arg},
-    Asm            {stmts: Array<AsmStmt>},
-    Binop          {binop: Binop, index: usize, lhs: Arg, rhs: Arg},
-    Index          {result: usize, arg: Arg, offset: Arg},
-    AutoAssign     {index: usize, arg: Arg},
-    ExternalAssign {name: *const c_char, arg: Arg},
-    Store          {index: usize, arg: Arg},
-    Funcall        {result: usize, fun: Arg, args: Array<Arg>},
-    Label          {label: usize},
-    JmpLabel       {label: usize},
-    JmpIfNotLabel  {label: usize, arg: Arg},
-    Return         {arg: Option<Arg>},
-}
-
-#[derive(Clone, Copy)]
-pub struct OpWithLocation {
-    pub opcode: Op,
-    pub loc: Loc,
-}
-
 pub unsafe fn push_opcode(opcode: Op, loc: Loc, c: *mut Compiler) {
     da_append(&mut (*c).func_body, OpWithLocation {opcode, loc});
-}
-
-pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
-    let rem = bytes%alignment;
-    if rem > 0 {
-        bytes + alignment - rem
-    } else {
-        bytes
-    }
 }
 
 /// Allocator of Auto Vars
@@ -390,16 +309,16 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 
 
 pub unsafe fn compile_string(string: *const c_char, c: *mut Compiler) -> usize {
-    let offset = (*c).data.count;
+    let offset = (*c).program.data.count;
     let string_len = strlen(string);
-    da_append_many(&mut (*c).data, slice::from_raw_parts(string as *const u8, string_len));
+    da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
     // TODO: Strings in B are not NULL-terminated.
     // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
     // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
     // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
     // libc. While the language is still in development we gonna terminate it with 0. We will make it
     // "spec complaint" later.
-    da_append(&mut (*c).data, 0); // NULL-terminator
+    da_append(&mut (*c).program.data, 0); // NULL-terminator
     offset
 }
 
@@ -767,7 +686,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
                 let name = arena::strdup(&mut (*c).arena, (*l).string);
-                name_declare_if_not_exists(&mut (*c).extrns, name);
+                name_declare_if_not_exists(&mut (*c).program.extrns, name);
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
             }
@@ -954,40 +873,10 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
 }
 
 pub unsafe fn usage() {
+    fprintf(stderr(), c!("B compiler\n"));
     fprintf(stderr(), c!("Usage: %s [OPTIONS] <inputs...> [--] [run arguments]\n"), flag_program_name());
     fprintf(stderr(), c!("OPTIONS:\n"));
     flag_print_options(stderr());
-}
-
-#[derive(Clone, Copy)]
-pub struct AsmFunc {
-    name: *const c_char,
-    name_loc: Loc,
-    body: Array<AsmStmt>,
-}
-
-#[derive(Clone, Copy)]
-pub struct Func {
-    name: *const c_char,
-    name_loc: Loc,
-    body: Array<OpWithLocation>,
-    params_count: usize,
-    auto_vars_count: usize,
-}
-
-#[derive(Clone, Copy)]
-pub struct Global {
-    name: *const c_char,
-    values: Array<ImmediateValue>,
-    is_vec: bool,
-    minimum_size: usize,
-}
-
-#[derive(Clone, Copy)]
-pub enum ImmediateValue {
-    Name(*const c_char),
-    Literal(u64),
-    DataOffset(usize),
 }
 
 #[derive(Clone, Copy)]
@@ -998,27 +887,16 @@ pub struct Switch {
 }
 
 #[derive(Clone, Copy)]
-pub struct Variadic {
-    pub loc: Loc,
-    pub fixed_args: usize,
-}
-
-#[derive(Clone, Copy)]
 pub struct Compiler {
+    pub program: Program,
     pub vars: Array<Array<Var>>,
     pub auto_vars_ator: AutoVarsAtor,
-    pub funcs: Array<Func>,
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
     pub func_gotos: Array<Goto>,
     pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
-    pub data: Array<u8>,
-    pub extrns: Array<*const c_char>,
-    pub variadics: Array<(*const c_char, Variadic)>,
-    pub globals: Array<Global>,
-    pub asm_funcs: Array<AsmFunc>,
     /// Arena into which the Compiler allocates all the names and
     /// objects that need to live for the duration of the
     /// compilation. Even if some object/names don't need to live that
@@ -1032,7 +910,7 @@ pub struct Compiler {
     pub arena: Arena,
     pub target: Target,
     pub error_count: usize,
-    pub historical: bool
+    pub historical: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -1064,7 +942,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
                 let func = arena::strdup(&mut (*c).arena, (*l).string);
                 let func_loc = (*l).loc;
-                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).variadics), func) {
+                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).program.variadics), func) {
                     // TODO: report all the duplicate variadics maybe?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
@@ -1076,7 +954,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
                     bump_error_count(c)?;
                 }
-                da_append(&mut (*c).variadics, (func, Variadic {
+                da_append(&mut (*c).program.variadics, (func, Variadic {
                     loc: func_loc,
                     fixed_args: (*l).int_number as usize,
                 }));
@@ -1087,7 +965,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
                     let name = arena::strdup(&mut (*c).arena, (*l).string);
-                    name_declare_if_not_exists(&mut (*c).extrns, name);
+                    name_declare_if_not_exists(&mut (*c).program.extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
                 }
@@ -1138,7 +1016,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             (*(*c).func_body.items.add(used_label.addr)).opcode = Op::JmpLabel {label: (*existing_label).label};
                         }
 
-                        da_append(&mut (*c).funcs, Func {
+                        da_append(&mut (*c).program.funcs, Func {
                             name,
                             name_loc,
                             body: (*c).func_body,
@@ -1154,7 +1032,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     Token::Asm => { // Assembly function definition
                         let mut body: Array<AsmStmt> = zeroed();
                         compile_asm_stmts(l, c, &mut body)?;
-                        da_append(&mut (*c).asm_funcs, AsmFunc {name, name_loc, body});
+                        da_append(&mut (*c).program.asm_funcs, AsmFunc {name, name_loc, body});
                     }
                     _ => { // Variable definition
                         (*l).parse_point = saved_point;
@@ -1213,7 +1091,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                         if !global.is_vec && global.values.count == 0 {
                             da_append(&mut global.values, ImmediateValue::Literal(0));
                         }
-                        da_append(&mut (*c).globals, global)
+                        da_append(&mut (*c).program.globals, global)
                     }
                 }
             }
@@ -1230,9 +1108,7 @@ pub unsafe fn include_path_if_exists(input_paths: &mut Array<*const c_char>, pat
     Some(())
 }
 
-pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
-    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
-
+pub unsafe fn get_file_name(path: *const c_char) -> *const c_char {
     let p = if cfg!(target_os = "windows") {
         let p1 = strrchr(path, '/' as i32);
         let p2 = strrchr(path, '\\' as i32);
@@ -1241,7 +1117,31 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
         strrchr(path, '/' as i32)
     };
 
-    let filename = if p.is_null() { path } else { p.add(1) };
+    if p.is_null() {
+        path
+    } else {
+        p.add(1)
+    }
+}
+
+pub unsafe fn get_file_ext(path: *const c_char) -> Option<*const c_char> {
+    let p = strrchr(get_file_name(path), '.' as i32);
+    if p.is_null() { return None; }
+    Some(p)
+}
+
+pub unsafe fn temp_strip_file_ext(path: *const c_char) -> *const c_char {
+    if let Some(ext) = get_file_ext(path) {
+        temp_sprintf(c!("%.*s"), strlen(path) - strlen(ext), path)
+    } else {
+        path
+    }
+}
+
+pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*mut c_char> {
+    const GARBAGE_PATH_NAME: *const c_char = c!(".build");
+
+    let filename = get_file_name(path);
     let parent_len = filename.offset_from(path);
 
     let garbage_dir = if parent_len == 0 {
@@ -1258,8 +1158,14 @@ pub unsafe fn get_garbage_base(path: *const c_char, target: Target) -> Option<*m
         write_entire_file(gitignore_path, c!("*") as *const c_void, 1)?;
     }
 
-    let base_filename = temp_strip_suffix(filename, c!(".b")).unwrap_or(filename);
-    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, base_filename, target.name()))
+    Some(temp_sprintf(c!("%s/%s.%s"), garbage_dir, filename, target.name()))
+}
+
+pub unsafe fn print_available_targets() {
+    fprintf(stderr(), c!("Compilation targets:\n"));
+    for i in 0..TARGET_ORDER.len() {
+        fprintf(stderr(), c!("    %s\n"), (*TARGET_ORDER)[i].name());
+    }
 }
 
 pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
@@ -1291,6 +1197,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
     let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
     let quiet       = flag_bool(c!("q"), false, c!("Makes the compiler yap less about what it's doing"));
+    let debug       = flag_bool(c!("g"), false, c!("Add debug information to the compiled program (if applicable for the target)"));
 
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
@@ -1328,15 +1235,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     }
 
     if strcmp(*target_name, c!("list")) == 0 {
-        fprintf(stderr(), c!("Compilation targets:\n"));
-        for i in 0..TARGET_ORDER.len() {
-            fprintf(stderr(), c!("    %s\n"), (*TARGET_ORDER)[i].name());
-        }
+        print_available_targets();
         return Some(());
     }
 
     let Some(target) = Target::by_name(*target_name) else {
         usage();
+        print_available_targets();
         log(Log_Level::ERROR, c!("Unknown target `%s`"), *target_name);
         return None;
     };
@@ -1409,24 +1314,43 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None
     }
 
-    let garbage_base = if (*output_path).is_null() {
-        get_garbage_base(*input_paths.items, target)?
-    } else {
-        get_garbage_base(*output_path, target)?
-    };
     let mut output: String_Builder = zeroed();
     let mut cmd: Cmd = zeroed();
 
     if *ir {
-        codegen::ir::generate_program(&mut output, &c);
+        dump_program(&mut output, &c.program);
         da_append(&mut output, 0);
         printf(c!("%s"), output.items);
         return Some(())
     }
 
+    let program_path = if (*output_path).is_null() {
+        temp_sprintf(c!("%s%s"), temp_strip_file_ext(*input_paths.items), target.file_ext())
+    } else {
+        if get_file_ext(*output_path).is_some() {
+            *output_path
+        } else {
+            temp_sprintf(c!("%s%s"), *output_path, target.file_ext())
+        }
+    };
+
+    // Compiler may produce lots of intermediate files (assembly,
+    // object, etc) also known collectively as "garbage". We are
+    // trying to keep the garbage away from the user in a separate
+    // folder. But not delete it, because it's important for
+    // transparency! `garbase_base` is a path that has a format
+    // "/path/to/garbase/folder/base". It must be concatenated with an
+    // approriate suffix to get a file path where the compiler can
+    // output a garbage file without worrying about colliding with
+    // other garbage files produced by compilations of other programs.
+    //
+    // Let's say you want to output an object file somewhere. The path
+    // to that object should be computed as `temp_sprintf("%s.o", garbase_base)`.
+    let garbage_base = get_garbage_base(program_path, target)?;
+
     match target {
         Target::Gas_SH4_Prizm => {
-            codegen::gas_sh4dsp_prizm::generate_program(&mut output, &c);
+            codegen::gas_sh4dsp_prizm::generate_program(&mut output, &c.program);
 
             let effective_output_path;
             if (*output_path).is_null() {
@@ -1439,357 +1363,114 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 effective_output_path = *output_path;
             }
 
+            let config = codegen::gas_sh4dsp_prizm::parse_link_flags(da_slice(*linker))?;
             let base_path = temp_strip_suffix(effective_output_path, c!(".g3a")).unwrap_or(effective_output_path);
             let output_bin_path = temp_sprintf(c!("%s.bin"), base_path);
             let output_g3a_path = temp_sprintf(c!("%s.g3a"), base_path);
             write_entire_file(output_bin_path, output.items as *const c_void, output.count)?;
             printf(c!("INFO: Generated %s\n"), output_bin_path);
-            codegen::gas_sh4dsp_prizm::generate_g3a(output_bin_path, c!("B add-in"), output_g3a_path)?;
+            codegen::gas_sh4dsp_prizm::generate_g3a(output_bin_path, config.name, output_g3a_path)?;
 
             if *run {
-                runner::gas_sh4dsp_prizm::run(&mut output, output_g3a_path, None)?;
+                codegen::gas_sh4dsp_prizm::run(&mut output, output_g3a_path, None)?;
             }
         },
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Linux);
+            codegen::gas_aarch64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
-                (c!("as"), c!("cc"))
-            } else {
-                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
-                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
-                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-
-            cmd_append! {
-                &mut cmd,
-                cc, if cfg!(target_os = "android") {
-                    c!("-fPIC")
-                } else {
-                    c!("-no-pie")
-                },
-                c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        }
-        Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Linux);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
-                // TODO: think how to approach cross-compilation
-                log(Log_Level::ERROR, c!("Cross-compilation of x86_64 linux is not supported for now"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                c!("cc"), c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_x86_64_linux::run(&mut cmd, effective_output_path, da_slice(run_args), None)?
-            }
-        }
-        Target::Gas_x86_64_Windows => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Windows);
-
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                c!("as"), output_asm_path, c!("-o") ,output_obj_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-no-pie"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_x86_64_windows::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
-            }
-        },
-        Target::Gas_x86_64_Darwin => {
-            codegen::gas_x86_64::generate_program(&mut output, &c, targets::Os::Darwin);
-
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), effective_output_path);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let (gas, cc) = (c!("as"), c!("cc"));
-
-            if !(cfg!(target_os = "macos")) {
-                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), effective_output_path);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-arch"), c!("x86_64"), c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-arch"), c!("x86_64"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            if *run {
-                runner::gas_x86_64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?;
             }
         }
         Target::Gas_AArch64_Darwin => {
-            codegen::gas_aarch64::generate_program(&mut output, &c, targets::Os::Darwin);
+            codegen::gas_aarch64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    effective_output_path = base_path;
-                } else {
-                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
-                }
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            let (gas, cc) = (c!("as"), c!("cc"));
-
-            if !(cfg!(target_os = "macos")) {
-                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
-                return None;
-            }
-
-            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-            cmd_append! {
-                &mut cmd,
-                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
-            cmd_append! {
-                &mut cmd,
-                cc, c!("-arch"), c!("arm64"), c!("-o"), effective_output_path, output_obj_path,
-            }
-            if *nostdlib {
-                cmd_append! {
-                    &mut cmd,
-                    c!("-nostdlib"),
-                }
-            }
-            for i in 0..(*linker).count {
-                cmd_append!{
-                    &mut cmd,
-                    *(*linker).items.add(i),
-                }
-            }
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::gas_aarch64_darwin::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
+            }
+        }
+        Target::Gas_x86_64_Linux => {
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+
+            if *run {
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?
+            }
+        }
+        Target::Gas_x86_64_Windows => {
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib, *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+
+            if *run {
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Windows)?;
+            }
+        },
+        Target::Gas_x86_64_Darwin => {
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+
+            if *run {
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(&mut output, &c);
+            codegen::uxn::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.rom"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
-
-            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s\n"), effective_output_path);
             if *run {
-                runner::uxn::run(&mut cmd, c!("uxnemu"), effective_output_path, da_slice(run_args), None)?;
+                codegen::uxn::run_program(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
             }
         }
-        Target::Mos6502 => {
+        Target::Mos6502_Posix => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-            codegen::mos6502::generate_program(&mut output, &c, config);
 
-            let effective_output_path;
-            if (*output_path).is_null() {
-                let input_path = *input_paths.items;
-                let base_path = temp_strip_suffix(input_path, c!(".b")).unwrap_or(input_path);
-                effective_output_path = temp_sprintf(c!("%s.6502"), base_path);
-            } else {
-                effective_output_path = *output_path;
-            }
+            codegen::mos6502::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, config, *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            write_entire_file(effective_output_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), effective_output_path);
             if *run {
-                runner::mos6502::run(&mut output, config, effective_output_path, None)?;
+                codegen::mos6502::run_program(&mut cmd, config, program_path, da_slice(run_args), None)?;
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(&mut output, &mut c);
+            codegen::ilasm_mono::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
 
-            let base_path;
-            if (*output_path).is_null() {
-                if let Some(path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
-                    base_path = path;
-                } else {
-                    base_path = *input_paths.items;
-                }
-            } else {
-                if let Some(path) = temp_strip_suffix(*output_path, c!(".exe")) {
-                    base_path = path;
-                } else {
-                    base_path = *output_path;
-                }
-            }
-
-            let effective_output_path = temp_sprintf(c!("%s.exe"), base_path);
-
-            let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
-            write_entire_file(output_asm_path, output.items as *const c_void, output.count)?;
-            log(Log_Level::INFO, c!("generated %s"), output_asm_path);
-
-            cmd_append!{
-                &mut cmd,
-                c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), effective_output_path),
-            }
-
-            if !cmd_run_sync_and_reset(&mut cmd) { return None; }
             if *run {
-                runner::ilasm_mono::run(&mut cmd, effective_output_path, da_slice(run_args), None)?;
+                codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args), None)?;
             }
         }
     }

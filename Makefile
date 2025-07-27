@@ -5,6 +5,8 @@ ifneq ($(OS),Windows_NT)
     UNAMEOS = $(shell uname)
     ifeq ($(UNAMEOS),Darwin)
 		LDFLAGS=-lc
+	else ifeq ($(shell uname -o), Android)
+		LDFLAGS=-lc
 	else
 		LDFLAGS=-lc -lgcc
     endif
@@ -15,6 +17,7 @@ CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 RSS=\
 	$(SRC)/arena.rs \
 	$(SRC)/b.rs \
+	$(SRC)/ir.rs \
 	$(SRC)/crust.rs \
 	$(SRC)/flag.rs \
 	$(SRC)/glob.rs \
@@ -28,17 +31,7 @@ RSS=\
 	$(SRC)/codegen/gas_x86_64.rs \
 	$(SRC)/codegen/mos6502.rs \
 	$(SRC)/codegen/uxn.rs \
-	$(SRC)/codegen/ir.rs \
 	$(SRC)/codegen/mod.rs \
-	$(SRC)/runner/gas_x86_64_linux.rs \
-	$(SRC)/runner/gas_x86_64_windows.rs \
-	$(SRC)/runner/gas_x86_64_darwin.rs \
-	$(SRC)/runner/gas_aarch64_linux.rs \
-	$(SRC)/runner/gas_sh4dsp_prizm.rs \
-	$(SRC)/runner/gas_aarch64_darwin.rs \
-	$(SRC)/runner/mod.rs \
-	$(SRC)/runner/mos6502.rs \
-	$(SRC)/runner/uxn.rs
 
 POSIX_OBJS=\
 	$(BUILD)/nob.posix.o \
@@ -46,7 +39,6 @@ POSIX_OBJS=\
 	$(BUILD)/glob.posix.o \
 	$(BUILD)/libc.posix.o \
 	$(BUILD)/arena.posix.o \
-	$(BUILD)/fake6502.posix.o \
 	$(BUILD)/jim.posix.o \
 	$(BUILD)/jimp.posix.o
 
@@ -56,7 +48,6 @@ MINGW32_OBJS=\
 	$(BUILD)/glob.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
-	$(BUILD)/fake6502.mingw32.o \
 	$(BUILD)/jim.mingw32.o \
 	$(BUILD)/jimp.mingw32.o
 
@@ -66,6 +57,9 @@ all: $(BUILD)/b $(BUILD)/btest
 .PHONY: test
 test: $(BUILD)/b $(BUILD)/btest
 	$(BUILD)/btest
+
+.PHONY: mingw32-all
+mingw32-all: $(BUILD)/b.exe $(BUILD)/btest.exe
 
 $(BUILD)/b: $(RSS) $(POSIX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/b.rs -o $(BUILD)/b
