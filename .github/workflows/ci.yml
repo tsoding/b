@@ -5,7 +5,7 @@ on: [push, pull_request]
 #   May require a special support for build-only mode in btest
 
 jobs:
-  ubuntu-excluding-macos:
+  ubuntu-linux-windows:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,6 +16,23 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -qq -y mono-devel clang make mingw-w64 wine64 gcc-aarch64-linux-gnu qemu-user
+      - name: Build Toolchain
+        run: |
+          make -B
+      - name: Run Tests
+        run: |
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -t *linux* -t *windows*
+  ubuntu-uxn:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y clang make
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
           make cli
@@ -24,7 +41,45 @@ jobs:
           make -B
       - name: Run Tests
         run: |
-          PATH=$(realpath uxn11/bin):$PATH ./build/btest -xt *darwin*
+          PATH=$(realpath uxn11/bin):$PATH ./build/btest -t uxn
+  ubuntu-6502-posix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y clang make
+          git clone https://github.com/bext-lang/posix6502
+          cd posix6502
+          cc -o nob nob.c
+          ./nob
+      - name: Build Toolchain
+        run: |
+          make -B
+      - name: Run Tests
+        run: |
+          PATH=$(realpath posix6502/build):$PATH ./build/btest -t 6502-posix
+  ubuntu-mono:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust
+        run: rustup toolchain install stable --no-self-update --profile minimal
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -qq -y mono-devel clang make
+      - name: Build Toolchain
+        run: |
+          make -B
+      - name: Run Tests
+        run: |
+          ./build/btest -t *ilasm-mono*
   macos-aarch64:
     runs-on: macos-latest
     steps:
