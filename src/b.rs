@@ -1192,7 +1192,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let historical  = flag_bool(c!("hist"), false, c!("Makes the compiler strictly follow the description of the B language from the \"Users' Reference to B\" by Ken Thompson as much as possible"));
     let quiet       = flag_bool(c!("q"), false, c!("Makes the compiler yap less about what it's doing"));
     let debug       = flag_bool(c!("g"), false, c!("Add debug information to the compiled program (if applicable for the target)"));
-    let dlltarget   = flag_str(c!("c"), ptr::null(), c!("Target for -t custom. Example: -t custom -c ./targets/uxn.so"))
+    let dlltarget   = flag_str(c!("c"), ptr::null(), c!("Target for -t custom. Example: -t custom -c ./targets/uxn.so"));
+
     let mut input_paths: Array<*const c_char> = zeroed();
     let mut run_args: Array<*const c_char> = zeroed();
     'args: while argc > 0 {
@@ -1444,9 +1445,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Custom => {
-            
-            let dll = dlopen(*dlltarget, 0); // TODO
-            
+            dlerror(); 
+            let dll = dlopen(*dlltarget, 0x00002); // TODO
+
+            printf(c!("%s"), dlerror());
+            if dll == ptr::null_mut() {
+                return None;
+            } 
             let generate_program: unsafe extern "C" fn(
                 *const Program, *const [*const c_char], bool, bool,
                 *mut String_Builder, *mut Cmd

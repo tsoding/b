@@ -63,10 +63,12 @@ test: $(BUILD)/b $(BUILD)/btest
 mingw32-all: $(BUILD)/b.exe $(BUILD)/btest.exe
 
 $(BUILD)/b: $(RSS) $(POSIX_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/b.rs -o $(BUILD)/b
+	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/b.rs -o $(BUILD)/b --cfg build_exe
+
 
 $(BUILD)/btest: $(SRC)/btest.rs $(RSS) $(POSIX_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/btest.rs -o $(BUILD)/btest
+	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/btest.rs -o $(BUILD)/btest --cfg build_exe
+
 
 $(BUILD)/%.posix.o: ./thirdparty/%.c | $(BUILD)
 	$(CC) -fPIC -g -c $< -o $@ $(LDFLAGS)
@@ -74,13 +76,16 @@ $(BUILD)/%.posix.o: ./thirdparty/%.c | $(BUILD)
 # Cross-compilation on POSIX to Windows using mingw32-w64
 # Invoked on demand by `make ./build/b.exe`
 $(BUILD)/b.exe: $(RSS) $(MINGW32_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b.exe
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/b.rs -o $(BUILD)/b.exe --cfg build_exe
 
 $(BUILD)/btest.exe: $(SRC)/btest.rs $(RSS) $(MINGW32_OBJS) | $(BUILD)
-	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/btest.rs -o $(BUILD)/btest.exe
+	rustc $(CRUST_FLAGS) --target x86_64-pc-windows-gnu -C link-args="$(MINGW32_OBJS) -lmingwex -lmsvcrt -lkernel32" $(SRC)/btest.rs -o $(BUILD)/btest.exe --cfg build_exe
 
 $(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
-	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@
+	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@ 
+
+$(BUILD)/libmos6502.so: src/mos6502.rs 
+	rustc src/mos6502.rs  $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)"  --crate-type=cdylib
 
 $(BUILD):
 	mkdir -pv $(BUILD)

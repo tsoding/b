@@ -116,6 +116,7 @@ pub mod libc {
         pub fn qsort(base: *mut c_void, nmemb: usize, size: usize, compar: unsafe extern "C" fn(*const c_void, *const c_void) -> c_int);
 
         pub fn dlopen(filename: *const c_char, flags: c_int) -> *mut c_void;
+        pub fn dlerror() -> *const c_char;
         pub fn dlclose(handle: *mut c_void) -> c_int;
         pub fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     }
@@ -153,6 +154,7 @@ pub unsafe fn panic_handler(info: &PanicInfo) -> ! {
     abort()
 }
 
+#[cfg(build_exe)]
 #[export_name="main"]
 pub unsafe extern "C" fn crust_entry_point(argc: i32, argv: *mut*mut c_char) -> i32 {
     match crate::main(argc, argv) {
