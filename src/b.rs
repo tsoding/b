@@ -1191,7 +1191,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
-    let nobuild  = flag_bool(c!("nobuild"), false, strdup(temp_sprintf(c!("Skip the build step. Useful in conjunction with the -%s flag when you already have a build program and just want to run it on the specified target without rebuilding it."), flag_name(run)))); // memory leak
+    let nobuild  = flag_bool(c!("nobuild"), false, strdup(temp_sprintf(c!("Skip the build step. Useful in conjunction with the -%s flag when you already have a built program and just want to run it on the specified target without rebuilding it."), flag_name(run)))); // memory leak
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
