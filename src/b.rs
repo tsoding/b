@@ -1436,7 +1436,11 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::uxn::run_program(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
+                // TODO: the exact uxn runner (`uxncli` or `uxnemu`) should be customizable via the codegen parameters (-C)
+                // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
+                // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
+                // the default runner should be `uxnemu`.
+                codegen::uxn::run_program(&mut cmd, c!("uxncli"), program_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502_Posix => {
