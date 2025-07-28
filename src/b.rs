@@ -1356,122 +1356,84 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     match target {
         Target::Gas_AArch64_Linux => {
-            if !*nobuild {
-                codegen::gas_aarch64::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Linux)?;
-            }
+            codegen::gas_aarch64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args), targets::Os::Linux,
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
         Target::Gas_AArch64_Darwin => {
-            if !*nobuild {
-                codegen::gas_aarch64::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Darwin)?;
-            }
+            codegen::gas_aarch64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args), targets::Os::Darwin,
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
         Target::Gas_x86_64_Linux => {
-            if !*nobuild {
-                codegen::gas_x86_64::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Linux)?
-            }
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args), targets::Os::Linux,
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
         Target::Gas_x86_64_Windows => {
-            if !*nobuild {
-                codegen::gas_x86_64::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Windows)?;
-            }
-        },
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args), targets::Os::Windows,
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
+        }
         Target::Gas_x86_64_Darwin => {
-            if !*nobuild {
-                codegen::gas_x86_64::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Darwin)?;
-            }
+            codegen::gas_x86_64::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args), targets::Os::Darwin,
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
         Target::Uxn => {
-            if !*nobuild {
-                codegen::uxn::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                // TODO: the exact uxn runner (`uxncli` or `uxnemu`) should be customizable via the codegen parameters (-C)
-                // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
-                // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
-                // the default runner should be `uxnemu`.
-                codegen::uxn::run_program(&mut cmd, c!("uxncli"), program_path, da_slice(run_args))?;
-            }
+            codegen::uxn::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args),
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
         Target::Mos6502_Posix => {
-            let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
-
-            if !*nobuild {
-                codegen::mos6502::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, config, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::mos6502::run_program(&mut cmd, config, program_path, da_slice(run_args))?;
-            }
+            codegen::mos6502::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args),
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
         Target::ILasm_Mono => {
-            if !*nobuild {
-                codegen::ilasm_mono::generate_program(
-                    // Inputs
-                    &c.program, program_path, garbage_base, da_slice(*linker), *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
-                )?;
-            }
-
-            if *run {
-                codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args))?;
-            }
+            codegen::ilasm_mono::generate_program(
+                // Inputs
+                &c.program, program_path, garbage_base,
+                da_slice(*linker), da_slice(run_args),
+                *nostdlib, *debug, *nobuild, *run,
+                // Temporaries
+                &mut output, &mut cmd,
+            )?;
         }
     }
     Some(())
