@@ -1493,7 +1493,7 @@ pub struct Config {
     pub load_offset: u16,
 }
 
-pub unsafe fn run_program(cmd: *mut Cmd, config: Config, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
+pub unsafe fn run_program(cmd: *mut Cmd, config: Config, program_path: *const c_char, run_args: *const [*const c_char]) -> Option<()> {
     cmd_append!{
         cmd,
         c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), config.load_offset as c_uint),
@@ -1503,13 +1503,6 @@ pub unsafe fn run_program(cmd: *mut Cmd, config: Config, program_path: *const c_
         cmd_append!(cmd, c!("--"));
         da_append_many(cmd, run_args);
     }
-    if let Some(stdout_path) = stdout_path {
-        let mut fdout = fd_open_for_write(stdout_path);
-        let mut redirect: Cmd_Redirect = zeroed();
-        redirect.fdout = &mut fdout;
-        if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-    } else {
-        if !cmd_run_sync_and_reset(cmd) { return None; }
-    }
+    if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
 }

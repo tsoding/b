@@ -571,7 +571,7 @@ pub unsafe fn generate_program(
     }
 }
 
-pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>, os: Os) -> Option<()> {
+pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], os: Os) -> Option<()> {
     match os {
         Os::Linux => {
             if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
@@ -595,15 +595,7 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
             }
 
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
             Some(())
         }
         Os::Darwin => {
@@ -626,15 +618,7 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
             }
 
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
             Some(())
         }
         Os::Windows => todo!(),

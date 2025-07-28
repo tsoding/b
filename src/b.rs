@@ -1366,7 +1366,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?;
+                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Linux)?;
             }
         }
         Target::Gas_AArch64_Darwin => {
@@ -1380,7 +1380,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
+                codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Darwin)?;
             }
         }
         Target::Gas_x86_64_Linux => {
@@ -1394,7 +1394,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Linux)?
             }
         }
         Target::Gas_x86_64_Windows => {
@@ -1408,7 +1408,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Windows)?;
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Windows)?;
             }
         },
         Target::Gas_x86_64_Darwin => {
@@ -1422,7 +1422,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
+                codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), Os::Darwin)?;
             }
         }
         Target::Uxn => {
@@ -1440,7 +1440,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
                 // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
                 // the default runner should be `uxnemu`.
-                codegen::uxn::run_program(&mut cmd, c!("uxncli"), program_path, da_slice(run_args), None)?;
+                codegen::uxn::run_program(&mut cmd, c!("uxncli"), program_path, da_slice(run_args))?;
             }
         }
         Target::Mos6502_Posix => {
@@ -1456,7 +1456,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::mos6502::run_program(&mut cmd, config, program_path, da_slice(run_args), None)?;
+                codegen::mos6502::run_program(&mut cmd, config, program_path, da_slice(run_args))?;
             }
         }
         Target::ILasm_Mono => {
@@ -1470,7 +1470,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
 
             if *run {
-                codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args), None)?;
+                codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args))?;
             }
         }
     }
