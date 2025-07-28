@@ -1431,10 +1431,10 @@ pub unsafe fn generate_entry(out: *mut String_Builder, asm: *mut Assembler) {
     instr16(out, JMP, IND, 0xFFFC);
 }
 
-pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<Config> {
-    let mut config = Config {
-        load_offset: DEFAULT_LOAD_OFFSET,
-    };
+pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<*mut Config> {
+    let mut config: *mut Config = &mut zeroed();
+
+    (*config).load_offset = DEFAULT_LOAD_OFFSET;
 
     // TODO: some sort of help flag to list all these "linker" flags for mos6502
     for i in 0..link_flags.len() {
@@ -1444,14 +1444,14 @@ pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) ->
         if sv_starts_with(flag_sv, load_offset_prefix) {
             flag_sv.data = flag_sv.data.add(load_offset_prefix.count);
             flag_sv.count += load_offset_prefix.count;
-            config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
+            (*config).load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
         } else {
             log(Log_Level::ERROR, c!("6502: Unknown linker flag: %s"), flag);
             return None
         }
     }
 
-    Some(config)
+    Some(&mut *config)
 }
 
 pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [AsmFunc],
@@ -1472,14 +1472,14 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn generate_program(
+pub unsafe fn generate_program(
     p: *const Program, args: *const [*const c_char], nostdlib: bool, debug: bool,
     out: *mut String_Builder, _cmd: *mut Cmd
-) -> *c_void {
+) -> core::option::Option<*mut c_void> {
     if debug { todo!("Debug information for 6502") }
     
-    let config = parse_config_from_link_flags(args);
+    let ret = parse_config_from_link_flags(args)?;
+    let config = *ret;
 
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
@@ -1496,10 +1496,19 @@ pub unsafe extern "C" fn generate_program(
     log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
     apply_relocations(out, data_start, &mut asm);
 
-    write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
-    log(Log_Level::INFO, c!("generated %s"), program_path);
+    write_entire_file(c!("A.6520"), (*out).items as *const c_void, (*out).count)?;
+    log(Log_Level::INFO, c!("generated A.6502"));
 
-    return config;
+    return Some(ret as *mut c_void);
+}
+
+#[export_name="generate_program"]
+pub unsafe extern "C" fn c_generate_prog(p: *const Program, args: *const *const c_char, nostdlib: bool, debug: bool, out: *mut String_Builder, _cmd: *mut Cmd) -> *mut c_void {
+    match generate_program(p, args, nostdlib, debug, out, _cmd) {
+        Some(arg) => arg,
+        None => core::ptr::null_mut(),
+    }
+
 }
 
 pub const DEFAULT_LOAD_OFFSET: u16 = 0x8000;
@@ -1582,27 +1591,31 @@ pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut
     Some(())
 }
 
-pub unsafe fn run_program
-
-#[no_mangle]
-#[export_name="run_program"]
-pub unsafe extern "C" fn c_run_program(output: *mut String_Builder, config: Config, program_path: *const c_char, stdout_path: Option<*const c_char>) -> bool {
-
+pub unsafe fn run_program(data: Config, output: *mut String_Builder, stdout_path: Option<*const c_char>) -> Option<()> {
     (*output).count = 0;
-    read_entire_file(program_path, output)?;
+    read_entire_file(c!("A.6502"), output)?;
 
     let stdout = if let Some(stdout_path) = stdout_path {
         let stdout = fopen(stdout_path, c!("wb"));
         if stdout.is_null() {
-            return false
+            return None
         }
         stdout
     } else {
         stdout()
     };
-    let result = run_impl(output, config, stdout);
+    let result = run_impl(output, data, stdout);
     if stdout_path.is_some() {
         fclose(stdout);
     }
-    true
+    result
+}
+
+#[no_mangle]
+#[export_name="run_program"]
+pub unsafe extern "C" fn c_run_program(data: *mut c_void, output: *mut String_Builder, stdout_path: *const c_char) -> bool {
+    match run_program(*(data as *mut Config), output, Some(stdout_path)) {
+        Some(()) => false,
+        None => true,
+    }
 }
