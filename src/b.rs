@@ -1191,6 +1191,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let target_name = flag_str(c!("t"), default_target_name, c!("Compilation target. Pass \"list\" to get the list of available targets."));
     let output_path = flag_str(c!("o"), ptr::null(), c!("Output path"));
     let run         = flag_bool(c!("run"), false, c!("Run the compiled program (if applicable for the target)"));
+    let nobuild  = flag_bool(c!("nobuild"), false, strdup(temp_sprintf(c!("Skip the build step. Useful in conjunction with the -%s flag when you already have a built program and just want to run it on the specified target without rebuilding it."), flag_name(run)))); // memory leak
     let help        = flag_bool(c!("help"), false, c!("Print this help message"));
     let linker      = flag_list(c!("L"), c!("Append a flag to the linker of the target platform"));
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
@@ -1256,62 +1257,64 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     c.target = target;
     c.historical = *historical;
 
-    if !*nostdlib {
-        // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
-        //   And of course we should also enable the user to append additional paths via the command line.
-        //   Paths to potentially check by default:
-        //   - Current working directory (like right now)
-        //   - Directory where the b executable resides
-        //   - Some system paths like /usr/include/libb on Linux? (Not 100% sure about this one)
-        //   - Some sort of instalation prefix? (Requires making build system more complicated)
-        //
-        //     - rexim (2025-06-12 20:56:08)
-        let libb_path = c!("./libb");
-        if !file_exists(libb_path)? {
-            log(Log_Level::ERROR, c!("No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag."), libb_path, libb_path, flag_name(nostdlib));
-            return None;
+    if !*nobuild {
+        if !*nostdlib {
+            // TODO: should be probably a list libb paths which we sequentually probe to find which one exists.
+            //   And of course we should also enable the user to append additional paths via the command line.
+            //   Paths to potentially check by default:
+            //   - Current working directory (like right now)
+            //   - Directory where the b executable resides
+            //   - Some system paths like /usr/include/libb on Linux? (Not 100% sure about this one)
+            //   - Some sort of instalation prefix? (Requires making build system more complicated)
+            //
+            //     - rexim (2025-06-12 20:56:08)
+            let libb_path = c!("./libb");
+            if !file_exists(libb_path)? {
+                log(Log_Level::ERROR, c!("No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag."), libb_path, libb_path, flag_name(nostdlib));
+                return None;
+            }
+            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
+            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
         }
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
-        include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
-    }
 
-    let mut sb: String_Builder = zeroed();
-    for i in 0..input_paths.count {
-        let input_path = *input_paths.items.add(i);
-        if i > 0 { sb_appendf(&mut sb, c!(", ")); }
-        sb_appendf(&mut sb, c!("%s"), input_path);
-    }
-    da_append(&mut sb, 0);
-    log(Log_Level::INFO, c!("compiling files %s"), sb.items);
-
-    let mut input: String_Builder = zeroed();
-
-    scope_push(&mut c.vars);          // begin global scope
-
-    for i in 0..input_paths.count {
-        let input_path = *input_paths.items.add(i);
-
-        input.count = 0;
-        read_entire_file(input_path, &mut input)?;
-
-        let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
-
-        compile_program(&mut l, &mut c)?;
-    }
-
-    for i in 0..c.used_funcs.count {
-        let used_global = *c.used_funcs.items.add(i);
-
-        if find_var_deep(&mut c.vars, used_global.name).is_null() {
-            diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
-            bump_error_count(&mut c);
+        let mut sb: String_Builder = zeroed();
+        for i in 0..input_paths.count {
+            let input_path = *input_paths.items.add(i);
+            if i > 0 { sb_appendf(&mut sb, c!(", ")); }
+            sb_appendf(&mut sb, c!("%s"), input_path);
         }
-    }
+        da_append(&mut sb, 0);
+        log(Log_Level::INFO, c!("compiling files %s"), sb.items);
 
-    scope_pop(&mut c.vars);          // end global scope
+        let mut input: String_Builder = zeroed();
 
-    if c.error_count > 0 {
-        return None
+        scope_push(&mut c.vars);          // begin global scope
+
+        for i in 0..input_paths.count {
+            let input_path = *input_paths.items.add(i);
+
+            input.count = 0;
+            read_entire_file(input_path, &mut input)?;
+
+            let mut l: Lexer = lexer::new(input_path, input.items, input.items.add(input.count), *historical);
+
+            compile_program(&mut l, &mut c)?;
+        }
+
+        for i in 0..c.used_funcs.count {
+            let used_global = *c.used_funcs.items.add(i);
+
+            if find_var_deep(&mut c.vars, used_global.name).is_null() {
+                diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
+                bump_error_count(&mut c);
+            }
+        }
+
+        scope_pop(&mut c.vars);          // end global scope
+
+        if c.error_count > 0 {
+            return None
+        }
     }
 
     let mut output: String_Builder = zeroed();
@@ -1321,6 +1324,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         dump_program(&mut output, &c.program);
         da_append(&mut output, 0);
         printf(c!("%s"), output.items);
+        if *nobuild {
+            printf(c!("You provided -%s along with -%s. So this is your IR dump of a program that was never built. Enjoy!\n"), flag_name(ir), flag_name(nobuild));
+        }
         return Some(())
     }
 
@@ -1350,98 +1356,118 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     match target {
         Target::Gas_AArch64_Linux => {
-            codegen::gas_aarch64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::gas_aarch64::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?;
             }
         }
         Target::Gas_AArch64_Darwin => {
-            codegen::gas_aarch64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::gas_aarch64::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::gas_aarch64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
             }
         }
         Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::gas_x86_64::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Linux, *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Linux)?
             }
         }
         Target::Gas_x86_64_Windows => {
-            codegen::gas_x86_64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib, *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::gas_x86_64::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Windows, *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Windows)?;
             }
         },
         Target::Gas_x86_64_Darwin => {
-            codegen::gas_x86_64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::gas_x86_64::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), targets::Os::Darwin, *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::gas_x86_64::run_program(&mut cmd, program_path, da_slice(run_args), None, Os::Darwin)?;
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::uxn::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
-                codegen::uxn::run_program(&mut cmd, c!("uxnemu"), program_path, da_slice(run_args), None)?;
+                // TODO: the exact uxn runner (`uxncli` or `uxnemu`) should be customizable via the codegen parameters (-C)
+                // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
+                // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
+                // the default runner should be `uxnemu`.
+                codegen::uxn::run_program(&mut cmd, c!("uxncli"), program_path, da_slice(run_args), None)?;
             }
         }
         Target::Mos6502_Posix => {
             let config = codegen::mos6502::parse_config_from_link_flags(da_slice(*linker))?;
 
-            codegen::mos6502::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, config, *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::mos6502::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, config, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::mos6502::run_program(&mut cmd, config, program_path, da_slice(run_args), None)?;
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base, da_slice(*linker), *debug,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::ilasm_mono::generate_program(
+                    // Inputs
+                    &c.program, program_path, garbage_base, da_slice(*linker), *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
 
             if *run {
                 codegen::ilasm_mono::run_program(&mut cmd, program_path, da_slice(run_args), None)?;
