@@ -13,6 +13,7 @@ use crate::ir::*;
 use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;
+use crate::codegen::*;
 
 // TODO: does this have to be a macro?
 macro_rules! instr_enum {
@@ -1416,29 +1417,6 @@ pub unsafe fn generate_entry(out: *mut String_Builder, asm: *mut Assembler) {
     instr16(out, JMP, IND, 0xFFFC);
 }
 
-pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<Config> {
-    let mut config = Config {
-        load_offset: DEFAULT_LOAD_OFFSET,
-    };
-
-    // TODO: some sort of help flag to list all these "linker" flags for mos6502
-    for i in 0..link_flags.len() {
-        let flag = (*link_flags)[i];
-        let mut flag_sv = sv_from_cstr(flag);
-        let load_offset_prefix = sv_from_cstr(c!("LOAD_OFFSET="));
-        if sv_starts_with(flag_sv, load_offset_prefix) {
-            flag_sv.data = flag_sv.data.add(load_offset_prefix.count);
-            flag_sv.count += load_offset_prefix.count;
-            config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
-        } else {
-            log(Log_Level::ERROR, c!("6502: Unknown linker flag: %s"), flag);
-            return None
-        }
-    }
-
-    Some(config)
-}
-
 pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [AsmFunc],
                                  asm: *mut Assembler) {
     for i in 0..asm_funcs.len() {
@@ -1457,28 +1435,58 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("mos6402 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
 pub unsafe fn generate_program(
     // Inputs
     p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
-    linker: *const [*const c_char], run_args: *const [*const c_char],
+    codegen_args: *const [*const c_char], run_args: *const [*const c_char],
     _nostdlib: bool, debug: bool, nobuild: bool, run: bool,
     // Temporaries
     out: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
-    let config = parse_config_from_link_flags(linker)?;
+    let mut help = false;
+    let mut load_offset: u64 = 0;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("LOAD_OFFSET"),
+            description: c!("Offset at which the rom is expected to be loaded"),
+            value:       ParamValue::Hex { var: &mut load_offset, default: 0x8000 },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, codegen_args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return Some(());
+    }
 
     if !nobuild {
         if debug { todo!("Debug information for 6502") }
 
         let mut asm: Assembler = zeroed();
         generate_entry(out, &mut asm);
-        asm.code_start = config.load_offset;
+        asm.code_start = load_offset as u16;
 
         generate_funcs(out, da_slice((*p).funcs), &mut asm);
         generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
         generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
 
-        let data_start = config.load_offset + (*out).count as u16;
+        let data_start = load_offset as u16 + (*out).count as u16;
         generate_data_section(out, da_slice((*p).data));
         generate_globals(out, da_slice((*p).globals), &mut asm);
 
@@ -1492,7 +1500,7 @@ pub unsafe fn generate_program(
     if run {
         cmd_append!{
             cmd,
-            c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), config.load_offset as c_uint),
+            c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), load_offset as c_uint),
             program_path
         }
         if run_args.len() > 0 {
@@ -1503,11 +1511,4 @@ pub unsafe fn generate_program(
     }
 
     Some(())
-}
-
-pub const DEFAULT_LOAD_OFFSET: u16 = 0x8000;
-
-#[derive(Clone, Copy)]
-pub struct Config {
-    pub load_offset: u16,
 }

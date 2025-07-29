@@ -4,10 +4,10 @@
 // Than pass appropriate linker flags to the b compiler.
 // # Linux
 //
-// $ b raylib.b -L -L/path/to/raylib-version_linux_amd64/lib/ -L -l:libraylib.a -L -lm -run
+// $ b raylib.b -C link-args='-L/path/to/raylib-version_linux_amd64/lib/ -l:libraylib.a -lm' -run
 //
 // # Windows mingw32-w64
-// > b -t gas-x86_64-windows raylib.b -L -L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -L -l:libraylib.a -L -lwinmm -L -lgdi32 -run
+// > b -t gas-x86_64-windows raylib.b -C link-args='-L$HOME/opt/raylib-version_win64_mingw-w64/lib/ -l:libraylib.a -lwinmm -lgdi32' -run
 
 W;
 

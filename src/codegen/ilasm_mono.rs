@@ -4,6 +4,7 @@ use crate::crust::libc::*;
 use crate::lexer::*;
 use crate::missingf;
 use crate::ir::*;
+use crate::codegen::*;
 
 pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *const [u8]) {
     match arg {
@@ -174,14 +175,40 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("ilasm_mono codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
 pub unsafe fn generate_program(
     // Inputs
     p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
-    _linker: *const [*const c_char], run_args: *const [*const c_char],
+    codegen_args: *const [*const c_char], run_args: *const [*const c_char],
     _nostdlib: bool, debug: bool, nobuild: bool, run: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, codegen_args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return Some(());
+    }
+
     if !nobuild {
         if debug { todo!("Debug information for ilasm-mono") }
 

@@ -1,10 +1,13 @@
 use core::ffi::*;
+use core::mem::zeroed;
 use core::cmp;
 use crate::ir::*;
 use crate::nob::*;
 use crate::targets::Os;
 use crate::crust::libc::*;
 use crate::lexer::Loc;
+use crate::codegen::*;
+use crate::shlex::*;
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
@@ -366,14 +369,46 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("gas_x86_64 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
 pub unsafe fn generate_program(
     // Inputs
     p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
-    linker: *const [*const c_char], run_args: *const [*const c_char], os: Os,
+    codegen_args: *const [*const c_char], run_args: *const [*const c_char], os: Os,
     nostdlib: bool, debug: bool, nobuild: bool, run: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
+    let mut help = false;
+    let mut link_args = c!("");
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("link-args"),
+            description: c!("Additional linker arguments"),
+            value:       ParamValue::String { var: &mut link_args, default: c!("") },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, codegen_args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return Some(());
+    }
+
     if !nobuild {
         match os {
             Os::Darwin => sb_appendf(output, c!(".text\n")),
@@ -416,7 +451,12 @@ pub unsafe fn generate_program(
                 if nostdlib {
                     cmd_append!(cmd, c!("-nostdlib"));
                 }
-                da_append_many(cmd, linker);
+                let mut s: Shlex = zeroed();
+                shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+                while !shlex_next(&mut s).is_null() {
+                    da_append(cmd, temp_strdup(s.string));
+                }
+                shlex_free(&mut s);
                 if !cmd_run_sync_and_reset(cmd) { return None; }
             }
             Os::Linux => {
@@ -440,7 +480,12 @@ pub unsafe fn generate_program(
                 if nostdlib {
                     cmd_append!(cmd, c!("-nostdlib"));
                 }
-                da_append_many(cmd, linker);
+                let mut s: Shlex = zeroed();
+                shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+                while !shlex_next(&mut s).is_null() {
+                    da_append(cmd, temp_strdup(s.string));
+                }
+                shlex_free(&mut s);
                 if !cmd_run_sync_and_reset(cmd) { return None; }
             }
             Os::Windows => {
@@ -458,7 +503,12 @@ pub unsafe fn generate_program(
                 if nostdlib {
                     cmd_append!(cmd, c!("-nostdlib"));
                 }
-                da_append_many(cmd, linker);
+                let mut s: Shlex = zeroed();
+                shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+                while !shlex_next(&mut s).is_null() {
+                    da_append(cmd, temp_strdup(s.string));
+                }
+                shlex_free(&mut s);
                 if !cmd_run_sync_and_reset(cmd) { return None; }
             }
         }

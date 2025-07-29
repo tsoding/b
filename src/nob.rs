@@ -122,6 +122,8 @@ pub enum Log_Level {
 extern "C" {
     #[link_name = "nob_temp_sprintf"]
     pub fn temp_sprintf(format: *const c_char, ...) -> *mut c_char;
+    #[link_name = "nob_temp_strdup"]
+    pub fn temp_strdup(cstr: *const c_char) -> *mut c_char;
     #[link_name = "nob_temp_save"]
     pub fn temp_save() -> usize;
     #[link_name = "nob_temp_rewind"]
