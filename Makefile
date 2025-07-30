@@ -38,7 +38,6 @@ POSIX_OBJS=\
 	$(BUILD)/glob.posix.o \
 	$(BUILD)/libc.posix.o \
 	$(BUILD)/arena.posix.o \
-	$(BUILD)/fake6502.posix.o \
 	$(BUILD)/jim.posix.o \
 	$(BUILD)/jimp.posix.o
 
@@ -48,7 +47,6 @@ MINGW32_OBJS=\
 	$(BUILD)/glob.mingw32.o \
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
-	$(BUILD)/fake6502.mingw32.o \
 	$(BUILD)/jim.mingw32.o \
 	$(BUILD)/jimp.mingw32.o
 
@@ -85,7 +83,7 @@ $(BUILD)/%.mingw32.o: ./thirdparty/%.c | $(BUILD)
 	x86_64-w64-mingw32-gcc -fPIC -g -c $< -o $@ 
 
 $(BUILD)/libmos6502.so: src/mos6502.rs 
-	rustc src/mos6502.rs  $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)"  --crate-type=cdylib
+	rustc src/mos6502.rs  $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)"  --crate-type=cdylib -o $(BUILD)/libmos6502.so
 
 $(BUILD):
 	mkdir -pv $(BUILD)

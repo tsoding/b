@@ -13,7 +13,7 @@ enum_with_order! {
         Gas_AArch64_Linux,
         Gas_AArch64_Darwin,
         Uxn,
-        Mos6502,
+        Mos6502_Posix,
         ILasm_Mono,
         Custom,
     }
@@ -28,7 +28,7 @@ impl Target {
             Self::Gas_AArch64_Linux  => c!(""),
             Self::Gas_AArch64_Darwin => c!(""),
             Self::Uxn                => c!(".rom"),
-            Self::Mos6502            => c!(".6502"),
+            Self::Mos6502_Posix      => c!(".6502"),
             Self::ILasm_Mono         => c!(".exe"),
             Self::Custom             => c!("") // Not Determined here
         }
@@ -42,7 +42,7 @@ impl Target {
             Self::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
             Self::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
             Self::Uxn                 => c!("uxn"),
-            Self::Mos6502             => c!("6502"),
+            Self::Mos6502_Posix       => c!("6502-posix"),
             Self::ILasm_Mono          => c!("ilasm-mono"),
             Self::Custom              => c!("custom")
         }

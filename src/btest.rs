@@ -13,9 +13,6 @@ pub mod flag;
 pub mod glob;
 pub mod jim;
 pub mod jimp;
-pub mod lexer;
-pub mod codegen;
-pub mod ir;
 
 use core::ffi::*;
 use core::cmp;
@@ -24,7 +21,6 @@ use core::ptr;
 use crust::libc::*;
 use nob::*;
 use targets::*;
-use codegen::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 use glob::*;
 use jim::*;
@@ -137,7 +133,7 @@ pub unsafe fn execute_test(
         Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
         Target::Gas_x86_64_Windows  => c!("exe"),
         Target::Uxn                 => c!("rom"),
-        Target::Mos6502             => c!("6502"),
+        Target::Mos6502_Posix       => c!("6502"),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
         Target::ILasm_Mono          => c!("exe"),
     });
@@ -156,25 +152,32 @@ pub unsafe fn execute_test(
     if !cmd_run_sync_and_reset(cmd) {
         return Some(Outcome::BuildFail);
     }
-    let run_result = match target {
-        Target::Gas_AArch64_Linux   => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
-        Target::Gas_AArch64_Darwin  => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
-        Target::Gas_x86_64_Linux    => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
-        Target::Gas_x86_64_Windows  => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Windows),
-        Target::Gas_x86_64_Darwin   => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
-        Target::Uxn                 => codegen::uxn::run_program(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-        Target::Mos6502             => codegen::mos6502::run_program(sb, Config {
-            load_offset: DEFAULT_LOAD_OFFSET
-        }, program_path, Some(stdout_path)),
-        Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
-    };
+
+    cmd_append! {
+        cmd,
+        if cfg!(target_os = "windows") {
+            c!("./build/b.exe")
+        } else {
+            c!("./build/b")
+        },
+        input_path,
+        c!("-t"), target.name(),
+        c!("-o"), program_path,
+        c!("-q"),
+        c!("-nobuild"),
+        c!("-run"),
+    }
+    let mut fdout = fd_open_for_write(stdout_path);
+    let mut redirect: Cmd_Redirect = zeroed();
+    redirect.fdout = &mut fdout;
+    let run_ok = cmd_run_sync_redirect_and_reset(cmd, redirect);
 
     (*sb).count = 0;
     read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.
     da_append(sb, 0);                   // NULL-terminating the stdout
     printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
 
-    if run_result.is_none() {
+    if !run_ok {
         Some(Outcome::RunFail)
     } else {
         Some(Outcome::RunSuccess{stdout: strdup((*sb).items)}) // TODO: memory leak
@@ -463,10 +466,6 @@ pub unsafe fn load_tt_from_json_file_if_exists(
                         target = Some(parsed_target);
                     } else {
                         jimp_diagf(jimp, c!("WARNING: invalid target name `%s`\n"), (*jimp).string);
-                        jimp_diagf(jimp, c!("NOTE: Expected target values are:\n"));
-                        for i in 0..TARGET_ORDER.len() {
-                            jimp_diagf(jimp, c!("NOTE:  %s\n"), (*TARGET_ORDER)[i]);
-                        }
                     }
                     continue 'row;
                 }
@@ -481,10 +480,6 @@ pub unsafe fn load_tt_from_json_file_if_exists(
                         state = parsed_state;
                     } else {
                         jimp_diagf(jimp, c!("WARNING: invalid state name `%s`\n"), (*jimp).string);
-                        jimp_diagf(jimp, c!("NOTE: Expected state values are:\n"));
-                        for i in 0..TEST_STATE_ORDER.len() {
-                            jimp_diagf(jimp, c!("NOTE:  %s\n"), (*TEST_STATE_ORDER)[i]);
-                        }
                     }
                     continue 'row;
                 }
@@ -501,14 +496,14 @@ pub unsafe fn load_tt_from_json_file_if_exists(
 
             let Some(target) = target else {
                 (*jimp).token_start = saved_point;
-                jimp_diagf(jimp, c!("ERROR: `target` is not defined for this test row. Ignoring the entire row...\n"));
+                jimp_diagf(jimp, c!("WARNING: no valid `target` field is defined for this test row. Ignoring the entire row...\n"));
                 // TODO: memory leak, we are dropping the whole row here
                 continue 'table;
             };
 
             if case_name.is_null() {
                 (*jimp).token_start = saved_point;
-                jimp_diagf(jimp, c!("ERROR: `case_name` is not defined for this test row. Ignoring the entire row...\n"));
+                jimp_diagf(jimp, c!("WARNING: no valid `case_name` field is defined for this test row. Ignoring the entire row...\n"));
                 // TODO: memory leak, we are dropping the whole row here
                 continue 'table;
             }
