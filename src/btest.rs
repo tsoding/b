@@ -168,6 +168,9 @@ pub unsafe fn execute_test(
         c!("-nobuild"),
         c!("-run"),
     }
+    if matches!(target, Target::Uxn) {
+        cmd_append!(cmd, c!("-C"), c!("runner=uxncli"));
+    }
     let mut fdout = fd_open_for_write(stdout_path);
     let mut redirect: Cmd_Redirect = zeroed();
     redirect.fdout = &mut fdout;
