@@ -1235,7 +1235,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
     if *help {
         usage();
-        return Some(());
+        return None;
     }
 
     if (*target_name).is_null() {
