@@ -1201,7 +1201,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let codegen_args = flag_list(CODEGEN_FLAG_NAME, temp_sprintf(c!("Pass an argument to the codegen of the current target selected by the -%s flag. Pass argument `-%s help` to learn more about what current codegen provides. All sorts of linker flag parameters are probably there."), flag_name(target_name), CODEGEN_FLAG_NAME));
     let linker = {
         let name = c!("L");
-        flag_list(name, temp_sprintf(c!("DEPRECATED! Append a flag to the linker of the target platform. But not every target even has a linker! For backward compatibility we transform `-%s foo -%s bar -%s ...` into `-%s link-args='foo bar ...'` but do not expect every codegen to support that. Use `-%s help` to learn more about what your current codegen supports. Expect this flag to be removed entirely in the future"), name, name, name, CODEGEN_FLAG_NAME, CODEGEN_FLAG_NAME))
+        flag_list(name, temp_sprintf(c!("DEPRECATED! Append a flag to the linker of the target platform. But not every target even has a linker! For backward compatibility we transform `-%s foo -%s bar -%s ...` into `-%s link-args='foo bar ...'` but do not expect every codegen to support that. Use `-%s help` to learn more about what your current codegen supports. Expect -%s to be removed entirely in the future."), name, name, name, CODEGEN_FLAG_NAME, CODEGEN_FLAG_NAME, name))
     };
     let nostdlib    = flag_bool(c!("nostdlib"), false, c!("Do not link with standard libraries like libb and/or libc on some platforms"));
     let ir          = flag_bool(c!("ir"), false, c!("Instead of compiling, dump the IR of the program to stdout"));
