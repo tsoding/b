@@ -1264,6 +1264,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Gas_x86_64_Darwin  => codegen::gas_x86_64::new(&mut c.arena, da_slice(*codegen_args))?,
         Target::Gas_AArch64_Linux  |
         Target::Gas_AArch64_Darwin => codegen::gas_aarch64::new(&mut c.arena, da_slice(*codegen_args))?,
+        Target::Uxn                => codegen::uxn::new(&mut c.arena, da_slice(*codegen_args))?,
         _ => ptr::null_mut(),
     };
 
@@ -1493,14 +1494,24 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::Uxn => {
-            codegen::uxn::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base,
-                da_slice(*codegen_args), da_slice(run_args),
-                *nostdlib, *debug, *nobuild, *run,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::uxn::generate_program(
+                    // Inputs
+                    gen, &c.program, program_path, garbage_base,
+                    *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
+
+            if *run {
+                codegen::uxn::run_program(
+                    // Inputs
+                    gen, program_path, da_slice(run_args),
+                    // Temporaries
+                    &mut cmd,
+                )?;
+            }
         }
         Target::Mos6502_Posix => {
             codegen::mos6502::generate_program(

@@ -1,11 +1,13 @@
 use core::ffi::*;
 use core::mem::zeroed;
+use core::ptr;
 use crate::ir::*;
 use crate::nob::*;
 use crate::crust::libc::*;
 use crate::lexer::Loc;
 use crate::missingf;
 use crate::diagf;
+use crate::arena;
 
 // UXN memory map
 // 0x0000 - 0x00ff - zero page
@@ -110,63 +112,70 @@ pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const
     }
 }
 
+pub unsafe fn new(_a: *mut arena::Arena, _args: *const [*const c_char]) -> Option<*mut c_void> {
+    Some(ptr::null_mut())
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
-    _linker: *const [*const c_char], run_args: *const [*const c_char],
-    _nostdlib: bool, debug: bool, nobuild: bool, run: bool,
+    _gen: *mut c_void, program: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
+    _nostdlib: bool, debug: bool,
     // Temporaries
-    output: *mut String_Builder, cmd: *mut Cmd,
+    output: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
-    if !nobuild {
-        if debug { todo!("Debug information for uxn") }
+    if debug { todo!("Debug information for uxn") }
 
-        let mut assembler: Assembler = zeroed();
-        assembler.data_section_label = create_label(&mut assembler);
-        // set the top of the stack
-        write_lit2(output, 0xffff);
-        write_lit_stz2(output, SP);
-        // call main or _start, _start having a priority
-        let mut main_proc = c!("main");
-        for i in 0..(*p).funcs.count {
-            let name = (*(*p).funcs.items.add(i)).name;
-            if strcmp(name, c!("_start")) == 0 {
-                main_proc = c!("_start");
-                break;
-            }
+    let mut assembler: Assembler = zeroed();
+    assembler.data_section_label = create_label(&mut assembler);
+    // set the top of the stack
+    write_lit2(output, 0xffff);
+    write_lit_stz2(output, SP);
+    // call main or _start, _start having a priority
+    let mut main_proc = c!("main");
+    for i in 0..(*program).funcs.count {
+        let name = (*(*program).funcs.items.add(i)).name;
+        if strcmp(name, c!("_start")) == 0 {
+            main_proc = c!("_start");
+            break;
         }
-        write_op(output, UxnOp::JSI);
-        write_label_rel(output, get_or_create_label_by_name(&mut assembler, main_proc), &mut assembler, 0);
-        // break out of the vector we were returned from
-        // also put this as the return address for the next vector which might be called
-        let vector_return_label = create_label(&mut assembler);
-        link_label(&mut assembler, vector_return_label, (*output).count);
-        write_op(output, UxnOp::LIT2r);
-        write_label_abs(output, vector_return_label, &mut assembler, 0);
-        write_op(output, UxnOp::BRK);
-
-        generate_funcs(output, da_slice((*p).funcs), &mut assembler);
-        generate_asm_funcs(output, da_slice((*p).asm_funcs));
-        generate_extrns(output, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), &mut assembler);
-        generate_data_section(output, da_slice((*p).data), &mut assembler);
-        generate_globals(output, da_slice((*p).globals), &mut assembler);
-
-        apply_patches(output, &mut assembler);
-
-        write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
-        log(Log_Level::INFO, c!("generated %s\n"), program_path);
     }
+    write_op(output, UxnOp::JSI);
+    write_label_rel(output, get_or_create_label_by_name(&mut assembler, main_proc), &mut assembler, 0);
+    // break out of the vector we were returned from
+    // also put this as the return address for the next vector which might be called
+    let vector_return_label = create_label(&mut assembler);
+    link_label(&mut assembler, vector_return_label, (*output).count);
+    write_op(output, UxnOp::LIT2r);
+    write_label_abs(output, vector_return_label, &mut assembler, 0);
+    write_op(output, UxnOp::BRK);
 
-    if run {
-        // TODO: the exact uxn runner (`uxncli` or `uxnemu`) should be customizable via the codegen parameters (-C)
-        // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
-        // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
-        // the default runner should be `uxnemu`.
-        cmd_append! {cmd, c!("uxncli"), program_path}
-        da_append_many(cmd, run_args);
-        if !cmd_run_sync_and_reset(cmd) { return None; }
-    }
+    generate_funcs(output, da_slice((*program).funcs), &mut assembler);
+    generate_asm_funcs(output, da_slice((*program).asm_funcs));
+    generate_extrns(output, da_slice((*program).extrns), da_slice((*program).funcs), da_slice((*program).globals), &mut assembler);
+    generate_data_section(output, da_slice((*program).data), &mut assembler);
+    generate_globals(output, da_slice((*program).globals), &mut assembler);
 
+    apply_patches(output, &mut assembler);
+
+    write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s\n"), program_path);
+
+    Some(())
+}
+
+pub unsafe fn run_program(
+    // Inputs
+    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    // TODO: the exact uxn runner (`uxncli` or `uxnemu`) should be customizable via the codegen parameters (-C)
+    // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
+    // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
+    // the default runner should be `uxnemu`.
+    cmd_append! {cmd, c!("uxncli"), program_path}
+    da_append_many(cmd, run_args);
+    if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
 }
 
