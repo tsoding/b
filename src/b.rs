@@ -35,6 +35,7 @@ pub mod codegen;
 pub mod lexer;
 pub mod targets;
 pub mod ir;
+pub mod time;
 pub mod shlex;
 
 use core::ffi::*;
@@ -50,6 +51,7 @@ use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
 use ir::*;
+use time::Instant;
 use codegen::*;
 use shlex::*;
 
@@ -1302,7 +1304,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             sb_appendf(&mut sb, c!("%s"), input_path);
         }
         da_append(&mut sb, 0);
-        log(Log_Level::INFO, c!("compiling files %s"), sb.items);
+        log(Log_Level::INFO, c!("compiling %zu files: %s"), input_paths.count, sb.items);
+
+        let compilation_start = Instant::now();
 
         let mut input: String_Builder = zeroed();
 
@@ -1324,15 +1328,17 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if find_var_deep(&mut c.vars, used_global.name).is_null() {
                 diagf!(used_global.loc, c!("ERROR: could not find name `%s`\n"), used_global.name);
-                bump_error_count(&mut c);
+                bump_error_count(&mut c)?;
             }
         }
 
         scope_pop(&mut c.vars);          // end global scope
 
         if c.error_count > 0 {
-            return None
+            return None;
         }
+
+        log(Log_Level::INFO, c!("compilation took %.3fs"), compilation_start.elapsed().as_secs_f64());
     }
 
     let mut output: String_Builder = zeroed();
