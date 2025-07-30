@@ -1,5 +1,5 @@
 // To compile this example you need to pass appropriate linker flags to the b compiler:
-// $ b 65_game_of_b.b -L -lncurses -L -lpanel -run
+// $ b 65_game_of_b.b -C link-args='-lncurses -lpanel' -run
 
 TRUE;
 FALSE;
