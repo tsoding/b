@@ -182,7 +182,28 @@ pub unsafe fn usage(params: *const [Param]) {
     print_params_help(params);
 }
 
-pub unsafe fn new(_a: *mut arena::Arena, _args: *const [*const c_char]) -> Option<*mut c_void> {
+pub unsafe fn new(_a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        fprintf(stderr(), c!("\n"));
+        fprintf(stderr(), c!("It doesn't really provide any useful parameters yet.\n"));
+        return None;
+    }
     Some(ptr::null_mut())
 }
 
