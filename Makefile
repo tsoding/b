@@ -51,7 +51,7 @@ MINGW32_OBJS=\
 	$(BUILD)/jimp.mingw32.o
 
 .PHONY: all
-all: $(BUILD)/b $(BUILD)/btest
+all: $(BUILD)/b $(BUILD)/btest $(BUILD)/libmos6502.so
 
 .PHONY: test
 test: $(BUILD)/b $(BUILD)/btest

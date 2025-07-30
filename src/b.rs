@@ -1437,22 +1437,24 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
         }
         Target::Custom => {
+            const version: usize = 1;
             dlerror(); 
             let dll = dlopen(*dlltarget, 0x00002); // TODO
 
-            printf(c!("%s"), dlerror());
             if dll == ptr::null_mut() {
+                printf(c!("%s\n"), dlerror());
                 return None;
             }
 
             let untrasmutated = dlsym(dll, c!("generate_program"));
             let err = dlerror();
             if err != ptr::null() {
-                printf(c!("Failed to get generate program from dll %s: %s"), *dlltarget, err);
+                printf(c!("Failed to get generate program from dll %s\n %s\n"), *dlltarget, err);
                 panic!();
             }
             let generate_program: unsafe extern "C" fn(
                 // Inputs
+                /* version */       usize,
                 /* program: */      *const Program,
                 /* program_path: */ *const c_char, 
                 /* garbage_base */  *const c_char,
@@ -1468,7 +1470,7 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 /* cmd    */        *mut Cmd
             ) -> bool = core::mem::transmute(untrasmutated);
             
-            if !generate_program(&c.program, program_path, garbage_base, linker, &run_args, *nostdlib, *debug, *nobuild, *run, &mut output, &mut cmd) {
+            if !generate_program(version, &c.program, program_path, garbage_base, linker, &run_args, *nostdlib, *debug, *nobuild, *run, &mut output, &mut cmd) {
                 return None;
             }
         }

@@ -1524,6 +1524,7 @@ pub unsafe fn generate_program(
 
 #[export_name="generate_program"]
 pub unsafe extern "C" fn generate_function_raw(
+    version: usize,
     // Inputs
     program: *const Program, program_path: *const c_char, garbage_base: *const c_char, 
     linker: *const Array<*const c_char>, run_args: *const Array<*const c_char>,
@@ -1531,6 +1532,7 @@ pub unsafe extern "C" fn generate_function_raw(
     // Temp
     output: *mut String_Builder,cmd: *mut Cmd
 ) -> bool {
+    assert!(version == 1);
     match generate_program(program, program_path, garbage_base, da_slice(*linker), da_slice(*run_args), nostdlib, debug, nobuild, run, output, cmd) {
         Some(()) => true,
         None => false,
