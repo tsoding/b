@@ -13,9 +13,6 @@ pub mod flag;
 pub mod glob;
 pub mod jim;
 pub mod jimp;
-pub mod lexer;
-pub mod codegen;
-pub mod ir;
 
 use core::ffi::*;
 use core::cmp;
@@ -24,7 +21,6 @@ use core::ptr;
 use crust::libc::*;
 use nob::*;
 use targets::*;
-use codegen::mos6502::{Config, DEFAULT_LOAD_OFFSET};
 use flag::*;
 use glob::*;
 use jim::*;
@@ -157,29 +153,32 @@ pub unsafe fn execute_test(
     if !cmd_run_sync_and_reset(cmd) {
         return Some(Outcome::BuildFail);
     }
-    let run_result = match target {
-        Target::Gas_AArch64_Linux   => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
-        Target::Gas_AArch64_Darwin  => codegen::gas_aarch64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
-        Target::Gas_x86_64_Linux    => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Linux),
-        Target::Gas_x86_64_Windows  => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Windows),
-        Target::Gas_x86_64_Darwin   => codegen::gas_x86_64::run_program(cmd, program_path, &[], Some(stdout_path), Os::Darwin),
-        Target::Uxn                 => codegen::uxn::run_program(cmd, c!("uxncli"), program_path, &[], Some(stdout_path)),
-        Target::Gas_SH4_Prizm       => codegen::gas_sh4dsp_prizm::run(sb, program_path, Some(stdout_path)),
-        Target::Mos6502_Posix       => codegen::mos6502::run_program(cmd, Config {
-            load_offset: DEFAULT_LOAD_OFFSET
-        }, program_path, &[], Some(stdout_path)),
-        Target::ILasm_Mono          => codegen::ilasm_mono::run_program(cmd, program_path, &[], Some(stdout_path)),
-    };
-    if let None = run_result {
-        return Some(Outcome::RunFail);
+
+    cmd_append! {
+        cmd,
+        if cfg!(target_os = "windows") {
+            c!("./build/b.exe")
+        } else {
+            c!("./build/b")
+        },
+        input_path,
+        c!("-t"), target.name(),
+        c!("-o"), program_path,
+        c!("-q"),
+        c!("-nobuild"),
+        c!("-run"),
     }
+    let mut fdout = fd_open_for_write(stdout_path);
+    let mut redirect: Cmd_Redirect = zeroed();
+    redirect.fdout = &mut fdout;
+    let run_ok = cmd_run_sync_redirect_and_reset(cmd, redirect);
 
     (*sb).count = 0;
     read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.
     da_append(sb, 0);                   // NULL-terminating the stdout
     printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
 
-    if run_result.is_none() {
+    if !run_ok {
         Some(Outcome::RunFail)
     } else {
         Some(Outcome::RunSuccess{stdout: strdup((*sb).items)}) // TODO: memory leak

@@ -478,117 +478,104 @@ macro_rules! instruction_set_matcher {
                             while isspace(*cursor as i32) != 0 && *cursor != 0 { cursor = cursor.add(1); }
                         }
                         i += 1;
-                        let _ = i;
 
-                        // Fun hack here (we stringify and check instead of doing the reasonable
-                        // thing.
-                        if strcmp(c!(stringify!($type)), c!("u8")) == 0 {
+                        // praying the rust compiler is smart enough to compare those strings at
+                        // compile time because apparently thats how you're supposed to do things
+                        // in this damn language???
+                        if stringify!($type) == "u8" {
                             // Unsigned 8-bit number
                             if let Some((v,ncursor)) = try_matchu8(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("Sext8")) == 0 {
+                        } else if stringify!($type) == "Sext8" {
                             // Signed 8-bit number
                             if let Some((v,ncursor)) = try_matchs8(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("Register")) == 0 {
+                        } else if stringify!($type) == "Register" {
                             // Register (r0-r15)
                             if let Some((v,ncursor)) = try_matchreg(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("PCRel8")) == 0 {
+                        } else if stringify!($type) == "PCRel8" {
                             // 8-bit PCRel
                             if let Some((v,ncursor)) = try_matchpcrel(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("Var")) == 0 {
+                        } else if stringify!($type) == "Var" {
                             // 8-bit PCRel
                             if let Some((v,ncursor)) = try_matchvar(cursor, symlist) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("MRegister")) == 0 {
+                        } else if stringify!($type) == "MRegister" {
                             // @Rn
                             if let Some((v,ncursor)) = try_matchmreg(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("SRegister")) == 0 {
+                        } else if stringify!($type) == "SRegister" {
                             // @-Rn
                             if let Some((v,ncursor)) = try_matchsreg(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("RegisterI")) == 0 {
+                        } else if stringify!($type) == "RegisterI" {
                             // @Rn+
                             if let Some((v,ncursor)) = try_matchregi(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("DispRM")) == 0 {
+                        } else if stringify!($type) == "DispRM" {
                             if let Some((v,ncursor)) = try_matchdisprm(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("DispRN1")) == 0 {
+                        } else if stringify!($type) == "DispRN1" {
                             if let Some((v,ncursor)) = try_matchdisprn1(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("DispRN8")) == 0 {
+                        } else if stringify!($type) == "DispRN8" {
                             if let Some((v,ncursor)) = try_matchdisprn8(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("DispR0")) == 0 {
+                        } else if stringify!($type) == "DispR0" {
                             if let Some((v,ncursor)) = try_matchdispr0(cursor) {
                                 $name = v as $type;
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("Dummy")) == 0 {
+                        } else if stringify!($type) == "Dummy" {
                             // Don't except anything (Dummy is always used when there is no
                             // arguments)
-                        } else if strcmp(c!(stringify!($type)), c!("PR")) == 0 {
+                        } else if stringify!($type) == "PR" {
                             if let Some(ncursor) = try_matchkeyword(cursor, c!("pr")) {
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("MACH")) == 0 {
+                        } else if stringify!($type) == "MACH" {
                             if let Some(ncursor) = try_matchkeyword(cursor, c!("mach")) {
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("MACL")) == 0 {
+                        } else if stringify!($type) == "MACL" {
                             if let Some(ncursor) = try_matchkeyword(cursor, c!("macl")) {
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
-                        } else if strcmp(c!(stringify!($type)), c!("R0")) == 0 {
+                        } else if stringify!($type) == "R0" {
                             if let Some(ncursor) = try_matchkeyword(cursor, c!("r0")) {
                                 cursor = ncursor;
-                                let _ = *cursor;            // Shut up, Rust!
                             } else { parsed = false; }
                         } else {
                             // ????????????????????
                         }
                     )*
+                    let _ = *cursor;                    // Used to prevent warnings on trailing
+                                                        // writes to cursor:
+                    let _ = i;                          // ... and i
                     if parsed {
                         return Some(Instruction::$instr{$($name: $name),*});
                     } 
@@ -1586,6 +1573,7 @@ pub unsafe fn read_16(addin: *const G3A, address: usize) -> u16 {
 }
 
 pub unsafe fn write_g3a(output: *mut String_Builder, addin: *const G3A) {
+    printf(c!("count=%d\n"), (*(*addin).addin).count as c_int);
     // Writing out the header
 
     // The full header is 0x7000 bytes, with a 4 byte ending checksum.
@@ -1881,13 +1869,13 @@ pub mod sh4 {
     pub unsafe fn read16(address: u32) -> u16 {
         // TODO: Alignment
         if address >= 0xFFFFF000 { printf(c!("PC=0x%08X\n"), CPU.pc); }
-        let ret = ((read(address) as u16) << 8) | (read(address + 1) as u16);
+        let ret = ((read(address) as u16) << 8) | (read(address.wrapping_add(1)) as u16);
 
         ret
     }
     pub unsafe fn read32(address: u32) -> u32 {
         // TODO: Alignment
-        let ret = ((read16(address) as u32) << 16) | (read16(address + 2) as u32);
+        let ret = ((read16(address) as u32) << 16) | (read16(address.wrapping_add(2)) as u32);
 
         if address == 0xE5200004 {
             getchar() as u32
@@ -2266,7 +2254,7 @@ pub mod sh4 {
             let rn = ((instr & 0x0F00) >> (4 * 2)) as usize;
 
             CPU.pr = read32(CPU.r[rn]);
-            CPU.r[rn] += 4;
+            CPU.r[rn] = CPU.r[rn].wrapping_add(4);
             CPU.pc += 2;
             true
         } else if (instr & 0xF000) == 0x7000 {
@@ -2562,7 +2550,6 @@ pub unsafe fn run(output: *mut String_Builder, output_path: *const c_char, stdou
         }
     }
     let code = sh4::CPU.r[0] as c_uint;
-    printf(c!("\nExited with code %d\n"), code);
     if stdout_path.is_some() {
         fclose(stream);
     }
