@@ -14,6 +14,7 @@ use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;
 use crate::codegen::*;
+use crate::arena;
 
 // TODO: does this have to be a macro?
 macro_rules! instr_enum {
@@ -1441,16 +1442,14 @@ pub unsafe fn usage(params: *const [Param]) {
     print_params_help(params);
 }
 
-pub unsafe fn generate_program(
-    // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
-    codegen_args: *const [*const c_char], run_args: *const [*const c_char],
-    _nostdlib: bool, debug: bool, nobuild: bool, run: bool,
-    // Temporaries
-    out: *mut String_Builder, cmd: *mut Cmd,
-) -> Option<()> {
+struct Mos6502 {
+    load_offset: u64,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Mos6502>(a);
+
     let mut help = false;
-    let mut load_offset: u64 = 0;
     let params = &[
         Param {
             name:        c!("help"),
@@ -1460,11 +1459,11 @@ pub unsafe fn generate_program(
         Param {
             name:        c!("LOAD_OFFSET"),
             description: c!("Offset at which the rom is expected to be loaded"),
-            value:       ParamValue::Hex { var: &mut load_offset, default: 0x8000 },
+            value:       ParamValue::Hex { var: &mut (*gen).load_offset, default: 0x8000 },
         },
     ];
 
-    if let Err(message) = parse_args(params, codegen_args) {
+    if let Err(message) = parse_args(params, args) {
         usage(params);
         log(Log_Level::ERROR, c!("%s"), message);
         return None;
@@ -1472,43 +1471,60 @@ pub unsafe fn generate_program(
 
     if help {
         usage(params);
-        return Some(());
+        return None;
     }
 
-    if !nobuild {
-        if debug { todo!("Debug information for 6502") }
+    Some(gen as *mut c_void)
+}
 
-        let mut asm: Assembler = zeroed();
-        generate_entry(out, &mut asm);
-        asm.code_start = load_offset as u16;
+pub unsafe fn generate_program(
+    // Inputs
+    gen: *mut c_void, p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
+    _nostdlib: bool, debug: bool,
+    // Temporaries
+    out: *mut String_Builder, _cmd: *mut Cmd,
+) -> Option<()> {
+    let gen = gen as *mut Mos6502;
 
-        generate_funcs(out, da_slice((*p).funcs), &mut asm);
-        generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
-        generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
+    if debug { todo!("Debug information for 6502") }
 
-        let data_start = load_offset as u16 + (*out).count as u16;
-        generate_data_section(out, da_slice((*p).data));
-        generate_globals(out, da_slice((*p).globals), &mut asm);
+    let mut asm: Assembler = zeroed();
+    generate_entry(out, &mut asm);
+    asm.code_start = (*gen).load_offset as u16;
 
-        log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
-        apply_relocations(out, data_start, &mut asm);
+    generate_funcs(out, da_slice((*p).funcs), &mut asm);
+    generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
+    generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
 
-        write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
-        log(Log_Level::INFO, c!("generated %s"), program_path);
+    let data_start = (*gen).load_offset as u16 + (*out).count as u16;
+    generate_data_section(out, da_slice((*p).data));
+    generate_globals(out, da_slice((*p).globals), &mut asm);
+
+    log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
+    apply_relocations(out, data_start, &mut asm);
+
+    write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
+    log(Log_Level::INFO, c!("generated %s"), program_path);
+
+    Some(())
+}
+
+pub unsafe fn run_program(
+    // Inputs
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    let gen = gen as *mut Mos6502;
+    cmd_append!{
+        cmd,
+        c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), (*gen).load_offset as c_uint),
+        program_path
     }
-
-    if run {
-        cmd_append!{
-            cmd,
-            c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), load_offset as c_uint),
-            program_path
-        }
-        if run_args.len() > 0 {
-            cmd_append!(cmd, c!("--"));
-            da_append_many(cmd, run_args);
-        }
-        if !cmd_run_sync_and_reset(cmd) { return None; }
+    if run_args.len() > 0 {
+        cmd_append!(cmd, c!("--"));
+        da_append_many(cmd, run_args);
     }
-
+    if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
 }
