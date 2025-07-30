@@ -1261,13 +1261,13 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let gen = match target {
         Target::Gas_x86_64_Linux   |
         Target::Gas_x86_64_Windows |
-        Target::Gas_x86_64_Darwin  => codegen::gas_x86_64::new(&mut c.arena, da_slice(*codegen_args))?,
+        Target::Gas_x86_64_Darwin  => codegen::gas_x86_64::new(&mut c.arena, da_slice(*codegen_args)),
         Target::Gas_AArch64_Linux  |
-        Target::Gas_AArch64_Darwin => codegen::gas_aarch64::new(&mut c.arena, da_slice(*codegen_args))?,
-        Target::Uxn                => codegen::uxn::new(&mut c.arena, da_slice(*codegen_args))?,
-        Target::Mos6502_Posix      => codegen::mos6502::new(&mut c.arena, da_slice(*codegen_args))?,
-        _ => ptr::null_mut(),
-    };
+        Target::Gas_AArch64_Darwin => codegen::gas_aarch64::new(&mut c.arena, da_slice(*codegen_args)),
+        Target::Uxn                => codegen::uxn::new(&mut c.arena, da_slice(*codegen_args)),
+        Target::Mos6502_Posix      => codegen::mos6502::new(&mut c.arena, da_slice(*codegen_args)),
+        Target::ILasm_Mono         => codegen::ilasm_mono::new(&mut c.arena, da_slice(*codegen_args)),
+    }?;
 
     if input_paths.count == 0 {
         usage();
@@ -1535,14 +1535,24 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             }
         }
         Target::ILasm_Mono => {
-            codegen::ilasm_mono::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base,
-                da_slice(*codegen_args), da_slice(run_args),
-                *nostdlib, *debug, *nobuild, *run,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            if !*nobuild {
+                codegen::ilasm_mono::generate_program(
+                    // Inputs
+                    gen, &c.program, program_path, garbage_base,
+                    *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
+
+            if *run {
+                codegen::ilasm_mono::run_program(
+                    // Inputs
+                    gen, program_path, da_slice(run_args),
+                    // Temporaries
+                    &mut cmd,
+                )?;
+            }
         }
     }
     Some(())
