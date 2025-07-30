@@ -29,3 +29,4 @@ uint64_t nanos_since_unspecified_epoch() {
     return NANOS_PER_SEC * ts.tv_sec + ts.tv_nsec;
 #endif // _WIN32
 }
+// TODO: Consider making this a part of https://github.com/tsoding/nob.h
