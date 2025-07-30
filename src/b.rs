@@ -1254,15 +1254,22 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         return None;
     };
 
+    let mut c: Compiler = zeroed();
+    c.target = target;
+    c.historical = *historical;
+
+    let gen = match target {
+        Target::Gas_x86_64_Linux   |
+        Target::Gas_x86_64_Windows |
+        Target::Gas_x86_64_Darwin => codegen::gas_x86_64::new(&mut c.arena, da_slice(*codegen_args))?,
+        _ => ptr::null_mut(),
+    };
+
     if input_paths.count == 0 {
         usage();
         log(Log_Level::ERROR, c!("no inputs are provided"));
         return None;
     }
-
-    let mut c: Compiler = zeroed();
-    c.target = target;
-    c.historical = *historical;
 
     if !*nobuild {
         if !*nostdlib {
@@ -1394,34 +1401,70 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
             )?;
         }
         Target::Gas_x86_64_Linux => {
-            codegen::gas_x86_64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base,
-                da_slice(*codegen_args), da_slice(run_args), targets::Os::Linux,
-                *nostdlib, *debug, *nobuild, *run,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            let os = targets::Os::Linux;
+
+            if !*nobuild {
+                codegen::gas_x86_64::generate_program(
+                    // Inputs
+                    gen, &c.program, program_path, garbage_base, os,
+                    *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
+
+            if *run {
+                codegen::gas_x86_64::run_program(
+                    // Inputs
+                    gen, program_path, da_slice(run_args), os,
+                    // Temporaries
+                    &mut cmd,
+                )?;
+            }
         }
         Target::Gas_x86_64_Windows => {
-            codegen::gas_x86_64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base,
-                da_slice(*codegen_args), da_slice(run_args), targets::Os::Windows,
-                *nostdlib, *debug, *nobuild, *run,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            let os = targets::Os::Windows;
+
+            if !*nobuild {
+                codegen::gas_x86_64::generate_program(
+                    // Inputs
+                    gen, &c.program, program_path, garbage_base, os,
+                    *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
+
+            if *run {
+                codegen::gas_x86_64::run_program(
+                    // Inputs
+                    gen, program_path, da_slice(run_args), os,
+                    // Temporaries
+                    &mut cmd,
+                )?;
+            }
         }
         Target::Gas_x86_64_Darwin => {
-            codegen::gas_x86_64::generate_program(
-                // Inputs
-                &c.program, program_path, garbage_base,
-                da_slice(*codegen_args), da_slice(run_args), targets::Os::Darwin,
-                *nostdlib, *debug, *nobuild, *run,
-                // Temporaries
-                &mut output, &mut cmd,
-            )?;
+            let os = targets::Os::Darwin;
+
+            if !*nobuild {
+                codegen::gas_x86_64::generate_program(
+                    // Inputs
+                    gen, &c.program, program_path, garbage_base, os,
+                    *nostdlib, *debug,
+                    // Temporaries
+                    &mut output, &mut cmd,
+                )?;
+            }
+
+            if *run {
+                codegen::gas_x86_64::run_program(
+                    // Inputs
+                    gen, program_path, da_slice(run_args), os,
+                    // Temporaries
+                    &mut cmd,
+                )?;
+            }
         }
         Target::Uxn => {
             codegen::uxn::generate_program(
