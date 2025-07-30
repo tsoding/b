@@ -13,6 +13,8 @@ use crate::ir::*;
 use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;
+use crate::codegen::*;
+use crate::arena;
 
 // TODO: does this have to be a macro?
 macro_rules! instr_enum {
@@ -1416,29 +1418,6 @@ pub unsafe fn generate_entry(out: *mut String_Builder, asm: *mut Assembler) {
     instr16(out, JMP, IND, 0xFFFC);
 }
 
-pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<Config> {
-    let mut config = Config {
-        load_offset: DEFAULT_LOAD_OFFSET,
-    };
-
-    // TODO: some sort of help flag to list all these "linker" flags for mos6502
-    for i in 0..link_flags.len() {
-        let flag = (*link_flags)[i];
-        let mut flag_sv = sv_from_cstr(flag);
-        let load_offset_prefix = sv_from_cstr(c!("LOAD_OFFSET="));
-        if sv_starts_with(flag_sv, load_offset_prefix) {
-            flag_sv.data = flag_sv.data.add(load_offset_prefix.count);
-            flag_sv.count += load_offset_prefix.count;
-            config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
-        } else {
-            log(Log_Level::ERROR, c!("6502: Unknown linker flag: %s"), flag);
-            return None
-        }
-    }
-
-    Some(config)
-}
-
 pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [AsmFunc],
                                  asm: *mut Assembler) {
     for i in 0..asm_funcs.len() {
@@ -1457,57 +1436,95 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("mos6402 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+struct Mos6502 {
+    load_offset: u64,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Mos6502>(a);
+
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("LOAD_OFFSET"),
+            description: c!("Offset at which the rom is expected to be loaded"),
+            value:       ParamValue::Hex { var: &mut (*gen).load_offset, default: 0x8000 },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
-    linker: *const [*const c_char], run_args: *const [*const c_char],
-    _nostdlib: bool, debug: bool, nobuild: bool, run: bool,
+    gen: *mut c_void, p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
+    _nostdlib: bool, debug: bool,
     // Temporaries
-    out: *mut String_Builder, cmd: *mut Cmd,
+    out: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
-    let config = parse_config_from_link_flags(linker)?;
+    let gen = gen as *mut Mos6502;
 
-    if !nobuild {
-        if debug { todo!("Debug information for 6502") }
+    if debug { todo!("Debug information for 6502") }
 
-        let mut asm: Assembler = zeroed();
-        generate_entry(out, &mut asm);
-        asm.code_start = config.load_offset;
+    let mut asm: Assembler = zeroed();
+    generate_entry(out, &mut asm);
+    asm.code_start = (*gen).load_offset as u16;
 
-        generate_funcs(out, da_slice((*p).funcs), &mut asm);
-        generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
-        generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
+    generate_funcs(out, da_slice((*p).funcs), &mut asm);
+    generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
+    generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
 
-        let data_start = config.load_offset + (*out).count as u16;
-        generate_data_section(out, da_slice((*p).data));
-        generate_globals(out, da_slice((*p).globals), &mut asm);
+    let data_start = (*gen).load_offset as u16 + (*out).count as u16;
+    generate_data_section(out, da_slice((*p).data));
+    generate_globals(out, da_slice((*p).globals), &mut asm);
 
-        log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
-        apply_relocations(out, data_start, &mut asm);
+    log(Log_Level::INFO, c!("Generated size: 0x%x"), (*out).count as c_uint);
+    apply_relocations(out, data_start, &mut asm);
 
-        write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
-        log(Log_Level::INFO, c!("generated %s"), program_path);
-    }
-
-    if run {
-        cmd_append!{
-            cmd,
-            c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), config.load_offset as c_uint),
-            program_path
-        }
-        if run_args.len() > 0 {
-            cmd_append!(cmd, c!("--"));
-            da_append_many(cmd, run_args);
-        }
-        if !cmd_run_sync_and_reset(cmd) { return None; }
-    }
+    write_entire_file(program_path, (*out).items as *const c_void, (*out).count)?;
+    log(Log_Level::INFO, c!("generated %s"), program_path);
 
     Some(())
 }
 
-pub const DEFAULT_LOAD_OFFSET: u16 = 0x8000;
-
-#[derive(Clone, Copy)]
-pub struct Config {
-    pub load_offset: u16,
+pub unsafe fn run_program(
+    // Inputs
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    let gen = gen as *mut Mos6502;
+    cmd_append!{
+        cmd,
+        c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), (*gen).load_offset as c_uint),
+        program_path
+    }
+    if run_args.len() > 0 {
+        cmd_append!(cmd, c!("--"));
+        da_append_many(cmd, run_args);
+    }
+    if !cmd_run_sync_and_reset(cmd) { return None; }
+    Some(())
 }

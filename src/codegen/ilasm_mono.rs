@@ -4,6 +4,8 @@ use crate::crust::libc::*;
 use crate::lexer::*;
 use crate::missingf;
 use crate::ir::*;
+use crate::codegen::*;
+use crate::arena;
 
 pub unsafe fn load_arg(loc: Loc, arg: Arg, output: *mut String_Builder, data: *const [u8]) {
     match arg {
@@ -174,51 +176,85 @@ pub unsafe fn generate_funcs(funcs: *const [Func], output: *mut String_Builder, 
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("ilasm_mono codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+pub unsafe fn new(_a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        fprintf(stderr(), c!("\n"));
+        fprintf(stderr(), c!("It doesn't really provide any useful parameters yet.\n"));
+        return None;
+    }
+    Some(ptr::null_mut())
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
-    _linker: *const [*const c_char], run_args: *const [*const c_char],
-    _nostdlib: bool, debug: bool, nobuild: bool, run: bool,
+    _gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char,
+    _nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
-    if !nobuild {
-        if debug { todo!("Debug information for ilasm-mono") }
+    if debug { todo!("Debug information for ilasm-mono") }
 
-        sb_appendf(output, c!(".assembly 'Main' {}\n"));
-        sb_appendf(output, c!(".module Main.exe\n"));
-        sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
-        generate_funcs(da_slice((*p).funcs), output, da_slice((*p).data));
-        sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
-        sb_appendf(output, c!("        .entrypoint\n"));
-        sb_appendf(output, c!("        call int64 class Program::main()\n"));
-        sb_appendf(output, c!("        pop\n"));
-        sb_appendf(output, c!("        ret\n"));
-        sb_appendf(output, c!("    }\n"));
-        sb_appendf(output, c!("}\n"));
+    sb_appendf(output, c!(".assembly 'Main' {}\n"));
+    sb_appendf(output, c!(".module Main.exe\n"));
+    sb_appendf(output, c!(".class Program extends [mscorlib]System.Object {\n"));
+    generate_funcs(da_slice((*program).funcs), output, da_slice((*program).data));
+    sb_appendf(output, c!("    .method static void Main (string[] args) {\n"));
+    sb_appendf(output, c!("        .entrypoint\n"));
+    sb_appendf(output, c!("        call int64 class Program::main()\n"));
+    sb_appendf(output, c!("        pop\n"));
+    sb_appendf(output, c!("        ret\n"));
+    sb_appendf(output, c!("    }\n"));
+    sb_appendf(output, c!("}\n"));
 
-        let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
-        write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
-        log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+    let output_asm_path = temp_sprintf(c!("%s.il"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
-        cmd_append!{
-            cmd,
-            c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), program_path)
-        }
-
-        if !cmd_run_sync_and_reset(cmd) { return None; }
+    cmd_append!{
+        cmd,
+        c!("ilasm"), output_asm_path, temp_sprintf(c!("/output:%s"), program_path)
     }
 
-    if run {
-        cmd_append!{
-            cmd,
-            c!("mono"), program_path,
-        }
+    if !cmd_run_sync_and_reset(cmd) { return None; }
 
-        da_append_many(cmd, run_args);
-        if !cmd_run_sync_and_reset(cmd) { return None; }
+    Some(())
+}
+
+pub unsafe fn run_program(
+    // Inputs
+    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    cmd_append!{
+        cmd,
+        c!("mono"), program_path,
     }
 
+    da_append_many(cmd, run_args);
+    if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
 }
 

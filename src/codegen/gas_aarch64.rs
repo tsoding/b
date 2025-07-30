@@ -7,6 +7,9 @@ use crate::ir::*;
 use crate::lexer::*;
 use crate::missingf;
 use crate::targets::Os;
+use crate::codegen::*;
+use crate::shlex::*;
+use crate::arena;
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
@@ -489,139 +492,198 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("gas_aarch64 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+struct Gas_AArch64 {
+    link_args: *const c_char,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Gas_AArch64>(a);
+
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("link-args"),
+            description: c!("Additional linker arguments"),
+            value:       ParamValue::String { var: &mut (*gen).link_args, default: c!("") },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
-    linker: *const [*const c_char], run_args: *const [*const c_char], os: Os,
-    nostdlib: bool, debug: bool, nobuild: bool, run: bool,
+    gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char, os: Os,
+    nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
-    if !nobuild {
-        if debug { todo!("Debug information for aarch64") }
+    let gen = gen as *mut Gas_AArch64;
 
-        generate_funcs(output, da_slice((*p).funcs), da_slice((*p).variadics), os);
-        generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
-        generate_globals(output, da_slice((*p). globals), os);
-        generate_data_section(output, da_slice((*p).data));
+    if debug { todo!("Debug information for aarch64") }
 
-        let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-        write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
-        log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+    generate_funcs(output, da_slice((*program).funcs), da_slice((*program).variadics), os);
+    generate_asm_funcs(output, da_slice((*program).asm_funcs), os);
+    generate_globals(output, da_slice((*program). globals), os);
+    generate_data_section(output, da_slice((*program).data));
 
-        match os {
-            Os::Linux => {
-                let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
-                    (c!("as"), c!("cc"))
+    let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+
+    match os {
+        Os::Linux => {
+            let (gas, cc) = if cfg!(target_arch = "aarch64") && (cfg!(target_os = "linux") || cfg!(target_os = "android")) {
+                (c!("as"), c!("cc"))
+            } else {
+                // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
+                //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
+                (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
+            };
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                gas, c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+
+            cmd_append! {
+                cmd,
+                cc, if cfg!(target_os = "android") {
+                    c!("-fPIC")
                 } else {
-                    // TODO: document somewhere the additional packages you may require to cross compile gas-aarch64-linux
-                    //   The packages include qemu-user and some variant of the aarch64 gcc compiler (different distros call it differently)
-                    (c!("aarch64-linux-gnu-as"), c!("aarch64-linux-gnu-gcc"))
-                };
-
-                let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-                cmd_append! {
-                    cmd,
-                    gas, c!("-o"), output_obj_path, output_asm_path,
-                }
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-
-                cmd_append! {
-                    cmd,
-                    cc, if cfg!(target_os = "android") {
-                        c!("-fPIC")
-                    } else {
-                        c!("-no-pie")
-                    },
-                    c!("-o"), program_path, output_obj_path,
-                }
-                if nostdlib {
-                    cmd_append!(cmd, c!("-nostdlib"));
-                }
-                da_append_many(cmd, linker);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+                    c!("-no-pie")
+                },
+                c!("-o"), program_path, output_obj_path,
             }
-            Os::Darwin => {
-                let (gas, cc) = (c!("as"), c!("cc"));
-
-                if !(cfg!(target_os = "macos")) {
-                    log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
-                    return None;
-                }
-
-                let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-                cmd_append! {
-                    cmd,
-                    gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
-                }
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-                cmd_append! {
-                    cmd,
-                    cc, c!("-arch"), c!("arm64"), c!("-o"), program_path, output_obj_path,
-                }
-                if nostdlib {
-                    cmd_append! {
-                        cmd,
-                        c!("-nostdlib"),
-                    }
-                }
-                da_append_many(cmd, linker);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            if nostdlib {
+                cmd_append!(cmd, c!("-nostdlib"));
             }
-            Os::Windows => todo!(),
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
+        Os::Darwin => {
+            let (gas, cc) = (c!("as"), c!("cc"));
+
+            if !(cfg!(target_os = "macos")) {
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                gas, c!("-arch"), c!("arm64"), c!("-o"), output_obj_path, output_asm_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+            cmd_append! {
+                cmd,
+                cc, c!("-arch"), c!("arm64"), c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append! {
+                    cmd,
+                    c!("-nostdlib"),
+                }
+            }
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+        }
+        Os::Windows => todo!(),
     }
 
-    if run {
-        match os {
-            Os::Linux => {
-                if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
-                    cmd_append! {
-                        cmd,
-                        c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
-                    }
-                }
+    Some(())
+}
 
-                // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
-                let run_path: *const c_char;
-                if (strchr(program_path, '/' as c_int)).is_null() {
-                    run_path = temp_sprintf(c!("./%s"), program_path);
-                } else {
-                    run_path = program_path;
-                }
-
+pub unsafe fn run_program(
+    // Inputs
+    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char], os: Os,
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    match os {
+        Os::Linux => {
+            if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
                 cmd_append! {
                     cmd,
-                    run_path,
+                    c!("qemu-aarch64"), c!("-L"), c!("/usr/aarch64-linux-gnu"),
                 }
-
-                da_append_many(cmd, run_args);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
             }
-            Os::Darwin => {
-                if !cfg!(target_arch = "aarch64") {
-                    log(Log_Level::ERROR, c!("This runner is only for aarch64 Darwin, but the current target is not aarch64 Darwin."));
-                    return None;
-                }
 
-                // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Darwin. It has to be `./program`.
-                let run_path: *const c_char;
-                if (strchr(program_path, '/' as c_int)).is_null() {
-                    run_path = temp_sprintf(c!("./%s"), program_path);
-                } else {
-                    run_path = program_path;
-                }
-
-                cmd_append! {
-                    cmd,
-                    run_path,
-                }
-
-                da_append_many(cmd, run_args);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
+            let run_path: *const c_char;
+            if (strchr(program_path, '/' as c_int)).is_null() {
+                run_path = temp_sprintf(c!("./%s"), program_path);
+            } else {
+                run_path = program_path;
             }
-            Os::Windows => todo!(),
+
+            cmd_append! {
+                cmd,
+                run_path,
+            }
+
+            da_append_many(cmd, run_args);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
+        Os::Darwin => {
+            if !cfg!(target_arch = "aarch64") {
+                log(Log_Level::ERROR, c!("This runner is only for aarch64 Darwin, but the current target is not aarch64 Darwin."));
+                return None;
+            }
+
+            // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Darwin. It has to be `./program`.
+            let run_path: *const c_char;
+            if (strchr(program_path, '/' as c_int)).is_null() {
+                run_path = temp_sprintf(c!("./%s"), program_path);
+            } else {
+                run_path = program_path;
+            }
+
+            cmd_append! {
+                cmd,
+                run_path,
+            }
+
+            da_append_many(cmd, run_args);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+        }
+        Os::Windows => todo!(),
     }
     Some(())
 }

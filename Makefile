@@ -39,7 +39,8 @@ POSIX_OBJS=\
 	$(BUILD)/libc.posix.o \
 	$(BUILD)/arena.posix.o \
 	$(BUILD)/jim.posix.o \
-	$(BUILD)/jimp.posix.o
+	$(BUILD)/jimp.posix.o \
+	$(BUILD)/shlex.posix.o \
 
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
@@ -48,7 +49,8 @@ MINGW32_OBJS=\
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
 	$(BUILD)/jim.mingw32.o \
-	$(BUILD)/jimp.mingw32.o
+	$(BUILD)/jimp.mingw32.o \
+	$(BUILD)/shlex.mingw32.o \
 
 .PHONY: all
 all: $(BUILD)/b $(BUILD)/btest

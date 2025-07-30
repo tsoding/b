@@ -1,10 +1,14 @@
 use core::ffi::*;
+use core::mem::zeroed;
 use core::cmp;
 use crate::ir::*;
 use crate::nob::*;
 use crate::targets::Os;
 use crate::crust::libc::*;
 use crate::lexer::Loc;
+use crate::codegen::*;
+use crate::shlex::*;
+use crate::arena;
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
@@ -366,152 +370,216 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("gas_x86_64 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+struct Gas_x86_64 {
+    link_args: *const c_char,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Gas_x86_64>(a);
+
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("link-args"),
+            description: c!("Additional linker arguments"),
+            value:       ParamValue::String { var: &mut (*gen).link_args, default: c!("") },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char,
-    linker: *const [*const c_char], run_args: *const [*const c_char], os: Os,
-    nostdlib: bool, debug: bool, nobuild: bool, run: bool,
+    gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char, os: Os,
+    nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
-    if !nobuild {
-        match os {
-            Os::Darwin => sb_appendf(output, c!(".text\n")),
-            Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
-        };
-        generate_funcs(output, da_slice((*p).funcs), debug, os);
-        generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
-        match os {
-            Os::Darwin => sb_appendf(output, c!(".data\n")),
-            Os::Linux | Os::Windows => sb_appendf(output, c!(".section .data\n")),
-        };
-        generate_data_section(output, da_slice((*p).data));
-        generate_globals(output, da_slice((*p).globals), os);
+    let gen = gen as *mut Gas_x86_64;
 
-        let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
-        write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
-        log(Log_Level::INFO, c!("generated %s"), output_asm_path);
+    match os {
+        Os::Darwin => sb_appendf(output, c!(".text\n")),
+        Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
+    };
+    generate_funcs(output, da_slice((*program).funcs), debug, os);
+    generate_asm_funcs(output, da_slice((*program).asm_funcs), os);
+    match os {
+        Os::Darwin => sb_appendf(output, c!(".data\n")),
+        Os::Linux | Os::Windows => sb_appendf(output, c!(".section .data\n")),
+    };
+    generate_data_section(output, da_slice((*program).data));
+    generate_globals(output, da_slice((*program).globals), os);
 
-        match os {
-            Os::Darwin => {
-                if !(cfg!(target_os = "macos")) {
-                    // TODO: think how to approach cross-compilation
-                    log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
-                    return None;
-                }
+    let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
+    write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
+    log(Log_Level::INFO, c!("generated %s"), output_asm_path);
 
-                let (gas, cc) = (c!("as"), c!("cc"));
-
-                let output_obj_path = temp_sprintf(c!("%s.o"), program_path);
-                cmd_append! {
-                    cmd,
-                    gas, c!("-arch"), c!("x86_64"), c!("-o"), output_obj_path, output_asm_path,
-                }
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-
-                cmd_append! {
-                    cmd,
-                    cc, c!("-arch"), c!("x86_64"), c!("-o"), program_path, output_obj_path,
-                }
-                if nostdlib {
-                    cmd_append!(cmd, c!("-nostdlib"));
-                }
-                da_append_many(cmd, linker);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+    match os {
+        Os::Darwin => {
+            if !(cfg!(target_os = "macos")) {
+                // TODO: think how to approach cross-compilation
+                log(Log_Level::ERROR, c!("Cross-compilation of darwin is not supported"));
+                return None;
             }
-            Os::Linux => {
-                if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
-                    // TODO: think how to approach cross-compilation
-                    log(Log_Level::ERROR, c!("Cross-compilation of x86_64 linux is not supported for now"));
-                    return None;
-                }
 
-                let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-                cmd_append! {
-                    cmd,
-                    c!("as"), output_asm_path, c!("-o"), output_obj_path,
-                }
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            let (gas, cc) = (c!("as"), c!("cc"));
 
-                cmd_append! {
-                    cmd,
-                    c!("cc"), c!("-no-pie"), c!("-o"), program_path, output_obj_path,
-                }
-                if nostdlib {
-                    cmd_append!(cmd, c!("-nostdlib"));
-                }
-                da_append_many(cmd, linker);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            let output_obj_path = temp_sprintf(c!("%s.o"), program_path);
+            cmd_append! {
+                cmd,
+                gas, c!("-arch"), c!("x86_64"), c!("-o"), output_obj_path, output_asm_path,
             }
-            Os::Windows => {
-                let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
-                cmd_append! {
-                    cmd,
-                    c!("as"), output_asm_path, c!("-o"), output_obj_path,
-                }
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
 
-                cmd_append! {
-                    cmd,
-                    c!("x86_64-w64-mingw32-gcc"), c!("-no-pie"), c!("-o"), program_path, output_obj_path,
-                }
-                if nostdlib {
-                    cmd_append!(cmd, c!("-nostdlib"));
-                }
-                da_append_many(cmd, linker);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            cmd_append! {
+                cmd,
+                cc, c!("-arch"), c!("x86_64"), c!("-o"), program_path, output_obj_path,
             }
+            if nostdlib {
+                cmd_append!(cmd, c!("-nostdlib"));
+            }
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+        }
+        Os::Linux => {
+            if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
+                // TODO: think how to approach cross-compilation
+                log(Log_Level::ERROR, c!("Cross-compilation of x86_64 linux is not supported for now"));
+                return None;
+            }
+
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                c!("as"), output_asm_path, c!("-o"), output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+
+            cmd_append! {
+                cmd,
+                c!("cc"), c!("-no-pie"), c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append!(cmd, c!("-nostdlib"));
+            }
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+        }
+        Os::Windows => {
+            let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
+            cmd_append! {
+                cmd,
+                c!("as"), output_asm_path, c!("-o"), output_obj_path,
+            }
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+
+            cmd_append! {
+                cmd,
+                c!("x86_64-w64-mingw32-gcc"), c!("-no-pie"), c!("-o"), program_path, output_obj_path,
+            }
+            if nostdlib {
+                cmd_append!(cmd, c!("-nostdlib"));
+            }
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
     }
 
-    if run {
-        match os {
-            Os::Linux => {
-                // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
-                let run_path: *const c_char;
-                if (strchr(program_path, '/' as c_int)).is_null() {
-                    run_path = temp_sprintf(c!("./%s"), program_path);
-                } else {
-                    run_path = program_path;
-                }
+    Some(())
+}
 
-                cmd_append! {cmd, run_path}
-                da_append_many(cmd, run_args);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+pub unsafe fn run_program(
+    // Inputs
+    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char], os: Os,
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    match os {
+        Os::Linux => {
+            // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
+            let run_path: *const c_char;
+            if (strchr(program_path, '/' as c_int)).is_null() {
+                run_path = temp_sprintf(c!("./%s"), program_path);
+            } else {
+                run_path = program_path;
             }
-            Os::Windows => {
-                // TODO: document that you may need wine as a system package to cross-run gas-x86_64-windows
-                if !cfg!(target_os = "windows") {
-                    cmd_append! {
-                        cmd,
-                        c!("wine"),
-                    }
-                }
 
-                cmd_append! {cmd, program_path}
-                da_append_many(cmd, run_args);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            cmd_append! {cmd, run_path}
+            da_append_many(cmd, run_args);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+        }
+        Os::Windows => {
+            // TODO: document that you may need wine as a system package to cross-run gas-x86_64-windows
+            if !cfg!(target_os = "windows") {
+                cmd_append! {
+                    cmd,
+                    c!("wine"),
+                }
             }
-            Os::Darwin => {
-                if !cfg!(target_os = "macos") {
-                    log(Log_Level::ERROR, c!("This runner is only for macOS, but the current target is not macOS."));
-                    return None;
-                }
 
-                // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Darwin. It has to be `./program`.
-                let run_path: *const c_char;
-                if (strchr(program_path, '/' as c_int)).is_null() {
-                    run_path = temp_sprintf(c!("./%s"), program_path);
-                } else {
-                    run_path = program_path;
-                }
-
-                cmd_append! {cmd, run_path}
-                da_append_many(cmd, run_args);
-                if !cmd_run_sync_and_reset(cmd) { return None; }
+            cmd_append! {cmd, program_path}
+            da_append_many(cmd, run_args);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
+        }
+        Os::Darwin => {
+            if !cfg!(target_os = "macos") {
+                log(Log_Level::ERROR, c!("This runner is only for macOS, but the current target is not macOS."));
+                return None;
             }
+
+            // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Darwin. It has to be `./program`.
+            let run_path: *const c_char;
+            if (strchr(program_path, '/' as c_int)).is_null() {
+                run_path = temp_sprintf(c!("./%s"), program_path);
+            } else {
+                run_path = program_path;
+            }
+
+            cmd_append! {cmd, run_path}
+            da_append_many(cmd, run_args);
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
     }
-
     Some(())
 }
