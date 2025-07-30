@@ -1,6 +1,5 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use core::ptr;
 use crate::ir::*;
 use crate::nob::*;
 use crate::crust::libc::*;
@@ -119,13 +118,59 @@ pub unsafe fn usage(params: *const [Param]) {
     print_params_help(params);
 }
 
-pub unsafe fn new(_a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+enum_with_order! {
+    #[derive(Clone, Copy)]
+    enum Uxn_Runner in UXN_RUNNER_ORDER {
+        Uxncli,
+        Uxnemu,
+    }
+}
+
+impl Uxn_Runner {
+    fn name(self) -> *const c_char {
+        match self {
+            Uxn_Runner::Uxncli => c!("uxncli"),
+            Uxn_Runner::Uxnemu => c!("uxnemu"),
+        }
+    }
+
+    fn description(self) -> *const c_char {
+        match self {
+            Uxn_Runner::Uxncli => c!("CLI Emulator"),
+            Uxn_Runner::Uxnemu => c!("GUI Emulator"),
+        }
+    }
+
+    unsafe fn from_name(name: *const c_char) -> Option<Self> {
+        for i in 0..UXN_RUNNER_ORDER.len() {
+            let runner = (*UXN_RUNNER_ORDER)[i];
+            if strcmp(runner.name(), name) == 0 {
+                return Some(runner);
+            }
+        }
+        None
+    }
+}
+
+struct Uxn {
+    runner: Uxn_Runner
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Uxn>(a);
+
     let mut help = false;
+    let mut runner_name = zeroed();
     let params = &[
         Param {
             name:        c!("help"),
             description: c!("Print this help message"),
             value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("runner"),
+            description: c!("What runner to use for the Uxn roms"),
+            value:       ParamValue::String { var: &mut runner_name, default: Uxn_Runner::Uxnemu.name() },
         },
     ];
 
@@ -137,11 +182,23 @@ pub unsafe fn new(_a: *mut arena::Arena, args: *const [*const c_char]) -> Option
 
     if help {
         usage(params);
-        fprintf(stderr(), c!("\n"));
-        fprintf(stderr(), c!("It doesn't really provide any useful parameters yet.\n"));
         return None;
     }
-    Some(ptr::null_mut())
+
+    if let Some(runner) = Uxn_Runner::from_name(runner_name) {
+        (*gen).runner = runner;
+    } else {
+        usage(params);
+        log(Log_Level::ERROR, c!("Invalid Uxn runner name `%s`!"), runner_name);
+        log(Log_Level::ERROR, c!("Valid names:"));
+        for i in 0..UXN_RUNNER_ORDER.len() {
+            let runner = (*UXN_RUNNER_ORDER)[i];
+            log(Log_Level::ERROR, c!("    %s - %s"), runner.name(), runner.description());
+        }
+        return None;
+    }
+
+    Some(gen as *mut c_void)
 }
 
 pub unsafe fn generate_program(
@@ -186,22 +243,19 @@ pub unsafe fn generate_program(
     apply_patches(output, &mut assembler);
 
     write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
-    log(Log_Level::INFO, c!("generated %s\n"), program_path);
+    log(Log_Level::INFO, c!("generated %s"), program_path);
 
     Some(())
 }
 
 pub unsafe fn run_program(
     // Inputs
-    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
     // Temporaries
     cmd: *mut Cmd,
 ) -> Option<()> {
-    // TODO: the exact uxn runner (`uxncli` or `uxnemu`) should be customizable via the codegen parameters (-C)
-    // when they are implemented. For now we are hardcoding the runner to be `uxncli` so it passes the CI.
-    // But ideally, for a better first impression purposes (especially when the user tries out examples/uxn/screen.b),
-    // the default runner should be `uxnemu`.
-    cmd_append! {cmd, c!("uxncli"), program_path}
+    let gen = gen as *mut Uxn;
+    cmd_append! {cmd, (*gen).runner.name(), program_path}
     da_append_many(cmd, run_args);
     if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
