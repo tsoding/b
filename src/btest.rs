@@ -136,6 +136,7 @@ pub unsafe fn execute_test(
         Target::Mos6502_Posix       => c!("6502"),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner
         Target::ILasm_Mono          => c!("exe"),
+        Target::Custom              => todo!()
     });
     let stdout_path = temp_sprintf(c!("%s/%s.%s.stdout.txt"), GARBAGE_FOLDER, name, target.name());
     cmd_append! {
