@@ -40,9 +40,9 @@ POSIX_OBJS=\
 	$(BUILD)/libc.posix.o \
 	$(BUILD)/arena.posix.o \
 	$(BUILD)/time.posix.o \
-	$(BUILD)/fake6502.posix.o \
 	$(BUILD)/jim.posix.o \
-	$(BUILD)/jimp.posix.o
+	$(BUILD)/jimp.posix.o \
+	$(BUILD)/shlex.posix.o \
 
 MINGW32_OBJS=\
 	$(BUILD)/nob.mingw32.o \
@@ -51,9 +51,9 @@ MINGW32_OBJS=\
 	$(BUILD)/libc.mingw32.o \
 	$(BUILD)/arena.mingw32.o \
 	$(BUILD)/time.mingw32.o \
-	$(BUILD)/fake6502.mingw32.o \
 	$(BUILD)/jim.mingw32.o \
-	$(BUILD)/jimp.mingw32.o
+	$(BUILD)/jimp.mingw32.o \
+	$(BUILD)/shlex.mingw32.o \
 
 .PHONY: all
 all: $(BUILD)/b $(BUILD)/btest
@@ -61,6 +61,9 @@ all: $(BUILD)/b $(BUILD)/btest
 .PHONY: test
 test: $(BUILD)/b $(BUILD)/btest
 	$(BUILD)/btest
+
+.PHONY: mingw32-all
+mingw32-all: $(BUILD)/b.exe $(BUILD)/btest.exe
 
 $(BUILD)/b: $(RSS) $(POSIX_OBJS) | $(BUILD)
 	rustc $(CRUST_FLAGS) -C link-args="$(POSIX_OBJS) $(LDFLAGS)" $(SRC)/b.rs -o $(BUILD)/b

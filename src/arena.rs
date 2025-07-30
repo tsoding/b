@@ -25,4 +25,10 @@ extern "C" {
     pub fn rewind(a: *mut Arena, m: Arena_Mark) -> c_void;
     #[link_name = "arena_sprintf"]
     pub fn sprintf(a: *mut Arena, format: *const c_char, ...) -> *mut c_char;
+    #[link_name = "arena_alloc"]
+    pub fn alloc(a: *mut Arena, size: usize) -> *mut c_void;
+}
+
+pub unsafe fn alloc_type<T>(a: *mut Arena) -> *mut T {
+    alloc(a, size_of::<T>()) as *mut T
 }

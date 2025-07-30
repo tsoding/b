@@ -1,10 +1,14 @@
 use core::ffi::*;
+use core::mem::zeroed;
 use core::cmp;
-use core::mem::*;
 use crate::ir::*;
 use crate::nob::*;
 use crate::targets::Os;
 use crate::crust::libc::*;
+use crate::lexer::Loc;
+use crate::codegen::*;
+use crate::shlex::*;
+use crate::arena;
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
@@ -46,13 +50,13 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char,output: *mut String_B
             Os::Darwin              => sb_appendf(output, c!("    movq _%s(%%rip), %%%s\n"), name, reg),
         },
         Arg::AutoVar(index)     => sb_appendf(output, c!("    movq -%zu(%%rbp), %%%s\n"), index * 8, reg),
-        Arg::Literal(value)     => sb_appendf(output, c!("    movq $%ld, %%%s\n"), value, reg),
+        Arg::Literal(value)     => sb_appendf(output, c!("    movq $%lld, %%%s\n"), value, reg),
         Arg::DataOffset(offset) => {sb_appendf(output, c!("    leaq dat+%zu(%%rip), %%%s\n"), offset, reg)},
         Arg::Bogus => unreachable!("bogus-amogus"),
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, os: Os) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, func_index: usize, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], debug: bool, output: *mut String_Builder, os: Os) {
     let stack_size = align_bytes(auto_vars_count * 8, 16);
     match os {
         Os::Linux | Os::Windows => {
@@ -66,6 +70,18 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
             sb_appendf(output, c!("_%s:\n"), name);
         }
     }
+
+    if debug {
+        sb_appendf(output, c!("    .file %lld \"%s\"\n"), func_index, name_loc.input_path);
+        // we need to place line information directly after the label, before any instrucitons
+        // ideally pointing to the first statement instead of the function name
+        if body.len() > 0 {
+            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, (*body)[0].loc.line_number);
+        } else {
+            sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, name_loc.line_number);
+        }
+    }
+
     sb_appendf(output, c!("    pushq %%rbp\n"));
     sb_appendf(output, c!("    movq %%rsp, %%rbp\n"));
     if stack_size > 0 {
@@ -93,6 +109,14 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
 
     for i in 0..body.len() {
         let op = (*body)[i];
+
+        if debug {
+            // location info of the first op has already been pushed
+            if i > 0 {
+                sb_appendf(output, c!("    .loc %lld %lld\n"), func_index, op.loc.line_number);
+            }
+        }
+
         match op.opcode {
             Op::Bogus => unreachable!("bogus-amogus"),
             Op::Return { arg } => {
@@ -258,9 +282,10 @@ pub unsafe fn generate_function(name: *const c_char, params_count: usize, auto_v
     sb_appendf(output, c!("    ret\n"));
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], os: Os) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], debug: bool, os: Os) {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, os);
+        let func = (*funcs)[i];
+        generate_function(func.name, func.name_loc, i, func.params_count, func.auto_vars_count, da_slice(func.body), debug, output, os);
     }
 }
 
@@ -345,24 +370,68 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("gas_x86_64 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+struct Gas_x86_64 {
+    link_args: *const c_char,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Gas_x86_64>(a);
+
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("link-args"),
+            description: c!("Additional linker arguments"),
+            value:       ParamValue::String { var: &mut (*gen).link_args, default: c!("") },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool,
+    gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char, os: Os,
+    nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
+    let gen = gen as *mut Gas_x86_64;
+
     match os {
         Os::Darwin => sb_appendf(output, c!(".text\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .text\n")),
     };
-    generate_funcs(output, da_slice((*p).funcs), os);
-    generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
+    generate_funcs(output, da_slice((*program).funcs), debug, os);
+    generate_asm_funcs(output, da_slice((*program).asm_funcs), os);
     match os {
         Os::Darwin => sb_appendf(output, c!(".data\n")),
         Os::Linux | Os::Windows => sb_appendf(output, c!(".section .data\n")),
     };
-    generate_data_section(output, da_slice((*p).data));
-    generate_globals(output, da_slice((*p).globals), os);
+    generate_data_section(output, da_slice((*program).data));
+    generate_globals(output, da_slice((*program).globals), os);
 
     let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
     write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
@@ -392,10 +461,14 @@ pub unsafe fn generate_program(
             if nostdlib {
                 cmd_append!(cmd, c!("-nostdlib"));
             }
-            da_append_many(cmd, linker);
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
             if !cmd_run_sync_and_reset(cmd) { return None; }
-
-            Some(())
         }
         Os::Linux => {
             if !(cfg!(target_arch = "x86_64") && cfg!(target_os = "linux")) {
@@ -418,10 +491,14 @@ pub unsafe fn generate_program(
             if nostdlib {
                 cmd_append!(cmd, c!("-nostdlib"));
             }
-            da_append_many(cmd, linker);
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
             if !cmd_run_sync_and_reset(cmd) { return None; }
-
-            Some(())
         }
         Os::Windows => {
             let output_obj_path = temp_sprintf(c!("%s.o"), garbage_base);
@@ -431,27 +508,33 @@ pub unsafe fn generate_program(
             }
             if !cmd_run_sync_and_reset(cmd) { return None; }
 
-            let cc = if cfg!(target_arch = "x86_64") && cfg!(target_os = "windows") {
-                c!("cc")
-            } else {
-                c!("x86_64-w64-mingw32-gcc")
-            };
             cmd_append! {
                 cmd,
-                cc, c!("-no-pie"), c!("-o"), program_path, output_obj_path,
+                c!("x86_64-w64-mingw32-gcc"), c!("-no-pie"), c!("-o"), program_path, output_obj_path,
             }
             if nostdlib {
                 cmd_append!(cmd, c!("-nostdlib"));
             }
-            da_append_many(cmd, linker);
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
             if !cmd_run_sync_and_reset(cmd) { return None; }
-
-            Some(())
         }
     }
+
+    Some(())
 }
 
-pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>, os: Os) -> Option<()> {
+pub unsafe fn run_program(
+    // Inputs
+    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char], os: Os,
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
     match os {
         Os::Linux => {
             // if the user does `b program.b -run` the compiler tries to run `program` which is not possible on Linux. It has to be `./program`.
@@ -464,16 +547,7 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
 
             cmd_append! {cmd, run_path}
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
-            Some(())
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
         Os::Windows => {
             // TODO: document that you may need wine as a system package to cross-run gas-x86_64-windows
@@ -486,16 +560,7 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
 
             cmd_append! {cmd, program_path}
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
-            Some(())
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
         Os::Darwin => {
             if !cfg!(target_os = "macos") {
@@ -513,16 +578,8 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
 
             cmd_append! {cmd, run_path}
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
-            Some(())
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
     }
+    Some(())
 }

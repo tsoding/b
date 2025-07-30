@@ -7,6 +7,9 @@ use crate::ir::*;
 use crate::lexer::*;
 use crate::missingf;
 use crate::targets::Os;
+use crate::codegen::*;
+use crate::shlex::*;
+use crate::arena;
 
 pub unsafe fn align_bytes(bytes: usize, alignment: usize) -> usize {
     let rem = bytes%alignment;
@@ -489,16 +492,62 @@ pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const 
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("gas_aarch64 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+struct Gas_AArch64 {
+    link_args: *const c_char,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Gas_AArch64>(a);
+
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("link-args"),
+            description: c!("Additional linker arguments"),
+            value:       ParamValue::String { var: &mut (*gen).link_args, default: c!("") },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, garbage_base: *const c_char, linker: *const [*const c_char], os: Os, nostdlib: bool,
+    gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char, os: Os,
+    nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
-    generate_funcs(output, da_slice((*p).funcs), da_slice((*p).variadics), os);
-    generate_asm_funcs(output, da_slice((*p).asm_funcs), os);
-    generate_globals(output, da_slice((*p). globals), os);
-    generate_data_section(output, da_slice((*p).data));
+    let gen = gen as *mut Gas_AArch64;
+
+    if debug { todo!("Debug information for aarch64") }
+
+    generate_funcs(output, da_slice((*program).funcs), da_slice((*program).variadics), os);
+    generate_asm_funcs(output, da_slice((*program).asm_funcs), os);
+    generate_globals(output, da_slice((*program). globals), os);
+    generate_data_section(output, da_slice((*program).data));
 
     let output_asm_path = temp_sprintf(c!("%s.s"), garbage_base);
     write_entire_file(output_asm_path, (*output).items as *const c_void, (*output).count)?;
@@ -533,9 +582,14 @@ pub unsafe fn generate_program(
             if nostdlib {
                 cmd_append!(cmd, c!("-nostdlib"));
             }
-            da_append_many(cmd, linker);
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
             if !cmd_run_sync_and_reset(cmd) { return None; }
-            Some(())
         }
         Os::Darwin => {
             let (gas, cc) = (c!("as"), c!("cc"));
@@ -561,15 +615,27 @@ pub unsafe fn generate_program(
                     c!("-nostdlib"),
                 }
             }
-            da_append_many(cmd, linker);
+            let mut s: Shlex = zeroed();
+            let link_args = (*gen).link_args;
+            shlex_init(&mut s, link_args, link_args.add(strlen(link_args)));
+            while !shlex_next(&mut s).is_null() {
+                da_append(cmd, temp_strdup(s.string));
+            }
+            shlex_free(&mut s);
             if !cmd_run_sync_and_reset(cmd) { return None; }
-            Some(())
         }
         Os::Windows => todo!(),
     }
+
+    Some(())
 }
 
-pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>, os: Os) -> Option<()> {
+pub unsafe fn run_program(
+    // Inputs
+    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char], os: Os,
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
     match os {
         Os::Linux => {
             if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
@@ -593,16 +659,7 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
             }
 
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
-            Some(())
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
         Os::Darwin => {
             if !cfg!(target_arch = "aarch64") {
@@ -624,17 +681,9 @@ pub unsafe fn run_program(cmd: *mut Cmd, program_path: *const c_char, run_args: 
             }
 
             da_append_many(cmd, run_args);
-
-            if let Some(stdout_path) = stdout_path {
-                let mut fdout = fd_open_for_write(stdout_path);
-                let mut redirect: Cmd_Redirect = zeroed();
-                redirect.fdout = &mut fdout;
-                if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-            } else {
-                if !cmd_run_sync_and_reset(cmd) { return None; }
-            }
-            Some(())
+            if !cmd_run_sync_and_reset(cmd) { return None; }
         }
         Os::Windows => todo!(),
     }
+    Some(())
 }

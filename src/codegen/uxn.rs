@@ -6,6 +6,8 @@ use crate::crust::libc::*;
 use crate::lexer::Loc;
 use crate::missingf;
 use crate::diagf;
+use crate::arena;
+use crate::codegen::*;
 
 // UXN memory map
 // 0x0000 - 0x00ff - zero page
@@ -110,12 +112,104 @@ pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("uxn codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+enum_with_order! {
+    #[derive(Clone, Copy)]
+    enum Uxn_Runner in UXN_RUNNER_ORDER {
+        Uxncli,
+        Uxnemu,
+    }
+}
+
+impl Uxn_Runner {
+    fn name(self) -> *const c_char {
+        match self {
+            Uxn_Runner::Uxncli => c!("uxncli"),
+            Uxn_Runner::Uxnemu => c!("uxnemu"),
+        }
+    }
+
+    fn description(self) -> *const c_char {
+        match self {
+            Uxn_Runner::Uxncli => c!("CLI Emulator"),
+            Uxn_Runner::Uxnemu => c!("GUI Emulator"),
+        }
+    }
+
+    unsafe fn from_name(name: *const c_char) -> Option<Self> {
+        for i in 0..UXN_RUNNER_ORDER.len() {
+            let runner = (*UXN_RUNNER_ORDER)[i];
+            if strcmp(runner.name(), name) == 0 {
+                return Some(runner);
+            }
+        }
+        None
+    }
+}
+
+struct Uxn {
+    runner: Uxn_Runner
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Uxn>(a);
+
+    let mut help = false;
+    let mut runner_name = zeroed();
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("runner"),
+            description: c!("What runner to use for the Uxn roms"),
+            value:       ParamValue::String { var: &mut runner_name, default: Uxn_Runner::Uxnemu.name() },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    if let Some(runner) = Uxn_Runner::from_name(runner_name) {
+        (*gen).runner = runner;
+    } else {
+        usage(params);
+        log(Log_Level::ERROR, c!("Invalid Uxn runner name `%s`!"), runner_name);
+        log(Log_Level::ERROR, c!("Valid names:"));
+        for i in 0..UXN_RUNNER_ORDER.len() {
+            let runner = (*UXN_RUNNER_ORDER)[i];
+            log(Log_Level::ERROR, c!("    %s - %s"), runner.name(), runner.description());
+        }
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, _linker: *const [*const c_char],
+    _gen: *mut c_void, program: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
+    _nostdlib: bool, debug: bool,
     // Temporaries
     output: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
+    if debug { todo!("Debug information for uxn") }
+
     let mut assembler: Assembler = zeroed();
     assembler.data_section_label = create_label(&mut assembler);
     // set the top of the stack
@@ -123,8 +217,8 @@ pub unsafe fn generate_program(
     write_lit_stz2(output, SP);
     // call main or _start, _start having a priority
     let mut main_proc = c!("main");
-    for i in 0..(*p).funcs.count {
-        let name = (*(*p).funcs.items.add(i)).name;
+    for i in 0..(*program).funcs.count {
+        let name = (*(*program).funcs.items.add(i)).name;
         if strcmp(name, c!("_start")) == 0 {
             main_proc = c!("_start");
             break;
@@ -140,31 +234,30 @@ pub unsafe fn generate_program(
     write_label_abs(output, vector_return_label, &mut assembler, 0);
     write_op(output, UxnOp::BRK);
 
-    generate_funcs(output, da_slice((*p).funcs), &mut assembler);
-    generate_asm_funcs(output, da_slice((*p).asm_funcs));
-    generate_extrns(output, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), &mut assembler);
-    generate_data_section(output, da_slice((*p).data), &mut assembler);
-    generate_globals(output, da_slice((*p).globals), &mut assembler);
+    generate_funcs(output, da_slice((*program).funcs), &mut assembler);
+    generate_asm_funcs(output, da_slice((*program).asm_funcs));
+    generate_extrns(output, da_slice((*program).extrns), da_slice((*program).funcs), da_slice((*program).globals), &mut assembler);
+    generate_data_section(output, da_slice((*program).data), &mut assembler);
+    generate_globals(output, da_slice((*program).globals), &mut assembler);
 
     apply_patches(output, &mut assembler);
 
     write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
-    log(Log_Level::INFO, c!("generated %s\n"), program_path);
+    log(Log_Level::INFO, c!("generated %s"), program_path);
 
     Some(())
 }
 
-pub unsafe fn run_program(cmd: *mut Cmd, emu: *const c_char, program_path: *const c_char, run_args: *const [*const c_char], stdout_path: Option<*const c_char>) -> Option<()> {
-    cmd_append! {cmd, emu, program_path}
+pub unsafe fn run_program(
+    // Inputs
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    let gen = gen as *mut Uxn;
+    cmd_append! {cmd, (*gen).runner.name(), program_path}
     da_append_many(cmd, run_args);
-    if let Some(stdout_path) = stdout_path {
-        let mut fdout = fd_open_for_write(stdout_path);
-        let mut redirect: Cmd_Redirect = zeroed();
-        redirect.fdout = &mut fdout;
-        if !cmd_run_sync_redirect_and_reset(cmd, redirect) { return None; }
-    } else {
-        if !cmd_run_sync_and_reset(cmd) { return None; }
-    }
+    if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
 }
 

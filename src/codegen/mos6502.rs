@@ -13,6 +13,8 @@ use crate::ir::*;
 use crate::nob::*;
 use crate::diagf;
 use crate::crust::libc::*;
+use crate::codegen::*;
+use crate::arena;
 
 // TODO: does this have to be a macro?
 macro_rules! instr_enum {
@@ -1416,29 +1418,6 @@ pub unsafe fn generate_entry(out: *mut String_Builder, asm: *mut Assembler) {
     instr16(out, JMP, IND, 0xFFFC);
 }
 
-pub unsafe fn parse_config_from_link_flags(link_flags: *const[*const c_char]) -> Option<Config> {
-    let mut config = Config {
-        load_offset: DEFAULT_LOAD_OFFSET,
-    };
-
-    // TODO: some sort of help flag to list all these "linker" flags for mos6502
-    for i in 0..link_flags.len() {
-        let flag = (*link_flags)[i];
-        let mut flag_sv = sv_from_cstr(flag);
-        let load_offset_prefix = sv_from_cstr(c!("LOAD_OFFSET="));
-        if sv_starts_with(flag_sv, load_offset_prefix) {
-            flag_sv.data = flag_sv.data.add(load_offset_prefix.count);
-            flag_sv.count += load_offset_prefix.count;
-            config.load_offset = strtoull(flag_sv.data, ptr::null_mut(), 16) as u16;
-        } else {
-            log(Log_Level::ERROR, c!("6502: Unknown linker flag: %s"), flag);
-            return None
-        }
-    }
-
-    Some(config)
-}
-
 pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [AsmFunc],
                                  asm: *mut Assembler) {
     for i in 0..asm_funcs.len() {
@@ -1457,21 +1436,67 @@ pub unsafe fn generate_asm_funcs(out: *mut String_Builder, asm_funcs: *const [As
     }
 }
 
+pub unsafe fn usage(params: *const [Param]) {
+    fprintf(stderr(), c!("mos6402 codegen for the B compiler\n"));
+    fprintf(stderr(), c!("OPTIONS:\n"));
+    print_params_help(params);
+}
+
+struct Mos6502 {
+    load_offset: u64,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<Mos6502>(a);
+
+    let mut help = false;
+    let params = &[
+        Param {
+            name:        c!("help"),
+            description: c!("Print this help message"),
+            value:       ParamValue::Flag { var: &mut help },
+        },
+        Param {
+            name:        c!("LOAD_OFFSET"),
+            description: c!("Offset at which the rom is expected to be loaded"),
+            value:       ParamValue::Hex { var: &mut (*gen).load_offset, default: 0x8000 },
+        },
+    ];
+
+    if let Err(message) = parse_args(params, args) {
+        usage(params);
+        log(Log_Level::ERROR, c!("%s"), message);
+        return None;
+    }
+
+    if help {
+        usage(params);
+        return None;
+    }
+
+    Some(gen as *mut c_void)
+}
+
 pub unsafe fn generate_program(
     // Inputs
-    p: *const Program, program_path: *const c_char, _garbage_base: *const c_char, config: Config,
+    gen: *mut c_void, p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
+    _nostdlib: bool, debug: bool,
     // Temporaries
     out: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
+    let gen = gen as *mut Mos6502;
+
+    if debug { todo!("Debug information for 6502") }
+
     let mut asm: Assembler = zeroed();
     generate_entry(out, &mut asm);
-    asm.code_start = config.load_offset;
+    asm.code_start = (*gen).load_offset as u16;
 
     generate_funcs(out, da_slice((*p).funcs), &mut asm);
     generate_asm_funcs(out, da_slice((*p).asm_funcs), &mut asm);
     generate_extrns(out, da_slice((*p).extrns), da_slice((*p).funcs), da_slice((*p).globals), da_slice((*p).asm_funcs), &mut asm);
 
-    let data_start = config.load_offset + (*out).count as u16;
+    let data_start = (*gen).load_offset as u16 + (*out).count as u16;
     generate_data_section(out, da_slice((*p).data));
     generate_globals(out, da_slice((*p).globals), &mut asm);
 
@@ -1484,102 +1509,22 @@ pub unsafe fn generate_program(
     Some(())
 }
 
-pub const DEFAULT_LOAD_OFFSET: u16 = 0x8000;
-
-#[derive(Clone, Copy)]
-pub struct Config {
-    pub load_offset: u16,
-}
-
-pub mod fake6502 {
-    use core::mem::zeroed;
-    use crate::nob::*;
-
-    pub static mut MEMORY: [u8; 1<<16] = unsafe { zeroed() };
-
-    pub unsafe fn load_rom_at(rom: String_Builder, offset: u16) {
-        for i in 0..rom.count {
-            MEMORY[i + offset as usize] = *rom.items.add(i) as u8;
-        }
+pub unsafe fn run_program(
+    // Inputs
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
+    // Temporaries
+    cmd: *mut Cmd,
+) -> Option<()> {
+    let gen = gen as *mut Mos6502;
+    cmd_append!{
+        cmd,
+        c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), (*gen).load_offset as c_uint),
+        program_path
     }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn read6502(address: u16) -> u8 {
-        MEMORY[address as usize]
+    if run_args.len() > 0 {
+        cmd_append!(cmd, c!("--"));
+        da_append_many(cmd, run_args);
     }
-
-    #[no_mangle]
-    pub unsafe extern "C" fn write6502(address: u16, value: u8) {
-        MEMORY[address as usize] = value;
-    }
-
-    extern "C" {
-        #[link_name = "reset6502"]
-        pub fn reset();
-        #[link_name = "step6502"]
-        pub fn step();
-        pub fn rts();
-        pub static mut pc: u16;
-        pub static mut sp: u16;
-        pub static mut a: u8;
-        pub static mut x: u8;
-        pub static mut y: u8;
-    }
-
-}
-
-pub unsafe fn run_impl(output: *mut String_Builder, config: Config, stdout: *mut FILE) -> Option<()> {
-    fake6502::load_rom_at(*output, config.load_offset);
-    fake6502::reset();
-    fake6502::pc = config.load_offset;
-
-    // set reset to $0000 to exit on reset
-    fake6502::MEMORY[0xFFFC] = 0;
-    fake6502::MEMORY[0xFFFD] = 0;
-
-    while fake6502::pc != 0 { // The convetion is stop executing when pc == $0000
-        let prev_sp = fake6502::sp & 0xFF;
-        let opcode  = fake6502::MEMORY[fake6502::pc as usize];
-        fake6502::step();
-
-        let curr_sp = fake6502::sp & 0xFF;
-        if opcode == 0x48 && curr_sp > prev_sp { // PHA instruction
-            log(Log_Level::ERROR, c!("Stack overflow detected"));
-            log(Log_Level::ERROR, c!("SP changed from $%02X to $%02X after PHA instruction"), prev_sp as c_uint, curr_sp as c_uint);
-            return None;
-        }
-
-        if fake6502::pc == 0xFFEF { // Emulating wozmon ECHO routine
-            fprintf(stdout, c!("%c"), fake6502::a as c_uint);
-            fake6502::rts();
-        }
-    }
-    // print exit code (in Y:A)
-    let code = ((fake6502::y as c_uint) << 8) | fake6502::a as c_uint;
-    log(Log_Level::INFO, c!("Exited with code %hd"), code);
-
-    if code != 0 {
-        return None;
-    }
+    if !cmd_run_sync_and_reset(cmd) { return None; }
     Some(())
-}
-
-pub unsafe fn run_program(output: *mut String_Builder, config: Config, program_path: *const c_char, stdout_path: Option<*const c_char>) -> Option<()> {
-    (*output).count = 0;
-    read_entire_file(program_path, output)?;
-
-    let stdout = if let Some(stdout_path) = stdout_path {
-        let stdout = fopen(stdout_path, c!("wb"));
-        if stdout.is_null() {
-            return None
-        }
-        stdout
-    } else {
-        stdout()
-    };
-    let result = run_impl(output, config, stdout);
-    if stdout_path.is_some() {
-        fclose(stdout);
-    }
-    result
 }

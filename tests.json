@@ -36,7 +36,7 @@
     },
     {
         "case": "rvalue_call",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Foo\r\nBar\r\nBaz\r\n",
         "state": "Enabled",
         "comment": ""
@@ -85,7 +85,7 @@
     },
     {
         "case": "multiple-postfix",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "34  35\r\n70 419\r\n",
         "state": "Enabled",
         "comment": ""
@@ -134,7 +134,7 @@
     },
     {
         "case": "ternary",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "0:\t..69\r\n42:\t..69\r\n69:\t69\r\n96:\t69..420\r\n420:\t420\r\n690:\t420..=1337\r\n1337:\t420..=1337\r\n4269:\t1337..\r\n",
         "state": "Enabled",
         "comment": ""
@@ -183,7 +183,7 @@
     },
     {
         "case": "deref_assign",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "*v =   1    v=1\r\n*v |=  16   v=17\r\n*v *=  2    v=34\r\n*v +=  35   v=69\r\n*v <<= 1    v=138\r\n*v &=  127  v=10\r\n",
         "state": "Enabled",
         "comment": ""
@@ -232,7 +232,7 @@
     },
     {
         "case": "asm_gas_x86_64_linux",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "",
         "state": "Disabled",
         "comment": "Doesn't make sense for this target"
@@ -246,6 +246,62 @@
     },
     {
         "case": "asm_gas_x86_64_linux",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "0\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_gas_x86_64_windows",
         "target": "ilasm-mono",
         "expected_stdout": "",
         "state": "Disabled",
@@ -288,7 +344,7 @@
     },
     {
         "case": "return",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "69\r\n",
         "state": "Enabled",
         "comment": ""
@@ -337,7 +393,7 @@
     },
     {
         "case": "asm_func_gas_x86_64_linux",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "",
         "state": "Disabled",
         "comment": "Doesn't make sense for this target"
@@ -356,6 +412,62 @@
         "state": "Disabled",
         "comment": "Doesn't make sense for this target"
     },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-x86_64-windows",
+        "expected_stdout": "69\r\n",
+        "state": "Enabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-x86_64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-aarch64-linux",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-aarch64-darwin",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "uxn",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "6502-posix",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "gas-x86_64-darwin",
+        "expected_stdout": "69\n",
+        "state": "Disabled",
+        "comment": ""
+    },
+    {
+        "case": "asm_func_gas_x86_64_windows",
+        "target": "ilasm-mono",
+        "expected_stdout": "",
+        "state": "Disabled",
+        "comment": "Doesn't make sense for this target"
+    },    
     {
         "case": "asm_func_6502",
         "target": "gas-x86_64-windows",
@@ -393,7 +505,7 @@
     },
     {
         "case": "asm_func_6502",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "",
         "state": "Enabled",
         "comment": ""
@@ -449,7 +561,7 @@
     },
     {
         "case": "call_stack_args",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "1 2 3 4 5 6 7 8 12 11\r\n1 2 3 4 5 6 7 8 12 11 10\r\n1 2 3 4 5 6 7 8 12 11 10 9\r\n",
         "state": "Enabled",
         "comment": ""
@@ -498,7 +610,7 @@
     },
     {
         "case": "globals",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "foo == 0x0102030405060708: OK\r\n",
         "state": "Enabled",
         "comment": ""
@@ -547,7 +659,7 @@
     },
     {
         "case": "recursion",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "10\r\n9\r\n8\r\n7\r\n6\r\n5\r\n4\r\n3\r\n2\r\n1\r\n",
         "state": "Enabled",
         "comment": ""
@@ -596,7 +708,7 @@
     },
     {
         "case": "lexer",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "0105 == 69: OK\r\n0x45 == 69: OK\r\n'E' == 0x45: OK\r\n'EF' == 0x4546: OK\r\n",
         "state": "Enabled",
         "comment": ""
@@ -645,7 +757,7 @@
     },
     {
         "case": "forward-declare",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Foo\r\nBar\r\n",
         "state": "Enabled",
         "comment": ""
@@ -694,7 +806,7 @@
     },
     {
         "case": "ternary-side-effect",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Only Foo should be printed bellow:\r\n  Foo\r\n",
         "state": "Enabled",
         "comment": ""
@@ -750,7 +862,7 @@
     },
     {
         "case": "compare",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "5 == 3: OK\r\n3 == 3: OK\r\n5 != 3: OK\r\n3 != 3: OK\r\n5 >= 3: OK\r\n3 >= 5: OK\r\n3 >= 3: OK\r\n3 >  3: OK\r\n5 >  3: OK\r\n",
         "state": "Enabled",
         "comment": ""
@@ -799,7 +911,7 @@
     },
     {
         "case": "literals",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "69\r\n16960\r\n64177\r\n",
         "state": "Enabled",
         "comment": "Since 6502 word size is 16 we expect such big literals to get truncated accordingly. 1000000 == 0xf4240 -> 16960 == 0x4240. 123456789987654321 == 0x1b69b4be052fab1 -> 64177 == 0xfab1"
@@ -848,7 +960,7 @@
     },
     {
         "case": "minus_2",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "-4\r\n",
         "state": "Enabled",
         "comment": ""
@@ -897,7 +1009,7 @@
     },
     {
         "case": "e",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "EEEEEEE\n",
         "state": "Enabled",
         "comment": ""
@@ -946,7 +1058,7 @@
     },
     {
         "case": "divmod",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Division:\r\n1/100 = 0\r\n-1/100 = 0\r\n100/100 = 1\r\n-100/100 = -1\r\n101/100 = 1\r\n-101/100 = -1\r\n201/100 = 2\r\n-201/100 = -2\r\n\r\nRemainder:\r\n1%100 = 1\r\n99%100 = 99\r\n100%100 = 0\r\n101%100 = 1\r\n201%100 = 1\r\n-1%100 = -1\r\n",
         "state": "Enabled",
         "comment": ""
@@ -995,7 +1107,7 @@
     },
     {
         "case": "switch",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "(69,69)    => 690: OK\r\n(420,420)  => 42: OK\r\n(420,1337) => 7331: OK\r\n(420,69)   => -2: OK\r\n(34,35)    => -1: OK\r\n------------------------------\r\n0\r\n1\r\n2\r\n3\r\n4\r\n------------------------------\r\n3\r\n4\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1044,7 +1156,7 @@
     },
     {
         "case": "args11",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "",
         "state": "Enabled",
         "comment": "TODO: Stack overflow"
@@ -1093,7 +1205,7 @@
     },
     {
         "case": "negative-ivals",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Hello, World\r\n-1\r\n-2\r\n-3\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1142,7 +1254,7 @@
     },
     {
         "case": "ternary-assign",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "a = 1 ? 69 : 420; a == 69: OK\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1191,7 +1303,7 @@
     },
     {
         "case": "asm_6502",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "",
         "state": "Enabled",
         "comment": ""
@@ -1247,7 +1359,7 @@
     },
     {
         "case": "ref",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "x: 69 69 69 69 69\r\ny: 420 420 420 420 420\r\na: 1337\r\nxs: [13, 42]\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1296,7 +1408,7 @@
     },
     {
         "case": "vector",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "34 + 35 = 69\r\nJust\r\nTesting\r\nGlobals\r\n1 => 2\r\n2 => 4\r\n3 => 6\r\n4 => 8\r\n5 => 10\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1345,7 +1457,7 @@
     },
     {
         "case": "args11-extrn",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Testing how well passing 11 arguments works.\r\nExpected output is `1 2 3 4 5 6 7 8 9 10`\r\n1 2 3 4 5 6 7 8 9 10\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1394,7 +1506,7 @@
     },
     {
         "case": "goto",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "0\r\n1\r\n2\r\n3\r\n4\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1443,7 +1555,7 @@
     },
     {
         "case": "unary_priority",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "69\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1492,7 +1604,7 @@
     },
     {
         "case": "args6",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "Testing how well passing 6 arguments works.\r\nExpected output is `1 2 3 4 5`\r\n1 2 3 4 5\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1541,7 +1653,7 @@
     },
     {
         "case": "stack_alloc",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "a = 1\r\nb = 2\r\nc = 3\r\n69\r\n420\r\n1337\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1590,7 +1702,7 @@
     },
     {
         "case": "hello",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "HELLOOOOO\nHELLOOOOO\nHELLOOOOO\n",
         "state": "Enabled",
         "comment": ""
@@ -1646,7 +1758,7 @@
     },
     {
         "case": "inc_dec",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "x: 3\r\n++x: 4\r\nx++: 4\r\nx: 5\r\nx--: 5\r\n--x: 3\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1695,7 +1807,7 @@
     },
     {
         "case": "upper",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "lower: hello, world\r\nUPPER: HELLO, WORLD\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1744,7 +1856,7 @@
     },
     {
         "case": "compile-overflow",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "",
         "state": "Disabled",
         "comment": "The word size of this platform is too small."
@@ -1793,7 +1905,7 @@
     },
     {
         "case": "execvp-error-checking",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "OK\r\n",
         "state": "Disabled",
         "comment": "Does not make sense on this platform"
@@ -1849,7 +1961,7 @@
     },
     {
         "case": "out_of_order_funcalls",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "No forward declaration is required\r\n",
         "state": "Enabled",
         "comment": ""
@@ -1912,7 +2024,7 @@
     },
     {
         "case": "statements",
-        "target": "6502",
+        "target": "6502-posix",
         "expected_stdout": "HELO\r\n",
         "state": "Enabled",
         "comment": ""
