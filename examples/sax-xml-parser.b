@@ -2,7 +2,7 @@
 //
 // Simple XML-aware parser. CDATA is not supported.
 //
-// Usage: sax-xml-parser [OPTIONs] <input...>
+// Usage: sax-xml-parser [OPTIONS] <input...>
 // OPTIONS:
 //    -f <file>
 //        Parse content of the file
@@ -143,16 +143,16 @@ characters(str, start, end)
     print_substring_n(str, start, end);
 }
 
-start_tag(str, tag_start, tagEnd, nameStart, nameEnd, isSelfClosing)
+start_tag(str, tag_start, tag_end, name_start, name_end, is_self_closing)
 {
     printf("start_tag: ");
-    print_substring_n(str, nameStart, nameEnd);
+    print_substring_n(str, name_start, name_end);
 }
 
-end_tag(str, tag_start, tagEnd, nameStart, nameEnd)
+end_tag(str, tag_start, tag_end, name_start, name_end)
 {
     printf("end_tag: ");
-    print_substring_n(str, nameStart, nameEnd);
+    print_substring_n(str, name_start, name_end);
 }
 
 start_document() 
@@ -172,9 +172,9 @@ ext_characters(str, start, end)
     print_substring_n(str, start, end);
 }
 
-ext_start_tag(str, tag_start, tagEnd, nameStart, nameEnd, isSelfClosing){}
+ext_start_tag(str, tag_start, tag_end, name_start, name_end, is_self_closing){}
 
-ext_end_tag(str, tag_start, tagEnd, nameStart, nameEnd){}
+ext_end_tag(str, tag_start, tag_end, name_start, name_end){}
 
 ext_start_document() {}
 
@@ -221,7 +221,7 @@ read_file(fname)
     auto fp; fp = fopen(fname, "rb");
     if (fp == 0) 
     {
-        printf("File %s not found.");
+        printf("File %s not found\n", fname);
         exit(-1);
     }
     fseek(fp, 0, 2); // fseek(fp, 0, SEEK_END)
