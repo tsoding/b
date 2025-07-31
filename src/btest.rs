@@ -120,7 +120,7 @@ pub struct Report {
 
 pub unsafe fn execute_test(
     // Inputs
-    test_folder: *const c_char, name: *const c_char, target: Target,
+    test_folder: *const c_char, name: *const c_char, target: Target, quiet: bool,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
 ) -> Option<Outcome> {
@@ -148,6 +148,9 @@ pub unsafe fn execute_test(
         input_path,
         c!("-t"), target.name(),
         c!("-o"), program_path,
+    }
+    if quiet {
+        cmd_append! { cmd, c!("-q") }
     }
     if !cmd_run_sync_and_reset(cmd) {
         return Some(Outcome::BuildFail);
@@ -178,7 +181,9 @@ pub unsafe fn execute_test(
     (*sb).count = 0;
     read_entire_file(stdout_path, sb)?; // Should always succeed, but may fail if stdout_path is a directory for instance.
     da_append(sb, 0);                   // NULL-terminating the stdout
-    printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
+    if !quiet {
+        printf(c!("%s"), (*sb).items);      // Forward stdout for diagnostic purposes
+    }
 
     if !run_ok {
         Some(Outcome::RunFail)
@@ -275,7 +280,7 @@ pub unsafe fn matches_glob(pattern: *const c_char, text: *const c_char) -> Optio
 
 pub unsafe fn record_tests(
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], tt: *mut TestTable,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], tt: *mut TestTable, quiet: bool,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder,
     reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>,
@@ -297,7 +302,7 @@ pub unsafe fn record_tests(
                     TestState::Enabled => {
                         let outcome = execute_test(
                             // Inputs
-                            test_folder, case_name, target,
+                            test_folder, case_name, target, quiet,
                             // Outputs
                             cmd, sb,
                         )?;
@@ -315,7 +320,7 @@ pub unsafe fn record_tests(
             } else {
                 let outcome = execute_test(
                     // Inputs
-                    test_folder, case_name, target,
+                    test_folder, case_name, target, quiet,
                     // Outputs
                     cmd, sb,
                 )?;
@@ -436,7 +441,7 @@ pub unsafe fn load_tt_from_json_file_if_exists(
 ) -> Option<TestTable> {
     let mut tt: TestTable = zeroed();
     if file_exists(json_path)? {
-        printf(c!("INFO: loading file %s...\n"), json_path);
+        log(Log_Level::INFO, c!("loading file %s..."), json_path);
         // TODO: file may stop existing between file_exists() and read_entire_file() cools
         // It would be much better if read_entire_file() returned the reason of failure so
         // it's easy to check if it failed due to ENOENT, but that requires significant
@@ -539,7 +544,7 @@ pub unsafe fn load_tt_from_json_file_if_exists(
         }
         jimp_array_end(jimp)?;
     } else {
-        printf(c!("INFO: %s doesn't exist. Nothing to load.\n"), json_path);
+        log(Log_Level::INFO, c!("%s doesn't exist. Nothing to load."), json_path);
     }
     Some(tt)
 }
@@ -548,7 +553,7 @@ pub unsafe fn save_tt_to_json_file(
     json_path: *const c_char, tt: TestTable,
     jim: *mut Jim,
 ) -> Option<()> {
-    printf(c!("INFO: saving file %s...\n"), json_path);
+    log(Log_Level::INFO, c!("saving file %s..."), json_path);
     jim_begin(jim);
     jim_array_begin(jim);
     for i in 0..tt.count {
@@ -577,7 +582,7 @@ pub unsafe fn save_tt_to_json_file(
 pub unsafe fn replay_tests(
     // TODO: The Inputs and the Outputs want to be their own entity. But what should they be called?
     // Inputs
-    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], mut tt: TestTable,
+    test_folder: *const c_char, cases: *const [*const c_char], targets: *const [Target], mut tt: TestTable, quiet: bool,
     // Outputs
     cmd: *mut Cmd, sb: *mut String_Builder, reports: *mut Array<Report>, stats_by_target: *mut Array<ReportStats>, jim: *mut Jim,
 ) -> Option<()> {
@@ -599,7 +604,7 @@ pub unsafe fn replay_tests(
                     TestState::Enabled => {
                         let outcome = execute_test(
                             // Inputs
-                            test_folder, case_name, target,
+                            test_folder, case_name, target, quiet,
                             // Outputs
                             cmd, sb,
                         )?;
@@ -626,7 +631,7 @@ pub unsafe fn replay_tests(
             } else {
                 let outcome = execute_test(
                     // Inputs
-                    test_folder, case_name, target,
+                    test_folder, case_name, target, quiet,
                     // Outputs
                     cmd, sb,
                 )?;
@@ -700,6 +705,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
     let comment              = flag_str(c!("comment"), ptr::null(), strdup(temp_sprintf(c!("Set the comment on disabled test cases when you do `-%s %s`"), flag_name(action_flag), Action::Disable.name()))); // TODO: memory leak
 
     let test_folder          = flag_str(c!("dir"), c!("./tests/"), c!("Test folder"));
+    let quiet                = flag_bool(c!("q"), false, c!("Makes the test runner yap less about what it's doing"));
     let help                 = flag_bool(c!("help"), false, c!("Print this help message"));
 
     if !flag_parse(argc, argv) {
@@ -750,6 +756,10 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             };
         }
         return Some(());
+    }
+
+    if *quiet {
+        minimal_log_level = Log_Level::WARNING;
     }
 
     let mut sb: String_Builder = zeroed();
@@ -877,7 +887,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let mut tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             record_tests(
                 // Inputs
-                *test_folder, da_slice(cases), da_slice(targets), &mut tt,
+                *test_folder, da_slice(cases), da_slice(targets), &mut tt, *quiet,
                 // Outputs
                 &mut cmd, &mut sb, &mut reports, &mut stats_by_target,
             )?;
@@ -887,7 +897,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
             let tt = load_tt_from_json_file_if_exists(json_path, *test_folder, &mut sb, &mut jimp)?;
             replay_tests(
                 // Inputs
-                *test_folder, da_slice(cases), da_slice(targets), tt,
+                *test_folder, da_slice(cases), da_slice(targets), tt, *quiet,
                 // Outputs
                 &mut cmd, &mut sb, &mut reports, &mut stats_by_target, &mut jim,
             );
@@ -914,7 +924,7 @@ pub unsafe fn main(argc: i32, argv: *mut*mut c_char) -> Option<()> {
                 let case_name = *cases.items.add(i);
                 for j in 0..targets.count {
                     let target = *targets.items.add(j);
-                    printf(c!("INFO: disabling %-*s for %-*s\n"), case_width, case_name, target_width, target.name());
+                    log(Log_Level::INFO, c!("disabling %-*s for %-*s"), case_width, case_name, target_width, target.name());
                     if let Some(row) = test_table_find_row(&mut tt, case_name, target) {
                         (*row).state = TestState::Disabled;
                         if !(*comment).is_null() {
