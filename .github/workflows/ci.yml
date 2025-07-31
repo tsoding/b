@@ -35,7 +35,7 @@ jobs:
           sudo apt-get install -qq -y clang make
           git clone https://git.sr.ht/~rabbits/uxn11
           cd uxn11
-          make cli
+          make
       - name: Build Toolchain
         run: |
           make -B
@@ -80,6 +80,7 @@ jobs:
       - name: Run Tests
         run: |
           ./build/btest -t *ilasm-mono*
+>>>>>>> f77509faac2d605e5fe410b1955a74546e507768
   macos-aarch64:
     runs-on: macos-latest
     steps:

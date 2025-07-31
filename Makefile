@@ -27,6 +27,7 @@ RSS=\
 	$(SRC)/time.rs \
 	$(SRC)/jim.rs \
 	$(SRC)/jimp.rs \
+	$(SRC)/codegen/gas_sh4dsp_prizm.rs \
 	$(SRC)/codegen/gas_aarch64.rs \
 	$(SRC)/codegen/gas_x86_64.rs \
 	$(SRC)/codegen/mos6502.rs \

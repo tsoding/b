@@ -1390,6 +1390,32 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let garbage_base = get_garbage_base(program_path, target)?;
 
     match target {
+        Target::Gas_SH4_Prizm => {
+            let effective_output_path;
+            if (*output_path).is_null() {
+                if let Some(base_path) = temp_strip_suffix(*input_paths.items, c!(".b")) {
+                    effective_output_path = base_path;
+                } else {
+                    effective_output_path = temp_sprintf(c!("%s.out"), *input_paths.items);
+                }
+            } else {
+                effective_output_path = *output_path;
+            }
+            let base_path = temp_strip_suffix(effective_output_path, c!(".g3a")).unwrap_or(effective_output_path);
+            let output_bin_path = temp_sprintf(c!("%s.bin"), base_path);
+            let output_g3a_path = temp_sprintf(c!("%s.g3a"), base_path);
+            if !*nobuild {
+                codegen::gas_sh4dsp_prizm::generate_program(&mut output, &c.program);
+                let config = codegen::gas_sh4dsp_prizm::parse_link_flags(da_slice(*linker))?;
+                write_entire_file(output_bin_path, output.items as *const c_void, output.count)?;
+                printf(c!("INFO: Generated %s\n"), output_bin_path);
+                codegen::gas_sh4dsp_prizm::generate_g3a(output_bin_path, config.name, output_g3a_path)?;
+            }
+
+            if *run {
+                codegen::gas_sh4dsp_prizm::run(&mut output, output_g3a_path, None)?;
+            }
+        },
         Target::Gas_AArch64_Linux => {
             let os = targets::Os::Linux;
 

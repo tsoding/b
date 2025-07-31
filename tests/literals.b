@@ -1,3 +1,4 @@
+// TODO: Literals this large _will_ fail on some platforms with a low word size
 main() {
     extrn printf;
     auto fmt;

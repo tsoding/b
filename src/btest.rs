@@ -132,6 +132,7 @@ pub unsafe fn execute_test(
         Target::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
         Target::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
         Target::Gas_x86_64_Windows  => c!("exe"),
+        Target::Gas_SH4_Prizm       => c!("g3a"),
         Target::Uxn                 => c!("rom"),
         Target::Mos6502_Posix       => c!("6502"),
         // TODO: ILasm_Mono may collide with Gas_x86_64_Windows if we introduce parallel runner

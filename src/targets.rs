@@ -12,6 +12,7 @@ enum_with_order! {
         Gas_x86_64_Darwin,
         Gas_AArch64_Linux,
         Gas_AArch64_Darwin,
+        Gas_SH4_Prizm,
         Uxn,
         Mos6502_Posix,
         ILasm_Mono,
@@ -29,6 +30,7 @@ impl Target {
             Self::Uxn                => c!(".rom"),
             Self::Mos6502_Posix      => c!(".6502"),
             Self::ILasm_Mono         => c!(".exe"),
+            Self::Gas_SH4_Prizm      => c!(".g3a"),
         }
     }
 
@@ -38,6 +40,7 @@ impl Target {
             Self::Gas_x86_64_Linux    => c!("gas-x86_64-linux"),
             Self::Gas_x86_64_Darwin   => c!("gas-x86_64-darwin"),
             Self::Gas_AArch64_Linux   => c!("gas-aarch64-linux"),
+            Self::Gas_SH4_Prizm       => c!("gas-sh4dsp-prizm"),
             Self::Gas_AArch64_Darwin  => c!("gas-aarch64-darwin"),
             Self::Uxn                 => c!("uxn"),
             Self::Mos6502_Posix       => c!("6502-posix"),
