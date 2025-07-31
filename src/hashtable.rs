@@ -31,7 +31,7 @@ where
     H: Hasher,
 {
     // Must be power of 2 and greater than or equal to 8
-    pub const MIN_CAPACITY: usize = 8;
+    pub const MIN_CAPACITY: usize = 32;
 
     /// Returns previous value stored by this `key` or `None`
     pub unsafe fn insert(ht: *mut Self, key: K, value: V) -> Option<V> {
@@ -58,11 +58,16 @@ where
         }
     }
 
+    pub unsafe fn clear(ht: *mut Self) {
+        (*ht).count = 0;
+        ptr::write_bytes((*ht).occupied, 0, (*ht).capacity >> 3);
+    }
+
     pub unsafe fn find(ht: *const Self, key: K) -> HtEntry<K, V> {
         if (*ht).capacity == 0 {
             return HtEntry::Vacant(ptr::null_mut());
         }
-        
+
         let hash = Self::hash_key(ht, key);
         let mut index = Self::index_from_hash(hash, (*ht).capacity);
 
@@ -86,15 +91,14 @@ where
         if entry.is_null() {
             Self::realloc_rehash(ht);
 
-            // Executes only when capacity was 0 
+            // Executes only when capacity was 0
             let hash = Self::hash_key(ht, key);
             let index = Self::index_from_hash(hash, (*ht).capacity);
-            *(*ht).entries.add(index) = Entry { key, value };
-            (*ht).count += 1;
+            Self::fill_entry(ht, (*ht).entries.add(index), index, key, value);
         } else {
-            (*entry).key = key;
-            (*entry).value = value;
-            (*ht).count += 1;
+            let index = entry.offset_from((*ht).entries);
+            debug_assert!(index >= 0);
+            Self::fill_entry(ht, entry, index as usize, key, value);
 
             // When load factor > 0.75
             if (3 * (*ht).capacity) / 4 < (*ht).count {
@@ -104,43 +108,50 @@ where
     }
 
     pub unsafe fn realloc_rehash(ht: *mut Self) {
-        let new_capacity = cmp::max((*ht).capacity << 1, Self::MIN_CAPACITY);
-        debug_assert!(new_capacity.is_power_of_two());
+        let old_entries = (*ht).entries;
+        let old_occupied = (*ht).occupied;
+        let old_capacity = (*ht).capacity;
 
+        (*ht).capacity = cmp::max(old_capacity << 1, Self::MIN_CAPACITY);
+        debug_assert!((*ht).capacity.is_power_of_two());
+        
         // We need new allocations here, to properly copy entries
-        let new_entries: *mut Entry<K, V> = libc::realloc_items(ptr::null_mut(), new_capacity);
-        let new_occupied: *mut u8 = libc::realloc_items(ptr::null_mut(), new_capacity >> 3);
-        debug_assert!(!new_entries.is_null());
-        debug_assert!(!new_occupied.is_null());
+        (*ht).entries = libc::realloc_items(ptr::null_mut(), (*ht).capacity);
+        (*ht).occupied = libc::realloc_items(ptr::null_mut(), (*ht).capacity >> 3);
+        debug_assert!(!(*ht).entries.is_null());
+        debug_assert!(!(*ht).occupied.is_null());
 
         // Fill occupied with zeros
-        ptr::write_bytes(new_occupied, 0, new_capacity >> 3);
+        ptr::write_bytes((*ht).occupied, 0, (*ht).capacity >> 3);
 
         // Rehash all occupoed entries
-        let buckets_count = (*ht).capacity >> 3;
+        let buckets_count = old_capacity >> 3;
         for i in 0..buckets_count {
-            let bucket = *(*ht).occupied.add(i);
+            let bucket = *old_occupied.add(i);
             for j in 0..8 {
                 if (bucket >> j) & 1 == 1 {
                     let index = (i << 3) + (7 - j);
-                    let entry = *(*ht).entries.add(index);
-                    let hash = Self::hash_key(ht, entry.key);
-                    let new_index = Self::index_from_hash(hash, new_capacity);
-                    let new_bucket = new_index >> 3;
-
-                    *new_entries.add(new_index) = entry;
-                    *new_occupied.add(new_bucket) |= 1 << (7 - (new_index & 7));
+                    let entry = *old_entries.add(index);
+                    assert!(Self::insert(ht, entry.key, entry.value).is_none()); 
                 }
             }
         }
 
         // free old allocations
-        libc::free((*ht).entries);
-        libc::free((*ht).occupied);
+        libc::free(old_entries);
+        libc::free(old_occupied);
+    }
 
-        (*ht).capacity = new_capacity;
-        (*ht).entries = new_entries;
-        (*ht).occupied = new_occupied;
+    pub unsafe fn fill_entry(ht: *mut Self, entry: *mut Entry<K, V>, index: usize, key: K, value: V) {
+        *entry = Entry { key, value };
+        Self::occupy_index(ht, index);
+        (*ht).count += 1;
+    }
+
+    pub unsafe fn occupy_index(ht: *mut Self, index: usize) {
+        let bucket = (*ht).occupied.add(index >> 3);
+        let sub_index = 7 - (index & 7);
+        *bucket |= 1 << sub_index;
     }
 
     pub unsafe fn is_occupied(ht: *const Self, index: usize) -> bool {
@@ -167,7 +178,9 @@ impl BuildHasher for DefaultHasher {
     type Hasher = Fnv1aHasher;
 
     fn build_hasher(&self) -> Self::Hasher {
-        Fnv1aHasher { hash: Fnv1aHasher::OFFSET } 
+        Fnv1aHasher {
+            hash: Fnv1aHasher::OFFSET,
+        }
     }
 }
 
