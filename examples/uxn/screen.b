@@ -1,7 +1,3 @@
-/* IMPORTANT! Implies -nostdlib.
- * Because the entry point from ./libb/uxn.b conflicts with the entry point of this program.
- * TODO: do we want to do anything about this?
- */
 logo;
 
 x; y;
@@ -49,6 +45,7 @@ on_screen() {
 
 main() {
     extrn uxn_deo2, lchar;
+    uxn_disable_exit_after_main();
     logo = "aaaaaaaaaaaaaaaa";
     lchar(logo,  0, 0x00); lchar(logo,  8, 0x7e); /*  ######  */
     lchar(logo,  1, 0x38); lchar(logo,  9, 0xc7); /* ##...### */

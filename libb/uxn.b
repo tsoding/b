@@ -1,7 +1,106 @@
 /* Standard Library for the Uxn target */
 
+/*
+ch = char(string, i);
+returns the ith character in a string pointed to by string, 0 based
+*/
+
+char __asm__(
+    "lit 4", "ldz2", /* first arg, string */
+    "lit 6", "ldz2", /* second arg, i */
+    "add2",
+    "lda",
+    "lit 0",
+    "swp",
+    "lit 4", "stz2", /* return value (same spot as the first arg) */
+    "jmp2r"
+);
+
+/*
+ch = lchar(string, i, char);
+replaces the ith character in the string pointed to by string with the character char.
+The value LCHAR returns is the character char that was placed in the string.
+*/
+
+lchar __asm__(
+    "lit 9", "ldz", /* low byte of the arg 2, char */
+    "lit 4", "ldz2",
+    "lit 6", "ldz2",
+    "add2",
+    "stak",
+    "pop2",
+    "lit 0",
+    "swp",
+    "lit 4", "stz2",
+    "jmp2r"
+);
+
+/*
+value = uxn_dei(device);
+reads 8 bit value off a device
+*/
+
+uxn_dei __asm__(
+    "lit 0", "lit 4", "stz", /* zero the high byte of arg0/return */
+    "lit 5", "ldzk", /* low byte of arg0 */
+    "dei",
+    "swp",
+    "stz",
+    "jmp2r"
+);
+
+/*
+value = uxn_dei2(device);
+reads 16 bit value off a device
+*/
+
+uxn_dei2 __asm__(
+    "lit 5", "ldz", /* low byte of arg0 */
+    "dei2",
+    "lit 4", "stz2",
+    "jmp2r"
+);
+
+/*
+uxn_deo(device, value);
+outputs 8 bit value to a device
+*/
+
+uxn_deo __asm__(
+    "lit 7", "ldz", /* low byte of arg1 */
+    "lit 5", "ldz", /* low byte of arg0 */
+    "deo",
+    "lit2 0", "lit 4", "stz2", /* return 0 */
+    "jmp2r"
+);
+
+/*
+uxn_deo2(device, value);
+outputs 16 bit value to a device
+*/
+
+uxn_deo2 __asm__(
+    "lit 6", "ldz2", /* arg1 */
+    "lit 5", "ldz", /* low byte of arg0 */
+    "deo2",
+    "lit2 0", "lit 4", "stz2", /* return 0 */
+    "jmp2r"
+);
+
+/*
+uxn_udiv(a, b)
+outputs 16 bit unsigned division of a / b.
+*/
+
+uxn_div2 __asm__(
+    "lit 4", "ldz2", /* arg0 */
+    "lit 6", "ldz2", /* arg1 */
+    "div2",
+    "lit 4", "stz2",
+    "jmp2r"
+);
+
 fputc(c, fd) {
-    extrn uxn_deo;
     uxn_deo(fd + 0x18, c); /* 0x18 - Console/write,
                               0x19 - Console/error */
 }
@@ -11,12 +110,22 @@ putchar(c) {
 }
 
 exit(code) {
-    extrn uxn_deo;
     uxn_deo(0x0f, code | 0x80); /* System/state */
 }
 
+_exit_after_main 1;
+
+uxn_disable_exit_after_main() {
+    _exit_after_main = 0;
+}
+
+_exit_main(code) {
+    if (_exit_after_main) {
+        exit(code);
+    }
+}
+
 abort() {
-    extrn printf;
     printf("Aborted\n");
     exit(1);
 }
@@ -50,7 +159,6 @@ printn(n, b) _fprintn(n, b, 0);
 /* TODO: Consider adding support for negative numbers to Uxn's printf. */
 /* TODO: Consider adding support for %ul to Uxn's printf. */
 fprintf(fd, string, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) {
-    extrn char;
     auto i, j, c, arg;
     i = 0;
     j = 0;
@@ -103,7 +211,6 @@ printf(string, x1, x2, x3, x4, x5, x6, x7, x8, x9, x10, x11, x12) {
 
 // TODO: doesn't skip whitespace, doesn't handle negative numbers
 atoi(s) {
-    extrn char;
     auto i, result, c;
     i = 0;
     while (1) {
@@ -119,20 +226,16 @@ out:
 
 /* simple bump allocator */
 
-__alloc_ptr;
+__alloc_ptr 0x8000; /* provide __heap_base by the compiler? */
 
 malloc(size) {
     auto ret;
-    if (__alloc_ptr == 0) {
-        __alloc_ptr = 0x8000; /* provide __heap_base by the compiler? */
-    }
     ret = __alloc_ptr;
     __alloc_ptr += size;
     return (ret);
 }
 
 memset(addr, val, size) {
-    extrn lchar;
     auto i;
     i = 0;
     while (i < size) {
@@ -141,14 +244,13 @@ memset(addr, val, size) {
     }
 }
 
-stdout; stderr;
+stdout 0; stderr 1;
 
-_args_count;
-_args_items;
-_prog_name;
+_args_count 1;
+_args_items 0x7f00; /* 128 arguments ought to be enough for everyone */
+_prog_name "-";
 
 _start_with_arguments() {
-    extrn uxn_dei, uxn_deo2, lchar, main;
     auto type, c;
     type = uxn_dei(0x17); /* Console/type */
     c = uxn_dei(0x12);
@@ -160,24 +262,17 @@ _start_with_arguments() {
     } else if (type == 4) { /* arguments end */
         lchar(__alloc_ptr++, 0, 0);
         uxn_deo2(0x10, 0);
-        exit(main(_args_count, _args_items));
+        _exit_main(main(_args_count, _args_items));
     }
 }
 
 _start() {
-    extrn main, uxn_dei, uxn_deo2;
-    __alloc_ptr = 0x8000;
-    _args_items = 0x7f00; /* 128 arguments ought to be enough for everyone */
-    stdout = 0;
-    stderr = 1;
-    _prog_name = "-"; /* we don't have access to it */
     *_args_items = _prog_name;
-    _args_count = 1;
     if (uxn_dei(0x17) != 0) {
         *(_args_items + (_args_count++)*2) = __alloc_ptr;
         uxn_deo2(0x10, &_start_with_arguments);
     } else {
-        exit(main(_args_count, _args_items));
+        _exit_main(main(_args_count, _args_items));
     }
 }
 

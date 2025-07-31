@@ -8,6 +8,8 @@ use crate::missingf;
 use crate::diagf;
 use crate::arena;
 use crate::codegen::*;
+use crate::lexer;
+use crate::lexer::{Token, loc};
 
 // UXN memory map
 // 0x0000 - 0x00ff - zero page
@@ -75,7 +77,7 @@ pub unsafe fn link_label(a: *mut Assembler, label: usize, addr: usize) {
     *(*a).resolved_addresses.items.add(label) = addr as u16;
 }
 
-pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
+pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) -> Option<()> {
     for i in 0..(*a).patches.count {
         let patch = *(*a).patches.items.add(i);
         let addr = *(*a).resolved_addresses.items.add(patch.label);
@@ -84,11 +86,11 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
                 let named_label = *(*a).named_labels.items.add(j);
                 if named_label.label == patch.label {
                     log(Log_Level::ERROR, c!("uxn: Label '%s' was never linked"), named_label.name);
-                    abort();
+                    return None;
                 }
             }
             log(Log_Level::ERROR, c!("uxn: Label #%ld was never linked"), patch.label);
-            abort();
+            return None;
         }
         let offset = patch.offset;
         let byte = match patch.kind {
@@ -99,17 +101,20 @@ pub unsafe fn apply_patches(output: *mut String_Builder, a: *mut Assembler) {
         };
         *(*output).items.add(patch.addr as usize) = byte as c_char;
     }
+    Some(())
 }
 
 const SP: u8 = 0;
 const BP: u8 = 2;
 const FIRST_ARG: u8 = 4;
 
-pub unsafe fn generate_asm_funcs(_output: *mut String_Builder, asm_funcs: *const [AsmFunc]) {
+pub unsafe fn generate_asm_funcs(output: *mut String_Builder, asm_funcs: *const [AsmFunc], assembler: *mut Assembler) -> Option<()> {
     for i in 0..asm_funcs.len() {
         let asm_func = (*asm_funcs)[i];
-        missingf!(asm_func.name_loc, c!("__asm__ functions for uxn"));
+        link_label(assembler, get_or_create_label_by_name(assembler, asm_func.name), (*output).count);
+        process_asm_statements(output, da_slice(asm_func.body), assembler)?;
     }
+    Some(())
 }
 
 pub unsafe fn usage(params: *const [Param]) {
@@ -234,13 +239,13 @@ pub unsafe fn generate_program(
     write_label_abs(output, vector_return_label, &mut assembler, 0);
     write_op(output, UxnOp::BRK);
 
-    generate_funcs(output, da_slice((*program).funcs), &mut assembler);
-    generate_asm_funcs(output, da_slice((*program).asm_funcs));
-    generate_extrns(output, da_slice((*program).extrns), da_slice((*program).funcs), da_slice((*program).globals), &mut assembler);
+    generate_funcs(output, da_slice((*program).funcs), &mut assembler)?;
+    generate_asm_funcs(output, da_slice((*program).asm_funcs), &mut assembler)?;
+    generate_extrns(da_slice((*program).extrns), da_slice((*program).funcs), da_slice((*program).asm_funcs), da_slice((*program).globals))?;
     generate_data_section(output, da_slice((*program).data), &mut assembler);
     generate_globals(output, da_slice((*program).globals), &mut assembler);
 
-    apply_patches(output, &mut assembler);
+    apply_patches(output, &mut assembler)?;
 
     write_entire_file(program_path, (*output).items as *const c_void, (*output).count)?;
     log(Log_Level::INFO, c!("generated %s"), program_path);
@@ -261,13 +266,14 @@ pub unsafe fn run_program(
     Some(())
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], assembler: &mut Assembler) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], assembler: &mut Assembler) -> Option<()> {
     for i in 0..funcs.len() {
-        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, assembler);
+        generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, da_slice((*funcs)[i].body), output, assembler)?;
     }
+    Some(())
 }
 
-pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, assembler: *mut Assembler) {
+pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count: usize, auto_vars_count: usize, body: *const [OpWithLocation], output: *mut String_Builder, assembler: *mut Assembler) -> Option<()> {
     link_label(assembler, get_or_create_label_by_name(assembler, name), (*output).count);
 
     const MAX_ARGS: usize = (256 - FIRST_ARG as usize) / 2;
@@ -585,7 +591,9 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
                 write_lit_ldz2(output, FIRST_ARG);
                 store_auto(output, result);
             }
-            Op::Asm {..} => missingf!(op.loc, c!("Inline assembly\n")),
+            Op::Asm {stmts} => {
+                process_asm_statements(output, da_slice(stmts), assembler)?;
+            }
             Op::Label {label} => {
                 link_label(assembler, *labels.items.add(label), (*output).count);
             }
@@ -657,6 +665,8 @@ pub unsafe fn generate_function(name: *const c_char, name_loc: Loc, params_count
 
     // return
     write_op(output, UxnOp::JMP2r);
+
+    Some(())
 }
 
 pub unsafe fn write_op(output: *mut String_Builder, op: UxnOp) {
@@ -798,12 +808,18 @@ pub unsafe fn store_auto(output: *mut String_Builder, index: usize) {
     write_op(output, UxnOp::STA2);
 }
 
-pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*const c_char], funcs: *const [Func], globals: *const [Global], assembler: *mut Assembler) {
+pub unsafe fn generate_extrns(extrns: *const [*const c_char], funcs: *const [Func], asm_funcs: *const[AsmFunc], globals: *const [Global]) -> Option<()> {
     'skip_function_or_global: for i in 0..extrns.len() {
         // assemble a few "stdlib" functions which can't be programmed in B
         let name = (*extrns)[i];
         for j in 0..funcs.len() {
             let func = (*funcs)[j];
+            if strcmp(func.name, name) == 0 {
+                continue 'skip_function_or_global
+            }
+        }
+        for j in 0..asm_funcs.len() {
+            let func = (*asm_funcs)[j];
             if strcmp(func.name, name) == 0 {
                 continue 'skip_function_or_global
             }
@@ -814,94 +830,10 @@ pub unsafe fn generate_extrns(output: *mut String_Builder, extrns: *const [*cons
                 continue 'skip_function_or_global
             }
         }
-        // TODO: consider introducing target-specific inline assembly and implementing all these intrinsics in it
-        if strcmp(name, c!("char")) == 0 {
-            // ch = char(string, i);
-            // returns the ith character in a string pointed to by string, 0 based
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("char")), (*output).count);
-            write_lit_ldz2(output, FIRST_ARG + 0);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_op(output, UxnOp::ADD2);
-            write_op(output, UxnOp::LDA);
-            write_lit(output, 0);
-            write_op(output, UxnOp::SWP);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("lchar")) == 0 {
-            // ch = lchar(string, i, char);
-            // replaces the ith character in the string pointed to by string with the character char.
-            // The value LCHAR returns is the character char that was placed in the string.
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("lchar")), (*output).count);
-            write_lit(output, FIRST_ARG + 5); // lower byte of the arg 2 (char)
-            write_op(output, UxnOp::LDZ);
-            write_lit_ldz2(output, FIRST_ARG + 0);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_op(output, UxnOp::ADD2);
-            write_op(output, UxnOp::STAk);
-            write_op(output, UxnOp::POP2);
-            write_lit(output, 0);
-            write_op(output, UxnOp::SWP);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_dei")) == 0 {
-            // value = uxn_dei(device);
-            // reads 8 bit value off a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_dei")), (*output).count);
-            write_lit(output, 0);
-            write_lit(output, FIRST_ARG + 0); // the high byte of the first arg/return value, will be zeroed
-            write_op(output, UxnOp::STZ);
-            write_lit(output, FIRST_ARG + 1); // low byte of arg 0
-            write_op(output, UxnOp::LDZk);
-            write_op(output, UxnOp::DEI);
-            write_op(output, UxnOp::SWP);
-            write_op(output, UxnOp::STZ);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_dei2")) == 0 {
-            // value = uxn_dei2(device);
-            // reads 16 bit value off a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_dei2")), (*output).count);
-            write_lit(output, FIRST_ARG + 1); // low byte of arg 0
-            write_op(output, UxnOp::LDZ);
-            write_op(output, UxnOp::DEI2);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_deo")) == 0 {
-            // uxn_deo(device, value);
-            // outputs 8 bit value to a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_deo")), (*output).count);
-            write_lit(output, FIRST_ARG + 3); // low byte of arg 1
-            write_op(output, UxnOp::LDZ);
-            write_lit(output, FIRST_ARG + 1); // low byte of arg 0
-            write_op(output, UxnOp::LDZ);
-            write_op(output, UxnOp::DEO);
-            write_lit2(output, 0);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_deo2")) == 0 {
-            // uxn_deo2(device, value);
-            // outputs 16 bit value to a device
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_deo2")), (*output).count);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_lit(output, FIRST_ARG + 1);
-            write_op(output, UxnOp::LDZ);
-            write_op(output, UxnOp::DEO2);
-            write_lit2(output, 0);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else if strcmp(name, c!("uxn_div2")) == 0 {
-            // uxn_udiv(a, b)
-            // outputs 16 bit unsigned division of a / b.
-            link_label(assembler, get_or_create_label_by_name(assembler, c!("uxn_div2")), (*output).count);
-            write_lit_ldz2(output, FIRST_ARG);
-            write_lit_ldz2(output, FIRST_ARG + 2);
-            write_op(output, UxnOp::DIV2);
-            write_lit_stz2(output, FIRST_ARG);
-            write_op(output, UxnOp::JMP2r);
-        } else {
-            log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
-            abort();
-        }
+        log(Log_Level::ERROR, c!("uxn: Unknown extrn: `%s`, can not link"), name);
+        return None;
     }
+    Some(())
 }
 
 pub unsafe fn generate_globals(output: *mut String_Builder, globals: *const [Global], assembler: *mut Assembler) {
@@ -940,7 +872,7 @@ pub unsafe fn generate_data_section(output: *mut String_Builder, data: *const [u
 }
 
 #[repr(u8)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 pub enum UxnOp {
     BRK    = 0x00,
     INC    = 0x01,
@@ -1198,4 +1130,190 @@ pub enum UxnOp {
     ORA2kr = 0xfd,
     EOR2kr = 0xfe,
     SFT2kr = 0xff,
+}
+
+pub const AsmOpNames: *const [*const c_char] = &[
+    c!("brk"),    c!("inc"),    c!("pop"),    c!("nip"),    c!("swp"),    c!("rot"),    c!("dup"),    c!("ovr"),
+    c!("equ"),    c!("neq"),    c!("gth"),    c!("lth"),    c!("jmp"),    c!("jcn"),    c!("jsr"),    c!("sth"),
+    c!("ldz"),    c!("stz"),    c!("ldr"),    c!("str"),    c!("lda"),    c!("sta"),    c!("dei"),    c!("deo"),
+    c!("add"),    c!("sub"),    c!("mul"),    c!("div"),    c!("and"),    c!("ora"),    c!("eor"),    c!("sft"),
+    c!("jci"),    c!("inc2"),   c!("pop2"),   c!("nip2"),   c!("swp2"),   c!("rot2"),   c!("dup2"),   c!("ovr2"),
+    c!("equ2"),   c!("neq2"),   c!("gth2"),   c!("lth2"),   c!("jmp2"),   c!("jcn2"),   c!("jsr2"),   c!("sth2"),
+    c!("ldz2"),   c!("stz2"),   c!("ldr2"),   c!("str2"),   c!("lda2"),   c!("sta2"),   c!("dei2"),   c!("deo2"),
+    c!("add2"),   c!("sub2"),   c!("mul2"),   c!("div2"),   c!("and2"),   c!("ora2"),   c!("eor2"),   c!("sft2"),
+    c!("jmi"),    c!("incr"),   c!("popr"),   c!("nipr"),   c!("swpr"),   c!("rotr"),   c!("dupr"),   c!("ovrr"),
+    c!("equr"),   c!("neqr"),   c!("gthr"),   c!("lthr"),   c!("jmpr"),   c!("jcnr"),   c!("jsrr"),   c!("sthr"),
+    c!("ldzr"),   c!("stzr"),   c!("ldrr"),   c!("strr"),   c!("ldar"),   c!("star"),   c!("deir"),   c!("deor"),
+    c!("addr"),   c!("subr"),   c!("mulr"),   c!("divr"),   c!("andr"),   c!("orar"),   c!("eorr"),   c!("sftr"),
+    c!("jsi"),    c!("inc2r"),  c!("pop2r"),  c!("nip2r"),  c!("swp2r"),  c!("rot2r"),  c!("dup2r"),  c!("ovr2r"),
+    c!("equ2r"),  c!("neq2r"),  c!("gth2r"),  c!("lth2r"),  c!("jmp2r"),  c!("jcn2r"),  c!("jsr2r"),  c!("sth2r"),
+    c!("ldz2r"),  c!("stz2r"),  c!("ldr2r"),  c!("str2r"),  c!("lda2r"),  c!("sta2r"),  c!("dei2r"),  c!("deo2r"),
+    c!("add2r"),  c!("sub2r"),  c!("mul2r"),  c!("div2r"),  c!("and2r"),  c!("ora2r"),  c!("eor2r"),  c!("sft2r"),
+    c!("lit"),    c!("inck"),   c!("popk"),   c!("nipk"),   c!("swpk"),   c!("rotk"),   c!("dupk"),   c!("ovrk"),
+    c!("equk"),   c!("neqk"),   c!("gthk"),   c!("lthk"),   c!("jmpk"),   c!("jcnk"),   c!("jsrk"),   c!("sthk"),
+    c!("ldzk"),   c!("stzk"),   c!("ldrk"),   c!("strk"),   c!("ldak"),   c!("stak"),   c!("deik"),   c!("deok"),
+    c!("addk"),   c!("subk"),   c!("mulk"),   c!("divk"),   c!("andk"),   c!("orak"),   c!("eork"),   c!("sftk"),
+    c!("lit2"),   c!("inc2k"),  c!("pop2k"),  c!("nip2k"),  c!("swp2k"),  c!("rot2k"),  c!("dup2k"),  c!("ovr2k"),
+    c!("equ2k"),  c!("neq2k"),  c!("gth2k"),  c!("lth2k"),  c!("jmp2k"),  c!("jcn2k"),  c!("jsr2k"),  c!("sth2k"),
+    c!("ldz2k"),  c!("stz2k"),  c!("ldr2k"),  c!("str2k"),  c!("lda2k"),  c!("sta2k"),  c!("dei2k"),  c!("deo2k"),
+    c!("add2k"),  c!("sub2k"),  c!("mul2k"),  c!("div2k"),  c!("and2k"),  c!("ora2k"),  c!("eor2k"),  c!("sft2k"),
+    c!("litr"),   c!("inckr"),  c!("popkr"),  c!("nipkr"),  c!("swpkr"),  c!("rotkr"),  c!("dupkr"),  c!("ovrkr"),
+    c!("equkr"),  c!("neqkr"),  c!("gthkr"),  c!("lthkr"),  c!("jmpkr"),  c!("jcnkr"),  c!("jsrkr"),  c!("sthkr"),
+    c!("ldzkr"),  c!("stzkr"),  c!("ldrkr"),  c!("strkr"),  c!("ldakr"),  c!("stakr"),  c!("deikr"),  c!("deokr"),
+    c!("addkr"),  c!("subkr"),  c!("mulkr"),  c!("divkr"),  c!("andkr"),  c!("orakr"),  c!("eorkr"),  c!("sftkr"),
+    c!("lit2r"),  c!("inc2kr"), c!("pop2kr"), c!("nip2kr"), c!("swp2kr"), c!("rot2kr"), c!("dup2kr"), c!("ovr2kr"),
+    c!("equ2kr"), c!("neq2kr"), c!("gth2kr"), c!("lth2kr"), c!("jmp2kr"), c!("jcn2kr"), c!("jsr2kr"), c!("sth2kr"),
+    c!("ldz2kr"), c!("stz2kr"), c!("ldr2kr"), c!("str2kr"), c!("lda2kr"), c!("sta2kr"), c!("dei2kr"), c!("deo2kr"),
+    c!("add2kr"), c!("sub2kr"), c!("mul2kr"), c!("div2kr"), c!("and2kr"), c!("ora2kr"), c!("eor2kr"), c!("sft2kr"),
+];
+
+pub unsafe fn find_opcode_by_name(name: *const c_char) -> Option<UxnOp> {
+    let lname = strdup(name);
+    for i in 0..strlen(name) {
+        *(lname.add(i)) = tolower(*(name.add(i)) as c_int) as c_char;
+    }
+    for i in 0..AsmOpNames.len() {
+        let op_name = (*AsmOpNames)[i];
+        if strcmp(op_name, lname) == 0 {
+            free(lname);
+            return Some(core::mem::transmute(i as u8));
+        }
+    }
+    free(lname);
+    return None;
+}
+
+pub unsafe fn has_byte_immediate(op: UxnOp) -> bool {
+    op == UxnOp::LIT
+ || op == UxnOp::LITr
+}
+
+pub unsafe fn has_short_immediate(op: UxnOp) -> bool {
+    op == UxnOp::JCI
+ || op == UxnOp::JSI
+ || op == UxnOp::JMI
+ || op == UxnOp::LIT2
+ || op == UxnOp::LIT2r
+}
+
+pub unsafe fn has_relative_immediate(op: UxnOp) -> bool {
+    op == UxnOp::JCI
+ || op == UxnOp::JSI
+ || op == UxnOp::JMI
+}
+
+pub unsafe fn has_immediate(op: UxnOp) -> bool {
+    has_byte_immediate(op) || has_short_immediate(op)
+}
+
+pub unsafe fn process_asm_statements(output: *mut String_Builder, asm_stmts: *const [AsmStmt], assembler: *mut Assembler) -> Option<()> {
+    for i in 0..asm_stmts.len() {
+        let asm_stmt = (*asm_stmts)[i];
+        process_asm_statement(output, asm_stmt, assembler)?;
+    }
+    Some(())
+}
+
+pub unsafe fn process_asm_statement(output: *mut String_Builder, asm_stmt: AsmStmt, assembler: *mut Assembler) -> Option<()> {
+    // TODO: leaky function, but beware holding onto strings produced by the lexer
+
+    let mut lexer_name: String_Builder = zeroed();
+    sb_appendf(&mut lexer_name, c!("%s:%d:%d <asm>"), asm_stmt.loc.input_path, asm_stmt.loc.line_number, asm_stmt.loc.line_offset);
+    da_append(&mut lexer_name, 0);
+    let mut l = lexer::new(lexer_name.items, asm_stmt.line, asm_stmt.line.add(strlen(asm_stmt.line)), false);
+    let saved_point = l.parse_point;
+    lexer::get_token(&mut l)?;
+    match l.token {
+        Token::EOF => { /* Allow empty asm line, not sure if useful */ }
+        Token::ID => {
+            // label or opcode
+            lexer::get_token(&mut l)?;
+            match l.token {
+                Token::Colon => {
+                    // label
+                    link_label(assembler, get_or_create_label_by_name(assembler, l.string), (*output).count);
+                    lexer::get_token(&mut l)?;
+                    match l.token {
+                        Token::ID => { /* must be an an opcode */ }
+                        Token::EOF => { return Some(()); }
+                        _ => {
+                            diagf!(loc(&mut l), c!("ERROR: expected %s but got %s\n"),
+                                lexer::display_token(Token::ID),
+                                lexer::display_token(l.token));
+                            return None;
+                        }
+                    }
+                }
+                _ => {
+                    l.parse_point = saved_point;
+                    lexer::get_token(&mut l)?;
+                }
+            }
+        }
+        _ => {
+            diagf!(loc(&mut l), c!("ERROR: expected %s but got %s\n"),
+                lexer::display_token(Token::ID), lexer::display_token(l.token));
+            return None;
+        }
+    }
+    // must be an opcode
+    if let Some(opcode) = find_opcode_by_name(l.string) {
+        write_op(output, opcode);
+        lexer::get_token(&mut l)?;
+        if has_immediate(opcode) {
+            match l.token {
+                Token::ID => {
+                    // must be a label, only valid for short opcodes
+                    if has_short_immediate(opcode) {
+                        let label = get_or_create_label_by_name(assembler, l.string);
+                        if has_relative_immediate(opcode) {
+                            write_label_rel(output, label, assembler, 0);
+                        } else {
+                            write_label_abs(output, label, assembler, 0);
+                        }
+                    } else {
+                        diagf!(loc(&mut l), c!("ERROR: label is not a valid short immediate\n"));
+                        return None;
+                    }
+                }
+                Token::IntLit | Token::CharLit => {
+                    // immediate number literal
+                    if has_short_immediate(opcode) {
+                        write_short(output, l.int_number as u16);
+                    } else {
+                        write_byte(output, l.int_number as u8);
+                    }
+                }
+                _ => {
+                    diagf!(loc(&mut l), c!("ERROR: expected %s, %s, or %s but got %s\n"),
+                        lexer::display_token(Token::ID),
+                        lexer::display_token(Token::IntLit),
+                        lexer::display_token(Token::CharLit),
+                        lexer::display_token(l.token));
+                    return None;
+                }
+            }
+        } else {
+            match l.token {
+                Token::EOF => { return Some(()); }
+                _ => {
+                    diagf!(loc(&mut l), c!("ERROR: expected end of the line but got %s\n"),
+                        lexer::display_token(l.token));
+                    return None;
+                }
+            }
+        }
+    } else {
+        diagf!(loc(&mut l), c!("ERROR: invalid uxn opcode: %s\n"), l.string);
+        return None;
+    }
+    lexer::get_token(&mut l)?;
+    match l.token {
+        Token::EOF => { return Some(()); }
+        _ => {
+            diagf!(loc(&mut l), c!("ERROR: expected nothing but got %s\n"),
+                lexer::display_token(l.token));
+            return None;
+        }
+    }
 }
