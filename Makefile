@@ -16,6 +16,7 @@ CRUST_FLAGS=-g --edition 2021 -C opt-level=0 -C panic="abort"
 
 RSS=\
 	$(SRC)/arena.rs \
+	$(SRC)/hashtable.rs \
 	$(SRC)/b.rs \
 	$(SRC)/ir.rs \
 	$(SRC)/crust.rs \
