@@ -1260,6 +1260,17 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     c.target = target;
     c.historical = *historical;
 
+    if (*linker).count > 0 {
+        let mut s: Shlex = zeroed();
+        for i in 0..(*linker).count {
+            shlex_append_quoted(&mut s, *(*linker).items.add(i));
+        }
+        let codegen_arg = temp_sprintf(c!("link-args=%s"), shlex_join(&mut s));
+        da_append(codegen_args, codegen_arg);
+        shlex_free(&mut s);
+        log(Log_Level::WARNING, c!("Flag -%s is DEPRECATED! Interpreting it as `-%s %s` instead."), flag_name(linker), CODEGEN_FLAG_NAME, codegen_arg);
+    }
+
     let gen = match target {
         Target::Gas_x86_64_Linux   |
         Target::Gas_x86_64_Windows |
@@ -1377,17 +1388,6 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     // Let's say you want to output an object file somewhere. The path
     // to that object should be computed as `temp_sprintf("%s.o", garbase_base)`.
     let garbage_base = get_garbage_base(program_path, target)?;
-
-    if (*linker).count > 0 {
-        let mut s: Shlex = zeroed();
-        for i in 0..(*linker).count {
-            shlex_append_quoted(&mut s, *(*linker).items.add(i));
-        }
-        let codegen_arg = temp_sprintf(c!("link-args=%s"), shlex_join(&mut s));
-        da_append(codegen_args, codegen_arg);
-        shlex_free(&mut s);
-        log(Log_Level::WARNING, c!("Flag -%s is DEPRECATED! Interpreting it as `-%s %s` instead."), flag_name(linker), CODEGEN_FLAG_NAME, codegen_arg);
-    }
 
     match target {
         Target::Gas_AArch64_Linux => {
