@@ -45,8 +45,7 @@ use core::ptr;
 use core::slice;
 use core::cmp;
 use crust::Str;
-use hashtable::HashTable;
-use hashtable::HtEntry;
+use hashtable::{HashTable, HtEntry};
 use nob::*;
 use flag::*;
 use crust::libc::*;
@@ -962,7 +961,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
                 let func = intern(&mut (*c).interner, (*l).string);
                 let func_loc = (*l).loc;
-                if let Some(existing_variadic) = HashTable::get(&(*c).program.variadics, Str(func)) {
+                if let Some(existing_variadic) = HashTable::get(&(*c).program.variadics, func) {
                     // TODO: report all the duplicate variadics maybe?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
@@ -974,7 +973,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
                     bump_error_count(c)?;
                 }
-                HashTable::insert(&mut (*c).program.variadics, Str(func), Variadic {
+                HashTable::insert(&mut (*c).program.variadics, func, Variadic {
                     loc: func_loc,
                     fixed_args: (*l).int_number as usize,
                 });

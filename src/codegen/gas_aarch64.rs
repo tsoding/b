@@ -1,6 +1,5 @@
 use core::ffi::*;
 use core::mem::zeroed;
-use crate::crust::Str;
 use crate::hashtable::HashTable;
 use crate::nob::*;
 use crate::crust::libc::*;
@@ -128,7 +127,7 @@ pub unsafe fn load_arg_to_reg(arg: Arg, reg: *const c_char, output: *mut String_
     };
 }
 
-pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_count: usize, auto_vars_count: usize, os: Os, variadics: *const HashTable<Str, Variadic>, body: *const [OpWithLocation], output: *mut String_Builder) {
+pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_count: usize, auto_vars_count: usize, os: Os, variadics: *const HashTable<*const c_char, Variadic>, body: *const [OpWithLocation], output: *mut String_Builder) {
     let stack_size = align_bytes(auto_vars_count*8, 16);
     match os {
         Os::Linux => {
@@ -317,7 +316,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
                 let mut fixed_args = 0;
                 match fun {
                     Arg::External(name) | Arg::RefExternal(name) => {
-                        if let Some(variadic) = HashTable::get(variadics, Str(name)) {
+                        if let Some(variadic) = HashTable::get(variadics, name) {
                             fixed_args = (*variadic).fixed_args;
                         }
                     }
@@ -396,7 +395,7 @@ pub unsafe fn generate_function(name: *const c_char, _name_loc: Loc, params_coun
     sb_appendf(output, c!("    ret\n"));
 }
 
-pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], variadics: *const HashTable<Str, Variadic>, os: Os) {
+pub unsafe fn generate_funcs(output: *mut String_Builder, funcs: *const [Func], variadics: *const HashTable<*const c_char, Variadic>, os: Os) {
     sb_appendf(output, c!(".text\n"));
     for i in 0..funcs.len() {
         generate_function((*funcs)[i].name, (*funcs)[i].name_loc, (*funcs)[i].params_count, (*funcs)[i].auto_vars_count, os, variadics, da_slice((*funcs)[i].body), output);
