@@ -311,17 +311,26 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 
 
 pub unsafe fn compile_string(string: *const c_char, c: *mut Compiler) -> usize {
-    let offset = (*c).program.data.count;
-    let string_len = strlen(string);
-    da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
-    // TODO: Strings in B are not NULL-terminated.
-    // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
-    // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
-    // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
-    // libc. While the language is still in development we gonna terminate it with 0. We will make it
-    // "spec complaint" later.
-    da_append(&mut (*c).program.data, 0); // NULL-terminator
-    offset
+    // TODO: Don't use second hashtable, which requires changes to the API, returning string address
+    // instead of data offset
+    let string = intern(&mut (*c).interner, string);
+    match HashTable::find(&(*c).string_offset, string) {
+        HtEntry::Occupied(entry) => (*entry).value,
+        HtEntry::Vacant(entry) => {
+            let offset = (*c).program.data.count;
+            let string_len = strlen(string);
+            da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
+            // TODO: Strings in B are not NULL-terminated.
+            // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
+            // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
+            // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
+            // libc. While the language is still in development we gonna terminate it with 0. We will make it
+            // "spec complaint" later.
+            da_append(&mut (*c).program.data, 0); // NULL-terminator
+            HashTable::insert_new_key(&mut (*c).string_offset, entry, string, offset);
+            offset
+        },
+    }
 }
 
 pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
@@ -918,6 +927,7 @@ pub struct Compiler {
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
     pub interner: StringInterner,
+    pub string_offset: HashTable<*const c_char, usize>,
     pub target: Target,
     pub error_count: usize,
     pub historical: bool,
