@@ -1395,20 +1395,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !*nobuild {
                 codegen::gas_aarch64::generate_program(
-                    // Inputs
                     gen, &c.program, program_path, garbage_base, os,
                     *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
                 )?;
             }
 
             if *run {
                 codegen::gas_aarch64::run_program(
-                    // Inputs
                     gen, program_path, da_slice(run_args), os,
-                    // Temporaries
-                    &mut cmd,
                 )?;
             }
         }
@@ -1417,20 +1411,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
 
             if !*nobuild {
                 codegen::gas_aarch64::generate_program(
-                    // Inputs
                     gen, &c.program, program_path, garbage_base, os,
                     *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
                 )?;
             }
 
             if *run {
                 codegen::gas_aarch64::run_program(
-                    // Inputs
                     gen, program_path, da_slice(run_args), os,
-                    // Temporaries
-                    &mut cmd,
                 )?;
             }
         }

@@ -500,10 +500,13 @@ pub unsafe fn usage(params: *const [Param]) {
 
 struct Gas_AArch64 {
     link_args: *const c_char,
+    output: String_Builder,
+    cmd: Cmd,
 }
 
 pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
     let gen = arena::alloc_type::<Gas_AArch64>(a);
+    memset(gen as _ , 0, size_of::<Gas_AArch64>());
 
     let mut help = false;
     let params = &[
@@ -534,13 +537,12 @@ pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<
 }
 
 pub unsafe fn generate_program(
-    // Inputs
     gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char, os: Os,
     nostdlib: bool, debug: bool,
-    // Temporaries
-    output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
     let gen = gen as *mut Gas_AArch64;
+    let output = &mut (*gen).output;
+    let cmd = &mut (*gen).cmd;
 
     if debug { todo!("Debug information for aarch64") }
 
@@ -631,11 +633,11 @@ pub unsafe fn generate_program(
 }
 
 pub unsafe fn run_program(
-    // Inputs
-    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char], os: Os,
-    // Temporaries
-    cmd: *mut Cmd,
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char], os: Os,
 ) -> Option<()> {
+    let gen = gen as *mut Gas_AArch64;
+    let cmd = &mut (*gen).cmd;
+
     match os {
         Os::Linux => {
             if !(cfg!(target_arch = "aarch64") && cfg!(target_os = "linux")) {
