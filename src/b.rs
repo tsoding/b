@@ -1352,10 +1352,8 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         log(Log_Level::INFO, c!("compilation took %.3fs"), compilation_start.elapsed().as_secs_f64());
     }
 
-    let mut output: String_Builder = zeroed();
-    let mut cmd: Cmd = zeroed();
-
     if *ir {
+        let mut output: String_Builder = zeroed();
         dump_program(&mut output, &c.program);
         da_append(&mut output, 0);
         printf(c!("%s"), output.items);
@@ -1501,20 +1499,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::ILasm_Mono => {
             if !*nobuild {
                 codegen::ilasm_mono::generate_program(
-                    // Inputs
                     gen, &c.program, program_path, garbage_base,
                     *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
                 )?;
             }
 
             if *run {
                 codegen::ilasm_mono::run_program(
-                    // Inputs
                     gen, program_path, da_slice(run_args),
-                    // Temporaries
-                    &mut cmd,
                 )?;
             }
         }

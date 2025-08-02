@@ -182,7 +182,15 @@ pub unsafe fn usage(params: *const [Param]) {
     print_params_help(params);
 }
 
-pub unsafe fn new(_a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+struct ILasm_Mono {
+    output: String_Builder,
+    cmd: Cmd,
+}
+
+pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
+    let gen = arena::alloc_type::<ILasm_Mono>(a);
+    memset(gen as _ , 0, size_of::<ILasm_Mono>());
+
     let mut help = false;
     let params = &[
         Param {
@@ -204,16 +212,17 @@ pub unsafe fn new(_a: *mut arena::Arena, args: *const [*const c_char]) -> Option
         fprintf(stderr(), c!("It doesn't really provide any useful parameters yet.\n"));
         return None;
     }
-    Some(ptr::null_mut())
+    Some(gen as _)
 }
 
 pub unsafe fn generate_program(
-    // Inputs
-    _gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char,
+    gen: *mut c_void, program: *const Program, program_path: *const c_char, garbage_base: *const c_char,
     _nostdlib: bool, debug: bool,
-    // Temporaries
-    output: *mut String_Builder, cmd: *mut Cmd,
 ) -> Option<()> {
+    let gen = gen as *mut ILasm_Mono;
+    let output = &mut (*gen).output;
+    let cmd = &mut (*gen).cmd;
+
     if debug { todo!("Debug information for ilasm-mono") }
 
     sb_appendf(output, c!(".assembly 'Main' {}\n"));
@@ -243,11 +252,11 @@ pub unsafe fn generate_program(
 }
 
 pub unsafe fn run_program(
-    // Inputs
-    _gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
-    // Temporaries
-    cmd: *mut Cmd,
+    gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
 ) -> Option<()> {
+    let gen = gen as *mut ILasm_Mono;
+    let cmd = &mut (*gen).cmd;
+
     cmd_append!{
         cmd,
         c!("mono"), program_path,
