@@ -1487,20 +1487,14 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
         Target::Mos6502_Posix => {
             if !*nobuild {
                 codegen::mos6502::generate_program(
-                    // Inputs
                     gen, &c.program, program_path, garbage_base,
                     *nostdlib, *debug,
-                    // Temporaries
-                    &mut output, &mut cmd,
                 )?;
             }
 
             if *run {
                 codegen::mos6502::run_program(
-                    // Inputs
                     gen, program_path, da_slice(run_args),
-                    // Temporaries
-                    &mut cmd,
                 )?;
             }
         }

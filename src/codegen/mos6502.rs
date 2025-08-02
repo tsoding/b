@@ -1444,10 +1444,13 @@ pub unsafe fn usage(params: *const [Param]) {
 
 struct Mos6502 {
     load_offset: u64,
+    out: String_Builder,
+    cmd: Cmd,
 }
 
 pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
     let gen = arena::alloc_type::<Mos6502>(a);
+    memset(gen as _ , 0, size_of::<Mos6502>());
 
     let mut help = false;
     let params = &[
@@ -1478,13 +1481,11 @@ pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<
 }
 
 pub unsafe fn generate_program(
-    // Inputs
     gen: *mut c_void, p: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
     _nostdlib: bool, debug: bool,
-    // Temporaries
-    out: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
     let gen = gen as *mut Mos6502;
+    let out = &mut (*gen).out;
 
     if debug { todo!("Debug information for 6502") }
 
@@ -1510,12 +1511,10 @@ pub unsafe fn generate_program(
 }
 
 pub unsafe fn run_program(
-    // Inputs
     gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
-    // Temporaries
-    cmd: *mut Cmd,
 ) -> Option<()> {
     let gen = gen as *mut Mos6502;
+    let cmd = &mut (*gen).cmd;
     cmd_append!{
         cmd,
         c!("posix6502"), c!("-load-offset"), temp_sprintf(c!("%u"), (*gen).load_offset as c_uint),
