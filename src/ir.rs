@@ -1,4 +1,5 @@
 use core::ffi::*;
+use crate::hashtable::HashTable;
 use crate::lexer::*;
 use crate::nob::*;
 
@@ -120,7 +121,7 @@ pub struct Program {
     pub funcs: Array<Func>,
     pub data: Array<u8>,
     pub extrns: Array<*const c_char>,
-    pub variadics: Array<(*const c_char, Variadic)>,
+    pub variadics: HashTable<*const c_char, Variadic>,
     pub globals: Array<Global>,
     pub asm_funcs: Array<AsmFunc>,
 }

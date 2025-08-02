@@ -37,16 +37,18 @@ pub mod targets;
 pub mod ir;
 pub mod time;
 pub mod shlex;
+pub mod hashtable;
 
 use core::ffi::*;
 use core::mem::zeroed;
 use core::ptr;
 use core::slice;
 use core::cmp;
+use crust::Str;
+use hashtable::{HashTable, HtEntry};
 use nob::*;
 use flag::*;
 use crust::libc::*;
-use crust::assoc_lookup_cstr;
 use arena::Arena;
 use targets::*;
 use lexer::{Lexer, Loc, Token};
@@ -128,38 +130,32 @@ pub enum Storage {
 }
 
 #[derive(Clone, Copy)]
-pub struct Var {
-    pub name: *const c_char,
+pub struct VarData {
     pub loc: Loc,
     pub storage: Storage,
 }
 
-pub unsafe fn scope_push(vars: *mut Array<Array<Var>>) {
+pub unsafe fn scope_push(vars: *mut Array<HashTable<*const c_char, VarData>>) {
     if (*vars).count < (*vars).capacity {
         // Reusing already allocated scopes
         (*vars).count += 1;
-        (*da_last_mut(vars).expect("There should be always at least the global scope")).count = 0;
+        let last_scope = da_last_mut(vars).expect("There should be always at least the global scope");
+        HashTable::clear(last_scope);
     } else {
         da_append(vars, zeroed());
     }
 }
 
-pub unsafe fn scope_pop(vars: *mut Array<Array<Var>>) {
+pub unsafe fn scope_pop(vars: *mut Array<HashTable<*const c_char, VarData>>) {
     assert!((*vars).count > 0);
     (*vars).count -= 1;
 }
 
-pub unsafe fn find_var_near(vars: *const Array<Var>, name: *const c_char) -> *const Var {
-    for i in 0..(*vars).count {
-        let var = (*vars).items.add(i);
-        if strcmp((*var).name, name) == 0 {
-            return var
-        }
-    }
-    ptr::null()
+pub unsafe fn find_var_near(vars: *const HashTable<*const c_char, VarData>, name: *const c_char) -> *const VarData {
+    HashTable::get(vars, name).unwrap_or(ptr::null())
 }
 
-pub unsafe fn find_var_deep(vars: *const Array<Array<Var>>, name: *const c_char) -> *const Var {
+pub unsafe fn find_var_deep(vars: *const Array<HashTable<*const c_char, VarData>>, name: *const c_char) -> *const VarData {
     let mut i = (*vars).count;
     while i > 0 {
         let var = find_var_near((*vars).items.add(i-1), name);
@@ -180,7 +176,7 @@ pub unsafe fn declare_var(c: *mut Compiler, name: *const c_char, loc: Loc, stora
         return bump_error_count(c);
     }
 
-    da_append(scope, Var {name, loc, storage});
+    HashTable::insert(scope, name, VarData {loc, storage});
     Some(())
 }
 
@@ -314,17 +310,26 @@ pub unsafe fn allocate_auto_var(t: *mut AutoVarsAtor) -> usize {
 
 
 pub unsafe fn compile_string(string: *const c_char, c: *mut Compiler) -> usize {
-    let offset = (*c).program.data.count;
-    let string_len = strlen(string);
-    da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
-    // TODO: Strings in B are not NULL-terminated.
-    // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
-    // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
-    // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
-    // libc. While the language is still in development we gonna terminate it with 0. We will make it
-    // "spec complaint" later.
-    da_append(&mut (*c).program.data, 0); // NULL-terminator
-    offset
+    // TODO: Don't use second hashtable, which requires changes to the API, returning string address
+    // instead of data offset
+    let string = intern(&mut (*c).interner, string);
+    match HashTable::find(&(*c).string_offset, string) {
+        HtEntry::Occupied(entry) => (*entry).value,
+        HtEntry::Vacant(entry) => {
+            let offset = (*c).program.data.count;
+            let string_len = strlen(string);
+            da_append_many(&mut (*c).program.data, slice::from_raw_parts(string as *const u8, string_len));
+            // TODO: Strings in B are not NULL-terminated.
+            // They are terminated with symbol '*e' ('*' is escape character akin to '\' in C) which according to the
+            // spec is called just "end-of-file" without any elaboration on what its value is. Maybe it had a specific
+            // value on PDP that was a common knowledge at the time? In any case that breaks compatibility with
+            // libc. While the language is still in development we gonna terminate it with 0. We will make it
+            // "spec complaint" later.
+            da_append(&mut (*c).program.data, 0); // NULL-terminator
+            HashTable::insert_new_key(&mut (*c).string_offset, entry, string, offset);
+            offset
+        },
+    }
 }
 
 pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Option<(Arg, bool)> {
@@ -400,7 +405,7 @@ pub unsafe fn compile_primary_expression(l: *mut Lexer, c: *mut Compiler) -> Opt
         }
         Token::CharLit | Token::IntLit => Some((Arg::Literal((*l).int_number), false)),
         Token::ID => {
-            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let name = intern(&mut (*c).interner, (*l).string);
 
             let var_def = find_var_deep(&mut (*c).vars, name);
             if var_def.is_null() {
@@ -652,7 +657,7 @@ pub unsafe fn compile_asm_stmts(l: *mut Lexer, c: *mut Compiler, stmts: *mut Arr
             get_and_expect_token(l, Token::String)?;
             match (*l).token {
                 Token::String => {
-                    let line = arena::strdup(&mut (*c).arena, (*l).string);
+                    let line = intern(&mut (*c).interner, (*l).string);
                     let loc = (*l).loc;
                     da_append(stmts, AsmStmt { line, loc });
                 }
@@ -690,7 +695,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Extrn => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name = intern(&mut (*c).interner, (*l).string);
                 name_declare_if_not_exists(&mut (*c).program.extrns, name);
                 declare_var(c, name, (*l).loc, Storage::External {name})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
@@ -700,7 +705,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         Token::Auto => {
             while (*l).token != Token::SemiColon {
                 get_and_expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name = intern(&mut (*c).interner, (*l).string);
                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                 declare_var(c, name, (*l).loc, Storage::Auto {index})?;
                 get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma, Token::IntLit, Token::CharLit])?;
@@ -783,7 +788,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         Token::Goto => {
             get_and_expect_token(l, Token::ID)?;
-            let name = arena::strdup(&mut (*c).arena, (*l).string);
+            let name = intern(&mut (*c).interner, (*l).string);
             let loc = (*l).loc;
             let addr = (*c).func_body.count;
             da_append(&mut (*c).func_gotos, Goto {name, loc, addr});
@@ -857,7 +862,7 @@ pub unsafe fn compile_statement(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
         }
         _ => {
             if (*l).token == Token::ID {
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name = intern(&mut (*c).interner, (*l).string);
                 let name_loc = (*l).loc;
                 lexer::get_token(l)?;
                 if (*l).token == Token::Colon {
@@ -891,10 +896,28 @@ pub struct Switch {
     pub cond: usize,
 }
 
+/// Deduplicates and prolongs strings lifetime
+#[derive(Clone, Copy)]
+pub struct StringInterner {
+    pub deduper: HashTable<Str, ()>, 
+    pub arena: Arena,
+}
+
+pub unsafe fn intern(interner: *mut StringInterner, string: *const c_char) -> *mut c_char {
+    match HashTable::find(&(*interner).deduper, Str(string)) {
+        HtEntry::Occupied(entry) => (*entry).key.0 as *mut c_char,
+        HtEntry::Vacant(entry) => {
+            let ptr = arena::strdup(&mut (*interner).arena, string);
+            HashTable::insert_new_key(&mut (*interner).deduper, entry, Str(ptr), ());
+            ptr
+        } 
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct Compiler {
     pub program: Program,
-    pub vars: Array<Array<Var>>,
+    pub vars: Array<HashTable<*const c_char, VarData>>,
     pub auto_vars_ator: AutoVarsAtor,
     pub func_body: Array<OpWithLocation>,
     pub func_goto_labels: Array<GotoLabel>,
@@ -902,17 +925,8 @@ pub struct Compiler {
     pub used_funcs: Array<UsedFunc>,
     pub op_label_count: usize,
     pub switch_stack: Array<Switch>,
-    /// Arena into which the Compiler allocates all the names and
-    /// objects that need to live for the duration of the
-    /// compilation. Even if some object/names don't need to live that
-    /// long (for example, function labels need to live only for the
-    /// duration of that function compilation), just letting them live
-    /// longer makes the memory management easier.
-    ///
-    /// Basically just dump everything into this arena and if you ever
-    /// need to reset the state of the Compiler, just reset all its
-    /// Dynamic Arrays and this Arena.
-    pub arena: Arena,
+    pub interner: StringInterner,
+    pub string_offset: HashTable<*const c_char, usize>,
     pub target: Target,
     pub error_count: usize,
     pub historical: bool,
@@ -945,9 +959,9 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             Token::Variadic => {
                 get_and_expect_token_but_continue(l, c, Token::OParen)?;
                 get_and_expect_token_but_continue(l, c, Token::ID)?;
-                let func = arena::strdup(&mut (*c).arena, (*l).string);
+                let func = intern(&mut (*c).interner, (*l).string);
                 let func_loc = (*l).loc;
-                if let Some(existing_variadic) = assoc_lookup_cstr(da_slice((*c).program.variadics), func) {
+                if let Some(existing_variadic) = HashTable::get(&(*c).program.variadics, func) {
                     // TODO: report all the duplicate variadics maybe?
                     diagf!(func_loc, c!("ERROR: duplicate variadic declaration `%s`\n"), func);
                     diagf!((*existing_variadic).loc, c!("NOTE: the first declaration is located here\n"));
@@ -959,17 +973,17 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                     diagf!((*l).loc, c!("ERROR: variadic function `%s` cannot have 0 arguments\n"), func);
                     bump_error_count(c)?;
                 }
-                da_append(&mut (*c).program.variadics, (func, Variadic {
+                HashTable::insert(&mut (*c).program.variadics, func, Variadic {
                     loc: func_loc,
                     fixed_args: (*l).int_number as usize,
-                }));
+                });
                 get_and_expect_token_but_continue(l, c, Token::CParen)?;
                 get_and_expect_token_but_continue(l, c, Token::SemiColon)?;
             }
             Token::Extrn => {
                 while (*l).token != Token::SemiColon {
                     get_and_expect_token(l, Token::ID)?;
-                    let name = arena::strdup(&mut (*c).arena, (*l).string);
+                    let name = intern(&mut (*c).interner, (*l).string);
                     name_declare_if_not_exists(&mut (*c).program.extrns, name);
                     declare_var(c, name, (*l).loc, Storage::External {name})?;
                     get_and_expect_tokens(l, &[Token::SemiColon, Token::Comma])?;
@@ -977,7 +991,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
             }
             _ => {
                 expect_token(l, Token::ID)?;
-                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                let name = intern(&mut (*c).interner, (*l).string);
                 let name_loc = (*l).loc;
                 declare_var(c, name, name_loc, Storage::External{name})?;
 
@@ -994,7 +1008,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                             (*l).parse_point = saved_point;
                             'params: loop {
                                 get_and_expect_token(l, Token::ID)?;
-                                let name = arena::strdup(&mut (*c).arena, (*l).string);
+                                let name = intern(&mut (*c).interner, (*l).string);
                                 let name_loc = (*l).loc;
                                 let index = allocate_auto_var(&mut (*c).auto_vars_ator);
                                 declare_var(c, name, name_loc, Storage::Auto{index})?;
@@ -1072,7 +1086,7 @@ pub unsafe fn compile_program(l: *mut Lexer, c: *mut Compiler) -> Option<()> {
                                 Token::IntLit | Token::CharLit => ImmediateValue::Literal((*l).int_number),
                                 Token::String => ImmediateValue::DataOffset(compile_string((*l).string, c)),
                                 Token::ID => {
-                                    let name = arena::strdup(&mut (*c).arena, (*l).string);
+                                    let name = intern(&mut (*c).interner, (*l).string);
                                     let scope = da_last_mut(&mut (*c).vars).expect("There should be always at least the global scope");
                                     let var = find_var_near(scope, name);
                                     if var.is_null() {
@@ -1274,12 +1288,12 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
     let gen = match target {
         Target::Gas_x86_64_Linux   |
         Target::Gas_x86_64_Windows |
-        Target::Gas_x86_64_Darwin  => codegen::gas_x86_64::new(&mut c.arena, da_slice(*codegen_args)),
+        Target::Gas_x86_64_Darwin  => codegen::gas_x86_64::new(&mut c.interner.arena, da_slice(*codegen_args)),
         Target::Gas_AArch64_Linux  |
-        Target::Gas_AArch64_Darwin => codegen::gas_aarch64::new(&mut c.arena, da_slice(*codegen_args)),
-        Target::Uxn                => codegen::uxn::new(&mut c.arena, da_slice(*codegen_args)),
-        Target::Mos6502_Posix      => codegen::mos6502::new(&mut c.arena, da_slice(*codegen_args)),
-        Target::ILasm_Mono         => codegen::ilasm_mono::new(&mut c.arena, da_slice(*codegen_args)),
+        Target::Gas_AArch64_Darwin => codegen::gas_aarch64::new(&mut c.interner.arena, da_slice(*codegen_args)),
+        Target::Uxn                => codegen::uxn::new(&mut c.interner.arena, da_slice(*codegen_args)),
+        Target::Mos6502_Posix      => codegen::mos6502::new(&mut c.interner.arena, da_slice(*codegen_args)),
+        Target::ILasm_Mono         => codegen::ilasm_mono::new(&mut c.interner.arena, da_slice(*codegen_args)),
     }?;
 
     if input_paths.count == 0 {
@@ -1304,8 +1318,9 @@ pub unsafe fn main(mut argc: i32, mut argv: *mut*mut c_char) -> Option<()> {
                 log(Log_Level::ERROR, c!("No standard library path %s found. Please run the compiler from the same folder where %s is located. Or if you don't want to use the standard library pass the -%s flag."), libb_path, libb_path, flag_name(nostdlib));
                 return None;
             }
-            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/all.b"), libb_path));
-            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.arena, c!("%s/%s.b"), libb_path, *target_name));
+            // TODO: this should be stored in separate arena (or temporary allocated) 
+            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.interner.arena, c!("%s/all.b"), libb_path));
+            include_path_if_exists(&mut input_paths, arena::sprintf(&mut c.interner.arena, c!("%s/%s.b"), libb_path, *target_name));
         }
 
         let mut sb: String_Builder = zeroed();

@@ -1,5 +1,6 @@
 // This is a module that facilitates Crust-style programming - https://github.com/tsoding/crust
 use crate::crust::libc::*;
+use core::hash::{Hash, Hasher};
 use core::panic::PanicInfo;
 use core::ffi::*;
 
@@ -38,44 +39,28 @@ pub unsafe fn slice_contains<Value: PartialEq>(slice: *const [Value], needle: *c
     false
 }
 
-pub unsafe fn assoc_lookup_cstr_mut<Value>(assoc: *mut [(*const c_char, Value)], needle: *const c_char) -> Option<*mut Value> {
-    for i in 0..assoc.len() {
-        if strcmp((*assoc)[i].0, needle) == 0 {
-            return Some(&mut (*assoc)[i].1);
-        }
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug)]
+pub struct Str(pub *const c_char);
+
+impl PartialEq for Str {
+    fn eq(&self, other: &Self) -> bool {
+        unsafe { strcmp(self.0, other.0) == 0 }
     }
-    None
 }
 
-pub unsafe fn assoc_lookup_cstr<Value>(assoc: *const [(*const c_char, Value)], needle: *const c_char) -> Option<*const Value> {
-    for i in 0..assoc.len() {
-        if strcmp((*assoc)[i].0, needle) == 0 {
-            return Some(&(*assoc)[i].1);
-        }
-    }
-    None
-}
+impl Eq for Str {}
 
-pub unsafe fn assoc_lookup_mut<Key, Value>(assoc: *mut [(Key, Value)], needle: *const Key) -> Option<*mut Value>
-where Key: PartialEq
-{
-    for i in 0..assoc.len() {
-        if (*assoc)[i].0 == *needle {
-            return Some(&mut (*assoc)[i].1);
+impl Hash for Str {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        unsafe {
+            let mut ptr = self.0;
+            while *ptr != 0 {
+                state.write_i8(*ptr);
+                ptr = ptr.add(1);
+            }
         }
     }
-    None
-}
-
-pub unsafe fn assoc_lookup<Key, Value>(assoc: *const [(Key, Value)], needle: *const Key) -> Option<*const Value>
-where Key: PartialEq
-{
-    for i in 0..assoc.len() {
-        if (*assoc)[i].0 == *needle {
-            return Some(&(*assoc)[i].1);
-        }
-    }
-    None
 }
 
 #[macro_use]
