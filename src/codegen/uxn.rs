@@ -153,11 +153,14 @@ impl Uxn_Runner {
 }
 
 struct Uxn {
-    runner: Uxn_Runner
+    runner: Uxn_Runner,
+    output: String_Builder,
+    cmd: Cmd,
 }
 
 pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<*mut c_void> {
     let gen = arena::alloc_type::<Uxn>(a);
+    memset(gen as _ , 0, size_of::<Uxn>());
 
     let mut help = false;
     let mut runner_name = zeroed();
@@ -202,12 +205,12 @@ pub unsafe fn new(a: *mut arena::Arena, args: *const [*const c_char]) -> Option<
 }
 
 pub unsafe fn generate_program(
-    // Inputs
-    _gen: *mut c_void, program: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
+    gen: *mut c_void, program: *const Program, program_path: *const c_char, _garbage_base: *const c_char,
     _nostdlib: bool, debug: bool,
-    // Temporaries
-    output: *mut String_Builder, _cmd: *mut Cmd,
 ) -> Option<()> {
+    let gen = gen as *mut Uxn;
+    let output = &mut (*gen).output;
+
     if debug { todo!("Debug information for uxn") }
 
     let mut assembler: Assembler = zeroed();
@@ -249,12 +252,10 @@ pub unsafe fn generate_program(
 }
 
 pub unsafe fn run_program(
-    // Inputs
     gen: *mut c_void, program_path: *const c_char, run_args: *const [*const c_char],
-    // Temporaries
-    cmd: *mut Cmd,
 ) -> Option<()> {
     let gen = gen as *mut Uxn;
+    let cmd = &mut (*gen).cmd;
     cmd_append! {cmd, (*gen).runner.name(), program_path}
     da_append_many(cmd, run_args);
     if !cmd_run_sync_and_reset(cmd) { return None; }
